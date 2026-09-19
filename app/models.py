@@ -42,14 +42,11 @@ class BarcodeMapping(Base):
     target_id: Mapped[str] = mapped_column(String, nullable=False)
     target_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Food target settings.
     quantity: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     unit_id: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    # Recipe target settings.
     recipe_scale: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
 
-    mapped_by: Mapped[str] = mapped_column(String, default="manual")  # auto | auto_confirmed | manual | generic
+    mapped_by: Mapped[str] = mapped_column(String, default="manual")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -68,7 +65,7 @@ class RetryQueue(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     barcode: Mapped[str] = mapped_column(String, nullable=False)
-    payload: Mapped[str] = mapped_column(Text, nullable=False)  # JSON
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_retry_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -84,6 +81,7 @@ class Activity(Base):
     result: Mapped[str] = mapped_column(String, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_scan_event: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
