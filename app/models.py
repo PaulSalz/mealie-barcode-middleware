@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -38,11 +38,33 @@ class BarcodeCache(Base):
 
 
 class BarcodeMapping(Base):
+    """Map a barcode to a structured Mealie food.
+
+    ``quantity`` and ``unit_id`` are shopping defaults for this barcode, not
+    properties of the Mealie food itself. This allows two different barcodes
+    to point to the same food with different default quantities/units.
+    """
+
     __tablename__ = "barcode_mappings"
 
     barcode: Mapped[str] = mapped_column(String, primary_key=True)
     item_id: Mapped[str] = mapped_column(String, ForeignKey("items.id"), nullable=False)
-    mapped_by: Mapped[str] = mapped_column(String, default="manual")  # auto | manual
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    unit_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    mapped_by: Mapped[str] = mapped_column(String, default="manual")  # auto | auto_confirmed | manual
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class RecipeBarcodeMapping(Base):
+    """Map a barcode to a Mealie recipe using Mealie's native shopping-list recipe link."""
+
+    __tablename__ = "recipe_barcode_mappings"
+
+    barcode: Mapped[str] = mapped_column(String, primary_key=True)
+    recipe_id: Mapped[str] = mapped_column(String, nullable=False)
+    recipe_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    recipe_scale: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    mapped_by: Mapped[str] = mapped_column(String, default="manual")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -74,7 +96,7 @@ class Activity(Base):
     barcode: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     message: Mapped[str] = mapped_column(String, nullable=False)
-    result: Mapped[str] = mapped_column(String, nullable=False)  # added | queued | unknown | added_as_note
+    result: Mapped[str] = mapped_column(String, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
