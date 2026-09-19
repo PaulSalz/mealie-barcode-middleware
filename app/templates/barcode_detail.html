@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ cached.title if cached and cached.title else 'Barcode' }} — Mealie Barcode Middleware{% endblock %}
 
+{% macro decimal_stepper(name, value, input_id='') %}
+<div class="input-group decimal-stepper">
+    <input class="form-control decimal-number" type="text" inputmode="decimal" name="{{ name }}" value="{{ value }}" data-min="0.000001"{% if input_id %} id="{{ input_id }}"{% endif %}>
+    <button class="btn btn-outline-secondary" type="button" data-decimal-step="-1" title="-1"><i class="ti ti-chevron-down"></i></button>
+    <button class="btn btn-outline-secondary" type="button" data-decimal-step="1" title="+1"><i class="ti ti-chevron-up"></i></button>
+</div>
+{% endmacro %}
+
 {% block content %}
 <div class="page-header d-print-none mb-3">
     <div class="row g-2 align-items-center">
@@ -17,6 +25,13 @@
 {% if not cached %}
 <div class="alert alert-warning">This barcode is not in the cache.</div>
 {% else %}
+{% if duplicate_food %}
+<div class="alert alert-warning"><i class="ti ti-alert-triangle icon"></i> A Food with that exact name already existed in Mealie. The existing Food was linked instead of creating a duplicate.</div>
+{% endif %}
+{% if create_error %}
+<div class="alert alert-danger"><i class="ti ti-alert-triangle icon"></i> The Food could not be created in Mealie. Check the name, Mealie permissions, and container logs.</div>
+{% endif %}
+
 <div class="row row-cards mb-3">
     <div class="col-lg-7">
         <div class="card h-100">
@@ -27,10 +42,7 @@
                     <div class="datagrid-item"><div class="datagrid-title">Brand</div><div class="datagrid-content">{{ cached.brand or "—" }}</div></div>
                     <div class="datagrid-item"><div class="datagrid-title">Package quantity</div><div class="datagrid-content">{{ cached.quantity or "—" }}</div></div>
                     <div class="datagrid-item"><div class="datagrid-title">Lookup source</div><div class="datagrid-content">{{ cached.source or "—" }}</div></div>
-                    <div class="datagrid-item">
-                        <div class="datagrid-title">Found</div>
-                        <div class="datagrid-content">{% if cached.found %}<span class="badge bg-green text-green-fg">Yes</span>{% else %}<span class="badge bg-red text-red-fg">No</span>{% endif %}</div>
-                    </div>
+                    <div class="datagrid-item"><div class="datagrid-title">Found</div><div class="datagrid-content">{% if cached.found %}<span class="badge bg-green text-green-fg">Yes</span>{% else %}<span class="badge bg-red text-red-fg">No</span>{% endif %}</div></div>
                     <div class="datagrid-item"><div class="datagrid-title">Last lookup</div><div class="datagrid-content">{{ cached.lookup_attempted_at|localtime }}</div></div>
                 </div>
             </div>
@@ -38,9 +50,7 @@
                 {% if not cached.found and not cached.barcode.upper().startswith('GENERIC:') %}
                 <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/retry-lookup"><button type="submit" class="btn btn-warning"><i class="ti ti-refresh icon"></i> Retry Lookup</button></form>
                 {% else %}<div></div>{% endif %}
-                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/delete" data-confirm="Delete barcode {{ cached.barcode }}?">
-                    <button type="submit" class="btn btn-outline-danger"><i class="ti ti-trash icon"></i> Delete</button>
-                </form>
+                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/delete" data-confirm="Delete barcode {{ cached.barcode }}?"><button type="submit" class="btn btn-outline-danger"><i class="ti ti-trash icon"></i> Delete</button></form>
             </div>
         </div>
     </div>
@@ -53,40 +63,26 @@
                 <div class="d-flex align-items-center mb-3">
                     <span class="status-dot status-dot-animated bg-green me-2"></span>
                     <div>
-                        <div class="fw-bold">
-                            {% if mapping.target_type == 'food' and mapped_item %}<a href="/items/{{ mapped_item.id }}" class="text-reset">{{ mapped_item.name }}</a>{% else %}{{ mapping.target_name or mapping.target_id }}{% endif %}
-                        </div>
+                        <div class="fw-bold">{% if mapping.target_type == 'food' and mapped_item %}<a href="/items/{{ mapped_item.id }}" class="text-reset">{{ mapped_item.name }}</a>{% else %}{{ mapping.target_name or mapping.target_id }}{% endif %}</div>
                         <div class="text-secondary small">{{ 'Food' if mapping.target_type == 'food' else 'Recipe' }} · {{ mapping.mapped_by }}</div>
                     </div>
                 </div>
                 <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/mapping-settings">
                     {% if mapping.target_type == 'food' %}
                     <div class="row g-2">
-                        <div class="col-4"><label class="form-label">Default quantity</label><input class="form-control" type="number" name="quantity" min="0.000001" step="any" value="{{ mapping.quantity or 1 }}"></div>
-                        <div class="col-8">
-                            <label class="form-label">Unit</label>
-                            <select class="form-select" name="unit_id">
-                                <option value="">No unit</option>
-                                {% for unit in units %}<option value="{{ unit.id }}" {{ 'selected' if mapping.unit_id == unit.id }}>{{ unit.name }}{% if unit.abbreviation %} ({{ unit.abbreviation }}){% endif %}</option>{% endfor %}
-                            </select>
-                        </div>
+                        <div class="col-6"><label class="form-label">Default quantity</label>{{ decimal_stepper('quantity', mapping.quantity or 1) }}</div>
+                        <div class="col-6"><label class="form-label">Unit</label><select class="form-select" name="unit_id"><option value="">No unit</option>{% for unit in units %}<option value="{{ unit.id }}" {{ 'selected' if mapping.unit_id == unit.id }}>{{ unit.name }}{% if unit.abbreviation %} ({{ unit.abbreviation }}){% endif %}</option>{% endfor %}</select></div>
                     </div>
                     <input type="hidden" name="recipe_scale" value="1">
                     {% else %}
-                    <label class="form-label">Recipe scale</label>
-                    <input class="form-control" type="number" name="recipe_scale" min="0.000001" step="any" value="{{ mapping.recipe_scale or 1 }}">
+                    <label class="form-label">Recipe scale</label>{{ decimal_stepper('recipe_scale', mapping.recipe_scale or 1) }}
                     <input type="hidden" name="quantity" value="1"><input type="hidden" name="unit_id" value="">
                     {% endif %}
                     <button type="submit" class="btn btn-primary mt-3">Save defaults</button>
                 </form>
                 {% else %}<div class="text-secondary">No target linked yet.</div>{% endif %}
             </div>
-            {% if mapping %}
-            <div class="card-footer d-flex gap-2 justify-content-end">
-                {% if mapping.mapped_by == 'auto' %}<form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/confirm"><button type="submit" class="btn btn-success"><i class="ti ti-check icon"></i> Confirm</button></form>{% endif %}
-                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/unmap"><button type="submit" class="btn btn-outline-danger"><i class="ti ti-unlink icon"></i> Unlink</button></form>
-            </div>
-            {% endif %}
+            {% if mapping %}<div class="card-footer d-flex gap-2 justify-content-end">{% if mapping.mapped_by == 'auto' %}<form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/confirm"><button type="submit" class="btn btn-success"><i class="ti ti-check icon"></i> Confirm</button></form>{% endif %}<form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/unmap"><button type="submit" class="btn btn-outline-danger"><i class="ti ti-unlink icon"></i> Unlink</button></form></div>{% endif %}
         </div>
     </div>
 </div>
@@ -95,11 +91,8 @@
     <div class="card-header">
         <div class="row w-100 align-items-end g-2">
             <div class="col"><h3 class="card-title mb-0">Link existing Mealie Food</h3><p class="card-subtitle">A scan adds this Food structurally with the selected quantity and unit.</p></div>
-            <div class="col-md-3"><label class="form-label">Default quantity</label><input id="food-default-quantity" type="number" min="0.000001" step="any" value="1" class="form-control"></div>
-            <div class="col-md-4">
-                <label class="form-label">Unit</label>
-                <select id="food-default-unit" class="form-select"><option value="">No unit</option>{% for unit in units %}<option value="{{ unit.id }}">{{ unit.name }}{% if unit.abbreviation %} ({{ unit.abbreviation }}){% endif %}</option>{% endfor %}</select>
-            </div>
+            <div class="col-md-4"><label class="form-label">Default quantity</label>{{ decimal_stepper('', 1, 'food-default-quantity') }}</div>
+            <div class="col-md-4"><label class="form-label">Unit</label><select id="food-default-unit" class="form-select"><option value="">No unit</option>{% for unit in units %}<option value="{{ unit.id }}">{{ unit.name }}{% if unit.abbreviation %} ({{ unit.abbreviation }}){% endif %}</option>{% endfor %}</select></div>
         </div>
     </div>
     <div class="card-body border-bottom"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search icon"></i></span><input type="text" id="item-search" class="form-control" placeholder="Search Mealie Foods…" autocomplete="off"></div></div>
@@ -122,7 +115,7 @@
 <div class="row row-cards mb-3">
     <div class="col-lg-6">
         <div class="card h-100">
-            <div class="card-header"><div><h3 class="card-title">Create new Mealie Food</h3><p class="card-subtitle">Creates a real Food in Mealie and links this barcode to it.</p></div></div>
+            <div class="card-header"><div><h3 class="card-title">Create new Mealie Food</h3><p class="card-subtitle">Creates a real Food in Mealie. If the exact name exists, that Food is linked instead.</p></div></div>
             <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/create-and-map">
                 <div class="card-body">
                     <div class="mb-3"><label class="form-label">Name</label><input class="form-control" name="name" required value="{{ cached.title or '' }}"></div>
@@ -130,8 +123,8 @@
                     <div class="mb-3"><label class="form-label">Category / label</label><select class="form-select" name="label_id"><option value="">No label</option>{% for label in labels %}<option value="{{ label.id }}">{{ label.name }}</option>{% endfor %}</select></div>
                     <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="2"></textarea></div>
                     <div class="row g-2">
-                        <div class="col-4"><label class="form-label">Default quantity</label><input class="form-control" name="quantity" type="number" min="0.000001" step="any" value="1" required></div>
-                        <div class="col-8"><label class="form-label">Unit</label><select class="form-select" name="unit_id"><option value="">No unit</option>{% for unit in units %}<option value="{{ unit.id }}">{{ unit.name }}{% if unit.abbreviation %} ({{ unit.abbreviation }}){% endif %}</option>{% endfor %}</select></div>
+                        <div class="col-6"><label class="form-label">Default quantity</label>{{ decimal_stepper('quantity', 1) }}</div>
+                        <div class="col-6"><label class="form-label">Unit</label><select class="form-select" name="unit_id"><option value="">No unit</option>{% for unit in units %}<option value="{{ unit.id }}">{{ unit.name }}{% if unit.abbreviation %} ({{ unit.abbreviation }}){% endif %}</option>{% endfor %}</select></div>
                     </div>
                 </div>
                 <div class="card-footer text-end"><button class="btn btn-success" type="submit"><i class="ti ti-plus icon"></i> Create & link Food</button></div>
@@ -149,7 +142,7 @@
                 <form id="recipe-map-form" method="post" action="/barcodes/{{ cached.barcode|urlencode }}/map-recipe">
                     <input type="hidden" id="recipe-id" name="recipe_id"><input type="hidden" id="recipe-name" name="recipe_name">
                     <div class="mb-3"><label class="form-label">Selected recipe</label><input id="recipe-selected-name" class="form-control" readonly placeholder="No recipe selected"></div>
-                    <div class="mb-3"><label class="form-label">Recipe scale</label><input class="form-control" type="number" name="recipe_scale" min="0.000001" step="any" value="1"></div>
+                    <div class="mb-3"><label class="form-label">Recipe scale</label>{{ decimal_stepper('recipe_scale', 1) }}</div>
                     <button id="recipe-map-button" class="btn btn-primary" type="submit" disabled><i class="ti ti-receipt icon"></i> Link recipe</button>
                 </form>
             </div>
@@ -160,6 +153,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/decimal-number.js?v={{ v }}"></script>
 <script src="/static/js/item-search.js?v={{ v }}"></script>
 <script src="/static/js/recipe-search.js?v={{ v }}"></script>
 {% endblock %}
