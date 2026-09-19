@@ -21,13 +21,11 @@ def items_list(request: Request, q: str = Query(""), db: Session = Depends(get_d
         query = query.filter(Item.name.ilike(f"%{q}%") | Item.aliases.ilike(f"%{q}%"))
     all_items = query.order_by(func.lower(Item.name)).all()
 
-    # Count mappings per item
     mapping_counts = {}
-    for mapping in db.query(BarcodeMapping).all():
-        mapping_counts[mapping.item_id] = mapping_counts.get(mapping.item_id, 0) + 1
+    for mapping in db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food").all():
+        mapping_counts[mapping.target_id] = mapping_counts.get(mapping.target_id, 0) + 1
 
     items = [{"item": i, "mapping_count": mapping_counts.get(i.id, 0)} for i in all_items]
-
     last_synced = next((i.synced_at for i in all_items if i.source == "mealie" and i.synced_at), None)
 
     return templates.TemplateResponse(request, "items.html", {
@@ -41,18 +39,28 @@ def items_list(request: Request, q: str = Query(""), db: Session = Depends(get_d
 def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
     item = db.get(Item, item_id)
     if not item:
-        return templates.TemplateResponse(request, "404.html", {"message": "Item not found"}, status_code=404)
+        return templates.TemplateResponse(
+            request,
+            "404.html",
+            {"message": "Item not found"},
+            status_code=404,
+        )
 
-    # Get all barcodes mapped to this item
-    mappings = db.query(BarcodeMapping).filter(BarcodeMapping.item_id == item_id).all()
+    mappings = db.query(BarcodeMapping).filter(
+        BarcodeMapping.target_type == "food",
+        BarcodeMapping.target_id == item_id,
+    ).all()
     barcode_ids = [m.barcode for m in mappings]
-    barcodes = db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(barcode_ids)).all() if barcode_ids else []
-
+    barcodes = (
+        db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(barcode_ids)).all()
+        if barcode_ids
+        else []
+    )
     barcode_map = {bc.barcode: bc for bc in barcodes}
-    mapped_items = []
-    for m in mappings:
-        bc = barcode_map.get(m.barcode)
-        mapped_items.append({"mapping": m, "barcode": bc})
+    mapped_items = [
+        {"mapping": mapping, "barcode": barcode_map.get(mapping.barcode)}
+        for mapping in mappings
+    ]
 
     return templates.TemplateResponse(request, "item_detail.html", {
         "item": item,
@@ -63,7 +71,7 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
 @router.post("/items/{item_id}/remove-mapping/{barcode}")
 def remove_item_mapping(item_id: str, barcode: str, db: Session = Depends(get_db)):
     mapping = db.get(BarcodeMapping, barcode)
-    if mapping and mapping.item_id == item_id:
+    if mapping and mapping.target_type == "food" and mapping.target_id == item_id:
         db.delete(mapping)
         db.commit()
     return RedirectResponse(f"/items/{item_id}", status_code=303)
@@ -74,29 +82,29 @@ def trigger_sync(db: Session = Depends(get_db)):
     try:
         sync_items(db)
     except Exception as e:
-        logger.error(f"Manual item sync failed: {e}")
+        logger.error("Manual item sync failed: %s", e)
     return RedirectResponse("/items", status_code=303)
 
 
 @router.post("/items/add")
 def add_custom_item(name: str = Form(...), db: Session = Depends(get_db)):
-    """Create a manual item (non-Mealie)."""
+    """Legacy local item support; barcode mapping UI now creates real Mealie Foods."""
     name = name.strip()
-    if not name:
-        return RedirectResponse("/items", status_code=303)
-    db.add(Item(name=name, source="manual"))
-    db.commit()
+    if name:
+        db.add(Item(name=name, source="manual"))
+        db.commit()
     return RedirectResponse("/items", status_code=303)
 
 
 @router.post("/items/{item_id}/delete")
 def delete_custom_item(item_id: str, db: Session = Depends(get_db)):
-    """Delete a manual item. Mealie items cannot be deleted."""
     item = db.get(Item, item_id)
     if not item or item.source != "manual":
         return RedirectResponse("/items", status_code=303)
-    # Remove any barcode mappings pointing to this item
-    db.query(BarcodeMapping).filter(BarcodeMapping.item_id == item_id).delete()
+    db.query(BarcodeMapping).filter(
+        BarcodeMapping.target_type == "food",
+        BarcodeMapping.target_id == item_id,
+    ).delete()
     db.delete(item)
     db.commit()
     return RedirectResponse("/items", status_code=303)
