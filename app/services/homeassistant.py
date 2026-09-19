@@ -18,8 +18,6 @@ def should_send_scan_webhook(result: str, needs_action: bool = False) -> bool:
         return True
     if mode == "actionable":
         return needs_action or result in {"unknown", "needs_mapping", "error", "auto_mapped"}
-    # Default: only unresolved scans. Deliberately excludes successful auto-matches
-    # and transient retry-queue events to avoid notification spam.
     return result in {"unknown", "needs_mapping", "error", "retry_failed", "broken"}
 
 
@@ -57,14 +55,36 @@ def notify_scan(
         logger.warning("HA webhook failed for barcode %s", barcode, exc_info=True)
 
 
+def _last_actionable_result(barcode: str) -> str | None:
+    """Resolve the last bell-notification type even if viewing the page marked it read."""
+    try:
+        from app.database import SessionLocal
+        from app.models import Activity
+
+        db = SessionLocal()
+        try:
+            row = (
+                db.query(Activity)
+                .filter(Activity.barcode == barcode, Activity.is_dismissed == False)
+                .order_by(Activity.created_at.desc())
+                .first()
+            )
+            return row.result if row else None
+        finally:
+            db.close()
+    except Exception:
+        logger.debug("Could not resolve prior notification type for %s", barcode, exc_info=True)
+        return None
+
+
 def dismiss_notification(barcode: str, result: str | None = None) -> None:
-    """Tell HA to clear a phone notification if this event type could have created one."""
+    """Tell HA to clear a phone notification only if this event type could have created one."""
     url = settings.ha_webhook_url
-    if not url:
+    if not url or settings.ha_notification_mode == "off":
         return
-    if result is not None and not should_send_scan_webhook(result, needs_action=True):
-        return
-    if settings.ha_notification_mode == "off":
+
+    result = result or _last_actionable_result(barcode)
+    if result is None or not should_send_scan_webhook(result, needs_action=True):
         return
 
     payload = {
