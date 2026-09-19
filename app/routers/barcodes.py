@@ -15,6 +15,7 @@ from app.services.fuzzy import fuzzy_match
 from app.services.homeassistant import dismiss_notification as ha_dismiss
 from app.services.mealie import (
     create_food,
+    find_food_by_name,
     get_labels,
     get_units,
     reconcile_linked_barcode,
@@ -27,6 +28,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _parse_positive_float(value: str | float | int | None, default: float = 1.0) -> float:
+    """Accept both 1.5 and German-style 1,5 and keep values positive."""
+    if value is None:
+        return default
+    try:
+        parsed = float(str(value).strip().replace(",", "."))
+    except (TypeError, ValueError):
+        return default
+    return max(parsed, 0.000001)
+
+
 def _mark_notifications_read(barcode: str, db: Session):
     db.query(Activity).filter(
         Activity.barcode == barcode,
@@ -35,8 +47,29 @@ def _mark_notifications_read(barcode: str, db: Session):
 
 
 def _resolve_notifications(barcode: str, db: Session):
+    unread = (
+        db.query(Activity)
+        .filter(Activity.barcode == barcode, Activity.is_read == False)
+        .order_by(Activity.created_at.desc())
+        .first()
+    )
     _mark_notifications_read(barcode, db)
-    ha_dismiss(barcode)
+    ha_dismiss(barcode, unread.result if unread else None)
+
+
+def _cache_food(food: dict, db: Session) -> Item:
+    aliases_raw = food.get("aliases") or []
+    aliases = [a.get("name", a) if isinstance(a, dict) else a for a in aliases_raw]
+    item = Item(
+        id=food["id"],
+        name=food.get("name") or "Unnamed Food",
+        source="mealie",
+        aliases=json.dumps(aliases),
+        synced_at=utcnow(),
+    )
+    db.merge(item)
+    db.flush()
+    return db.get(Item, food["id"])
 
 
 def _food_mapping(
@@ -201,6 +234,8 @@ def barcode_detail(
             "threshold": settings.fuzzy_match_threshold,
             "units": get_units(),
             "labels": get_labels(),
+            "duplicate_food": request.query_params.get("duplicate_food") == "1",
+            "create_error": request.query_params.get("create_error") == "1",
         },
     )
 
@@ -210,7 +245,7 @@ def barcode_map(
     barcode: str,
     background_tasks: BackgroundTasks,
     item_id: str = Form(...),
-    quantity: float = Form(1.0),
+    quantity: str = Form("1"),
     unit_id: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -218,7 +253,7 @@ def barcode_map(
     if not item or item.source != "mealie":
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
-    _food_mapping(barcode, item, quantity, unit_id or None, db, mapped_by="manual")
+    _food_mapping(barcode, item, _parse_positive_float(quantity), unit_id or None, db, mapped_by="manual")
     _resolve_notifications(barcode, db)
     db.commit()
     background_tasks.add_task(reconcile_linked_barcode, barcode)
@@ -233,7 +268,7 @@ def barcode_create_and_map(
     plural_name: str = Form(""),
     description: str = Form(""),
     label_id: str = Form(""),
-    quantity: float = Form(1.0),
+    quantity: str = Form("1"),
     unit_id: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -241,35 +276,38 @@ def barcode_create_and_map(
     if not name:
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
-    try:
-        food = create_food(
-            name=name,
-            plural_name=plural_name.strip() or None,
-            description=description.strip() or None,
-            label_id=label_id or None,
-        )
-    except Exception:
-        logger.exception("Failed to create Mealie Food for barcode %s", barcode)
-        return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
+    quantity_value = _parse_positive_float(quantity)
 
-    aliases_raw = food.get("aliases") or []
-    aliases = [a.get("name", a) if isinstance(a, dict) else a for a in aliases_raw]
-    item = Item(
-        id=food["id"],
-        name=food.get("name") or name,
-        source="mealie",
-        aliases=json.dumps(aliases),
-        synced_at=utcnow(),
-    )
-    db.merge(item)
-    db.flush()
-    item = db.get(Item, food["id"])
+    # Avoid Mealie duplicate-name errors and make the intended action explicit:
+    # if the Food already exists, link the existing Food instead of creating a second one.
+    food = find_food_by_name(name)
+    duplicate = food is not None
+    if not food:
+        try:
+            food = create_food(
+                name=name,
+                plural_name=plural_name.strip() or None,
+                description=description.strip() or None,
+                label_id=label_id or None,
+            )
+        except Exception:
+            # A race or stale local cache can still cause Mealie to reject a duplicate.
+            food = find_food_by_name(name)
+            if not food:
+                logger.exception("Failed to create Mealie Food for barcode %s", barcode)
+                return RedirectResponse(
+                    f"/barcodes/{quote(barcode, safe='')}?create_error=1",
+                    status_code=303,
+                )
+            duplicate = True
 
-    _food_mapping(barcode, item, quantity, unit_id or None, db, mapped_by="manual")
+    item = _cache_food(food, db)
+    _food_mapping(barcode, item, quantity_value, unit_id or None, db, mapped_by="manual")
     _resolve_notifications(barcode, db)
     db.commit()
     background_tasks.add_task(reconcile_linked_barcode, barcode)
-    return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
+    suffix = "?duplicate_food=1" if duplicate else ""
+    return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}{suffix}", status_code=303)
 
 
 @router.post("/barcodes/{barcode:path}/map-recipe")
@@ -278,7 +316,7 @@ def barcode_map_recipe(
     background_tasks: BackgroundTasks,
     recipe_id: str = Form(...),
     recipe_name: str = Form(""),
-    recipe_scale: float = Form(1.0),
+    recipe_scale: str = Form("1"),
     db: Session = Depends(get_db),
 ):
     recipe_id = recipe_id.strip()
@@ -289,7 +327,7 @@ def barcode_map_recipe(
         barcode,
         recipe_id,
         recipe_name.strip() or recipe_id,
-        recipe_scale,
+        _parse_positive_float(recipe_scale),
         db,
     )
     _resolve_notifications(barcode, db)
@@ -301,18 +339,18 @@ def barcode_map_recipe(
 @router.post("/barcodes/{barcode:path}/mapping-settings")
 def barcode_mapping_settings(
     barcode: str,
-    quantity: float = Form(1.0),
+    quantity: str = Form("1"),
     unit_id: str = Form(""),
-    recipe_scale: float = Form(1.0),
+    recipe_scale: str = Form("1"),
     db: Session = Depends(get_db),
 ):
     mapping = db.get(BarcodeMapping, barcode)
     if mapping:
         if mapping.target_type == "food":
-            mapping.quantity = max(quantity, 0.000001)
+            mapping.quantity = _parse_positive_float(quantity)
             mapping.unit_id = unit_id or None
         elif mapping.target_type == "recipe":
-            mapping.recipe_scale = max(recipe_scale, 0.000001)
+            mapping.recipe_scale = _parse_positive_float(recipe_scale)
         db.commit()
 
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
