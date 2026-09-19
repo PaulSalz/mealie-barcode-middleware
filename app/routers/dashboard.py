@@ -66,7 +66,6 @@ def _recent_scans(db: Session, limit: int = 25) -> list[dict]:
 
 
 def _frequent_targets(db: Session, limit_each: int = 6) -> tuple[list[dict], list[dict]]:
-    # Activities marked dismissed are scan-history rows rather than actionable bell notifications.
     activities = (
         db.query(Activity)
         .filter(Activity.is_dismissed == True)
@@ -181,10 +180,10 @@ def dashboard_api(db: Session = Depends(get_db)):
         "recent_items": [
             {
                 "barcode": row["barcode"],
-                "item_name": row["target_name"],
+                "item_name": row["target_name"] if row["target_type"] == "food" else None,
                 "item_id": row["target_id"] if row["target_type"] == "food" else None,
                 "target_type": row["target_type"],
-                "title": row["title"] or "—",
+                "title": row["target_name"] if row["target_type"] == "recipe" else (row["title"] or "—"),
                 "source": row["source"] or "—",
                 "status": row["status"],
                 "created_at": _localtime(row["created_at"]),
