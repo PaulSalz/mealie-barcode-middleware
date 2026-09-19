@@ -30,7 +30,7 @@ def _scan_status(result: str, mapping: BarcodeMapping | None) -> str:
 def _recent_scans(db: Session, limit: int = 25) -> list[dict]:
     activities = (
         db.query(Activity)
-        .filter(Activity.is_dismissed == True)
+        .filter(Activity.is_scan_event == True)
         .order_by(Activity.created_at.desc())
         .limit(limit)
         .all()
@@ -68,7 +68,7 @@ def _recent_scans(db: Session, limit: int = 25) -> list[dict]:
 def _frequent_targets(db: Session, limit_each: int = 6) -> tuple[list[dict], list[dict]]:
     activities = (
         db.query(Activity)
-        .filter(Activity.is_dismissed == True)
+        .filter(Activity.is_scan_event == True)
         .order_by(Activity.created_at.desc())
         .limit(5000)
         .all()
