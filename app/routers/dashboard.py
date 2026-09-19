@@ -7,56 +7,63 @@ from starlette.responses import StreamingResponse
 
 from app.database import get_db
 from app.events import scan_events
-from app.models import ApiToken, BarcodeCache, BarcodeMapping, Item, RetryQueue
+from app.models import ApiToken, BarcodeCache, BarcodeMapping, RecipeBarcodeMapping, Item, RetryQueue
 from app.services.mealie import check_connectivity
 from app.templating import templates, _localtime
 
 router = APIRouter()
 
 
+def _mapped_ids(db: Session) -> set[str]:
+    return (
+        {m.barcode for m in db.query(BarcodeMapping.barcode).all()}
+        | {m.barcode for m in db.query(RecipeBarcodeMapping.barcode).all()}
+    )
+
+
+def _counts(db: Session):
+    mapped_ids = _mapped_ids(db)
+    total_barcodes = db.query(BarcodeCache).count()
+    mapped_count = len(mapped_ids)
+
+    pending_query = db.query(BarcodeCache).filter(BarcodeCache.found == True)
+    unknown_query = db.query(BarcodeCache).filter(BarcodeCache.found == False)
+    if mapped_ids:
+        pending_query = pending_query.filter(~BarcodeCache.barcode.in_(mapped_ids))
+        unknown_query = unknown_query.filter(~BarcodeCache.barcode.in_(mapped_ids))
+
+    return total_barcodes, mapped_count, pending_query.count(), unknown_query.count()
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)):
-    # Stats
-    total_barcodes = db.query(BarcodeCache).count()
-    mapped_count = db.query(BarcodeMapping).count()
-    pending_count = (
-        db.query(BarcodeCache)
-        .filter(BarcodeCache.found == True)
-        .filter(~BarcodeCache.barcode.in_(
-            db.query(BarcodeMapping.barcode)
-        ))
-        .count()
-    )
+    total_barcodes, mapped_count, pending_count, unknown_count = _counts(db)
     queue_depth = db.query(RetryQueue).count()
-    unknown_count = (
-        db.query(BarcodeCache)
-        .filter(BarcodeCache.found == False)
-        .filter(~BarcodeCache.barcode.in_(db.query(BarcodeMapping.barcode)))
-        .count()
-    )
 
-    # Recent scans
     recent = db.query(BarcodeCache).order_by(BarcodeCache.created_at.desc()).limit(10).all()
-
-    # Build recent items with status — only load mappings/queue for recent barcodes
     recent_barcodes = [bc.barcode for bc in recent]
     mappings = {
         m.barcode: m for m in
         db.query(BarcodeMapping).filter(BarcodeMapping.barcode.in_(recent_barcodes)).all()
     } if recent_barcodes else {}
-    queued_barcodes = set(
+    recipe_mappings = {
+        m.barcode: m for m in
+        db.query(RecipeBarcodeMapping).filter(RecipeBarcodeMapping.barcode.in_(recent_barcodes)).all()
+    } if recent_barcodes else {}
+    queued_barcodes = {
         r.barcode for r in
         db.query(RetryQueue.barcode).filter(RetryQueue.barcode.in_(recent_barcodes)).all()
-    ) if recent_barcodes else set()
+    } if recent_barcodes else set()
     item_ids = [m.item_id for m in mappings.values()]
     items_map = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()} if item_ids else {}
 
     recent_items = []
     for bc in recent:
-        if bc.barcode in mappings:
+        mapping = mappings.get(bc.barcode)
+        recipe_mapping = recipe_mappings.get(bc.barcode)
+        if mapping or recipe_mapping:
             status = "mapped"
-            mapping = mappings[bc.barcode]
-            item = items_map.get(mapping.item_id)
+            item = items_map.get(mapping.item_id) if mapping else None
         else:
             item = None
             if bc.barcode in queued_barcodes:
@@ -65,14 +72,16 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
                 status = "unknown"
             else:
                 status = "pending"
-        recent_items.append({"barcode": bc, "status": status, "item": item})
+        recent_items.append({
+            "barcode": bc,
+            "status": status,
+            "item": item,
+            "recipe_mapping": recipe_mapping,
+        })
 
-    # Health
     mealie_reachable = check_connectivity()
-
     last_sync = db.query(Item.synced_at).filter(Item.source == "mealie").order_by(Item.synced_at.desc()).first()
     last_sync_time = last_sync[0] if last_sync else None
-
     has_tokens = db.query(ApiToken).first() is not None
 
     return templates.TemplateResponse(request, "dashboard.html", {
@@ -90,17 +99,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/api/dashboard")
 def dashboard_api(db: Session = Depends(get_db)):
-    """JSON endpoint for partial dashboard refresh."""
-    total_barcodes = db.query(BarcodeCache).count()
-    mapped_count = db.query(BarcodeMapping).count()
-    pending_count = (
-        db.query(BarcodeCache)
-        .filter(BarcodeCache.found == True)
-        .filter(~BarcodeCache.barcode.in_(
-            db.query(BarcodeMapping.barcode)
-        ))
-        .count()
-    )
+    total_barcodes, mapped_count, pending_count, unknown_count = _counts(db)
     queue_depth = db.query(RetryQueue).count()
 
     recent = db.query(BarcodeCache).order_by(BarcodeCache.created_at.desc()).limit(10).all()
@@ -109,19 +108,24 @@ def dashboard_api(db: Session = Depends(get_db)):
         m.barcode: m for m in
         db.query(BarcodeMapping).filter(BarcodeMapping.barcode.in_(recent_barcodes)).all()
     } if recent_barcodes else {}
-    queued_barcodes = set(
+    recipe_mappings = {
+        m.barcode: m for m in
+        db.query(RecipeBarcodeMapping).filter(RecipeBarcodeMapping.barcode.in_(recent_barcodes)).all()
+    } if recent_barcodes else {}
+    queued_barcodes = {
         r.barcode for r in
         db.query(RetryQueue.barcode).filter(RetryQueue.barcode.in_(recent_barcodes)).all()
-    ) if recent_barcodes else set()
+    } if recent_barcodes else set()
     item_ids = [m.item_id for m in mappings.values()]
     items_map = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()} if item_ids else {}
 
     recent_items = []
     for bc in recent:
-        if bc.barcode in mappings:
+        mapping = mappings.get(bc.barcode)
+        recipe_mapping = recipe_mappings.get(bc.barcode)
+        if mapping or recipe_mapping:
             status = "mapped"
-            mapping = mappings[bc.barcode]
-            item = items_map.get(mapping.item_id)
+            item = items_map.get(mapping.item_id) if mapping else None
         else:
             item = None
             if bc.barcode in queued_barcodes:
@@ -130,22 +134,19 @@ def dashboard_api(db: Session = Depends(get_db)):
                 status = "unknown"
             else:
                 status = "pending"
+        linked_name = item.name if item else (
+            recipe_mapping.recipe_name or recipe_mapping.recipe_id if recipe_mapping else None
+        )
         recent_items.append({
             "barcode": bc.barcode,
-            "item_name": item.name if item else None,
+            "item_name": linked_name,
             "item_id": item.id if item else None,
-            "title": bc.title or "\u2014",
-            "source": bc.source or "\u2014",
+            "linked_type": "recipe" if recipe_mapping else ("food" if mapping else None),
+            "title": bc.title or "—",
+            "source": bc.source or "—",
             "status": status,
             "created_at": _localtime(bc.created_at),
         })
-
-    unknown_count = (
-        db.query(BarcodeCache)
-        .filter(BarcodeCache.found == False)
-        .filter(~BarcodeCache.barcode.in_(db.query(BarcodeMapping.barcode)))
-        .count()
-    )
 
     return {
         "total_barcodes": total_barcodes,
@@ -159,12 +160,10 @@ def dashboard_api(db: Session = Depends(get_db)):
 
 @router.get("/events")
 async def sse_stream():
-    """Server-Sent Events stream for real-time scan notifications."""
     queue = scan_events.subscribe()
 
     async def _generate():
         try:
-            # Send initial comment to confirm connection
             yield ": connected\n\n"
             while True:
                 msg = await queue.get()
