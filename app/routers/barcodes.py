@@ -27,7 +27,9 @@ from app.services.mealie import (
     get_food_labels,
     get_recipes,
     get_recipe,
+    add_recipe_to_shopping_list,
 )
+from app.services.shopping_cleanup import delete_shopping_item
 from app.templating import templates
 
 logger = logging.getLogger(__name__)
@@ -286,6 +288,7 @@ def barcode_map_recipe(
     if not recipe_id:
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
+    scale = _normalise_quantity(recipe_scale)
     recipe = get_recipe(recipe_id)
     recipe_name = recipe.get("name") if recipe else recipe_id
 
@@ -294,19 +297,30 @@ def barcode_map_recipe(
         db.delete(food_mapping)
 
     existing = db.get(RecipeBarcodeMapping, barcode)
+    is_new_mapping = existing is None
     if existing:
         existing.recipe_id = recipe_id
         existing.recipe_name = recipe_name
-        existing.recipe_scale = _normalise_quantity(recipe_scale)
+        existing.recipe_scale = scale
         existing.mapped_by = "manual"
     else:
         db.add(RecipeBarcodeMapping(
             barcode=barcode,
             recipe_id=recipe_id,
             recipe_name=recipe_name,
-            recipe_scale=_normalise_quantity(recipe_scale),
+            recipe_scale=scale,
             mapped_by="manual",
         ))
+
+    # If this mapping resolves a scan that was already added as a text note,
+    # fulfil that scan immediately with Mealie's native recipe reference and
+    # remove the temporary note only after the recipe add succeeded.
+    cached = db.get(BarcodeCache, barcode)
+    if is_new_mapping:
+        added = add_recipe_to_shopping_list(recipe_id, scale)
+        if added and cached and cached.shopping_item_id:
+            if delete_shopping_item(cached.shopping_item_id):
+                cached.shopping_item_id = None
 
     _resolve_notifications(barcode, db)
     db.commit()
