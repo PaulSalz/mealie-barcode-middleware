@@ -15,7 +15,7 @@ from app.models import Activity, BarcodeCache, BarcodeMapping, Item
 from app.pause import is_paused
 from app.services.barcode_lookup import enrich_barcode_background, needs_background_enrich, perform_lookup
 from app.services.fuzzy import try_auto_map
-from app.services.homeassistant import notify_scan as ha_notify_scan
+from app.services.homeassistant import notify_scan as ha_notify_scan, should_send_scan_webhook
 from app.services.mealie import (
     add_recipe_to_shopping_list,
     add_shopping_note,
@@ -42,17 +42,17 @@ class ScanRequest(BaseModel):
 class ScanResponse(BaseModel):
     result: str
     item: str | None = None
-    via: str | None = None  # item_id | recipe | note
+    via: str | None = None
     needs_action: bool = False
     action_url: str | None = None
     brand: str | None = None
     quantity: str | None = None
-    item_source: str | None = None  # mealie | recipe | manual | None
+    item_source: str | None = None
     paused: bool = False
 
 
 def _queue_ha_notification(resp: ScanResponse, barcode: str, background_tasks: BackgroundTasks) -> None:
-    if not resp.needs_action:
+    if not should_send_scan_webhook(resp.result, resp.needs_action):
         return
     added_to_list = (
         resp.via is not None
@@ -64,7 +64,7 @@ def _queue_ha_notification(resp: ScanResponse, barcode: str, background_tasks: B
         barcode,
         resp.item,
         resp.result,
-        resp.action_url or "",
+        resp.action_url or _build_action_url(barcode),
         added_to_list,
         resp.paused,
     )
@@ -96,14 +96,12 @@ def scan_barcode(
 def _process_scan(barcode: str, db: Session, background_tasks: BackgroundTasks) -> ScanResponse:
     paused = is_paused(db)
 
-    # Physical product codes are numeric. Kitchen labels may use GENERIC:<name>.
     if not barcode.upper().startswith("GENERIC:") and not barcode.isdigit():
         raise HTTPException(
             status_code=422,
             detail="Invalid barcode format — only numeric barcodes and GENERIC: codes are accepted",
         )
 
-    # A stored mapping always wins over product lookup/fuzzy matching.
     mapping = db.get(BarcodeMapping, barcode)
     if mapping:
         cached = db.get(BarcodeCache, barcode)
@@ -153,6 +151,7 @@ def _process_scan(barcode: str, db: Session, background_tasks: BackgroundTasks) 
                 action_url=_build_action_url(barcode),
             )
             _emit_scan_event(barcode, resp)
+            _save_activity(barcode, "Broken Food mapping", item_name, resp.result, db)
             _save_notification(
                 barcode,
                 "Broken Food mapping",
@@ -175,13 +174,26 @@ def _process_scan(barcode: str, db: Session, background_tasks: BackgroundTasks) 
             _save_activity(barcode, "Scanned (scan & link)", item_name, resp.result, db)
         else:
             resp = _add_via_item(item, item_name, barcode, db, cached=cached, mapping=mapping)
-            _save_activity(barcode, "Added to list", item_name, resp.result, db)
+            _save_activity(
+                barcode,
+                "Added to list" if resp.result == "added" else "Queued",
+                item_name,
+                resp.result,
+                db,
+            )
         _emit_scan_event(barcode, resp)
         return resp
 
     if barcode.upper().startswith("GENERIC:"):
         term = barcode[len("GENERIC:"):].strip()
         resp = _handle_generic(term, barcode, db, paused=paused)
+        _save_activity(
+            barcode,
+            "Scanned (scan & link)" if paused else ("Added to list" if resp.result.startswith("added") else "Queued"),
+            resp.item or term or barcode,
+            resp.result,
+            db,
+        )
         _emit_scan_event(barcode, resp)
         return resp
 
@@ -216,6 +228,13 @@ def _process_scan(barcode: str, db: Session, background_tasks: BackgroundTasks) 
         resp.needs_action = True
         resp.action_url = _build_action_url(barcode)
         _emit_scan_event(barcode, resp)
+        _save_activity(
+            barcode,
+            "Unknown barcode (scan & link)" if paused else "Unknown barcode",
+            barcode,
+            "unknown",
+            db,
+        )
         _save_notification(
             barcode,
             "Unknown barcode (scan & link)" if paused else "Unknown barcode",
@@ -352,6 +371,7 @@ def _save_activity(barcode: str, title: str, message: str, result: str, db: Sess
         result=result,
         is_read=True,
         is_dismissed=True,
+        is_scan_event=True,
     ))
     db.commit()
 
@@ -405,22 +425,18 @@ def _handle_generic(term: str, barcode: str, db: Session, paused: bool = False) 
         db.commit()
 
         if paused:
-            resp = ScanResponse(
+            return ScanResponse(
                 result="added",
                 item=best_item.name,
                 via=None,
                 paused=True,
                 item_source=best_item.source,
             )
-            _save_activity(barcode, "Scanned (scan & link)", best_item.name, resp.result, db)
-            return resp
 
         return _add_via_item(best_item, best_item.name, barcode, db, cached=cached, mapping=mapping)
 
     if paused:
-        resp = ScanResponse(result="added_as_note", item=term, via=None, paused=True)
-        _save_activity(barcode, "Scanned (scan & link)", term, resp.result, db)
-        return resp
+        return ScanResponse(result="added_as_note", item=term, via=None, paused=True)
 
     success, shopping_item_id = add_shopping_note(term)
     if success:

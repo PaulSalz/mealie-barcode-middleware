@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     lookup_strategy: str = "failover"   # failover | complement
     lookup_primary: str = "off"          # off | upcdb
-    lookup_enrich_in_background: bool = True  # complement: secondary call after response
+    lookup_enrich_in_background: bool = True
 
     item_sync_interval_hours: int = 6
     fuzzy_match_threshold: int = 85
@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     middleware_base_url: str = ""
     ha_webhook_url: str = ""
+    ha_notification_mode: str = "unresolved"  # unresolved | actionable | all | off
 
     db_path: str = "/data/barcode.db"
     timezone: str = "Europe/Berlin"
@@ -41,12 +42,7 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
-# ── Editable settings registry ──────────────────────────────────────
-# Each entry: field_name → {type, description, choices (optional)}
-# Only settings listed here can be changed via the web UI.
-
 EDITABLE_SETTINGS: dict[str, dict[str, Any]] = {
-    # Barcode Lookup Sources
     "off_enabled": {
         "type": "bool",
         "label": "OFF_ENABLED",
@@ -90,12 +86,11 @@ EDITABLE_SETTINGS: dict[str, dict[str, Any]] = {
         "group": "Barcode Lookup Sources",
         "section": "Strategy",
     },
-    # Matching & Sync
     "fuzzy_match_threshold": {
         "type": "int",
         "label": "FUZZY_MATCH_THRESHOLD",
         "description": "Match threshold",
-        "help": "Minimum score (0\u2013100) for a barcode title to be auto-linked to a Mealie item.",
+        "help": "Minimum score (0–100) for a barcode title to be auto-linked to a Mealie item.",
         "min": 0,
         "max": 100,
         "group": "Matching & Sync",
@@ -145,14 +140,11 @@ EDITABLE_SETTINGS: dict[str, dict[str, Any]] = {
         "type": "choice",
         "label": "UNKNOWN_BARCODE_ACTION",
         "description": "Unknown barcode behavior",
-        "help": "Controls what happens when a scanned barcode can't be linked to a Mealie item. "
-                "'Add to list & notify' adds a note to your shopping list and sends a notification. "
-                "'Notify only' skips the shopping list \u2014 unmapped barcodes appear on the Barcodes page for linking later.",
+        "help": "Controls what happens when a scanned barcode can't be linked to a Mealie item. 'Add to list & notify' adds a note to your shopping list and sends a notification. 'Notify only' skips the shopping list — unmapped barcodes appear on the Barcodes page for linking later.",
         "choices": [("add_to_list", "Add to list & notify"), ("notify_only", "Notify only")],
         "group": "Scanning",
         "section": "Unknown & Unlinked Barcodes",
     },
-    # System
     "timezone": {
         "type": "str",
         "label": "TIMEZONE",
@@ -170,12 +162,25 @@ EDITABLE_SETTINGS: dict[str, dict[str, Any]] = {
         "group": "System",
         "section": "General",
     },
-    # Home Assistant
+    "ha_notification_mode": {
+        "type": "choice",
+        "label": "HA_NOTIFICATION_MODE",
+        "description": "When to send scan webhooks",
+        "help": "Unresolved sends only unknown, unlinked, or failed scans. Actionable also includes auto-linked scans that need review. All sends every scan. Off disables scan webhooks.",
+        "choices": [
+            ("unresolved", "Only unresolved / failed scans"),
+            ("actionable", "All scans needing review"),
+            ("all", "Every scan"),
+            ("off", "Disabled"),
+        ],
+        "group": "Home Assistant",
+        "section": "Notifications",
+    },
     "ha_webhook_url": {
         "type": "str",
         "label": "HA_WEBHOOK_URL",
         "description": "Webhook URL",
-        "help": "When a scan needs attention, the middleware POSTs item details to this webhook so HA can send a push notification.",
+        "help": "The middleware POSTs selected scan events to this webhook so Home Assistant can send a push notification.",
         "hint": "e.g. http://homeassistant.local:8123/api/webhook/barcode-scanner",
         "wide": True,
         "group": "Home Assistant",
@@ -193,7 +198,6 @@ EDITABLE_SETTINGS: dict[str, dict[str, Any]] = {
     },
 }
 
-# Settings that are NEVER editable via the UI (secrets, paths, ports)
 READONLY_SETTINGS: dict[str, dict[str, Any]] = {
     "mealie_url": {
         "label": "MEALIE_URL",
@@ -242,7 +246,7 @@ READONLY_SETTINGS: dict[str, dict[str, Any]] = {
     "session_max_age_days": {
         "label": "SESSION_MAX_AGE_DAYS",
         "description": "Login session duration (days)",
-        "help": "How long users stay logged in when \u201cStay signed in\u201d is checked. Without it, the session expires when the browser closes.",
+        "help": "How long users stay logged in when “Stay signed in” is checked. Without it, the session expires when the browser closes.",
         "group": "System",
         "section": "Infrastructure",
     },
@@ -256,18 +260,10 @@ READONLY_SETTINGS: dict[str, dict[str, Any]] = {
 
 
 class SettingsManager:
-    """Proxy that overlays DB overrides on top of Pydantic env settings.
-
-    All existing ``settings.X`` attribute access works unchanged.
-    DB overrides are loaded once at init and refreshed on save.
-    """
-
     def __init__(self, env_settings: Settings):
-        # Store via __dict__ to avoid triggering __setattr__
         self.__dict__["_env"] = env_settings
         self.__dict__["_overrides"] = {}
 
-    # ── attribute access: override → env fallback ──
     def __getattr__(self, name: str) -> Any:
         if name in self.__dict__.get("_overrides", {}):
             return self._overrides[name]
@@ -276,13 +272,7 @@ class SettingsManager:
     def __setattr__(self, name: str, value: Any):
         raise AttributeError("Use save_override() to change settings")
 
-    # ── override management ──
     def load_overrides_from_db(self) -> None:
-        """Load all overrides from the settings_overrides table.
-
-        Also prunes any overrides that now match the current env value
-        (e.g. user added an env var that makes a former UI override redundant).
-        """
         from app.database import SessionLocal
         from app.models import SettingsOverride
 
@@ -301,27 +291,27 @@ class SettingsManager:
                 else:
                     overrides[row.key] = coerced
 
-            # Remove redundant overrides
             if stale:
                 for row in stale:
                     db.delete(row)
                 db.commit()
-                logger.info("Pruned %d redundant override(s): %s",
-                            len(stale), ", ".join(r.key for r in stale))
+                logger.info(
+                    "Pruned %d redundant override(s): %s",
+                    len(stale),
+                    ", ".join(r.key for r in stale),
+                )
 
             self.__dict__["_overrides"] = overrides
             if overrides:
-                logger.info("Loaded %d settings override(s) from DB: %s",
-                            len(overrides), ", ".join(overrides.keys()))
+                logger.info(
+                    "Loaded %d settings override(s) from DB: %s",
+                    len(overrides),
+                    ", ".join(overrides.keys()),
+                )
         finally:
             db.close()
 
     def save_override(self, key: str, value: str, db) -> None:
-        """Save a single override to the DB and update in-memory cache.
-
-        If the new value matches the env default, the override is removed
-        instead — keeping the DB clean and the UI consistent.
-        """
         from app.models import SettingsOverride
         from app.utils import utcnow
 
@@ -330,8 +320,6 @@ class SettingsManager:
 
         coerced = self._coerce(key, value)
         env_default = getattr(self._env, key)
-
-        # Value matches env default → remove any existing override
         if coerced == env_default:
             self.reset_override(key, db)
             return
@@ -343,37 +331,28 @@ class SettingsManager:
         else:
             db.add(SettingsOverride(key=key, value=str(value)))
         db.commit()
-
         self.__dict__["_overrides"][key] = coerced
 
     def reset_override(self, key: str, db) -> None:
-        """Remove a DB override, reverting to the env/default value."""
         from app.models import SettingsOverride
 
         existing = db.get(SettingsOverride, key)
         if existing:
             db.delete(existing)
             db.commit()
-
         self.__dict__["_overrides"].pop(key, None)
 
     def is_overridden(self, key: str) -> bool:
-        """True if this setting has a DB override (vs env default)."""
         return key in self.__dict__.get("_overrides", {})
 
     def get_env_default(self, key: str) -> Any:
-        """Get the original env/default value (ignoring DB overrides)."""
         return getattr(self._env, key)
 
     def get_display_value(self, key: str) -> str:
-        """Get the current effective value as a display string."""
         val = getattr(self, key)
-        if val is None:
-            return ""
-        return str(val)
+        return "" if val is None else str(val)
 
     def _coerce(self, key: str, raw: str) -> Any:
-        """Coerce a string value to the correct Python type."""
         meta = EDITABLE_SETTINGS[key]
         field_type = meta["type"]
         if field_type == "bool":
@@ -386,10 +365,15 @@ class SettingsManager:
                 v = min(meta["max"], v)
             return v
         if field_type == "choice":
-            if raw not in meta["choices"]:
+            choices = meta["choices"]
+            valid_values = [
+                choice[0] if isinstance(choice, (tuple, list)) else choice
+                for choice in choices
+            ]
+            if raw not in valid_values:
                 raise ValueError(f"Invalid choice '{raw}' for {key}")
             return raw
-        return raw  # str
+        return raw
 
 
 _env_settings = Settings()

@@ -1,3 +1,4 @@
+import json
 import logging
 
 from fastapi import APIRouter, Depends, Form, Query, Request
@@ -7,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import BarcodeCache, BarcodeMapping, Item
-from app.services.mealie import sync_items
+from app.services.mealie import get_food, get_labels, sync_items, update_food
 from app.templating import templates
+from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -62,10 +64,57 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
         for mapping in mappings
     ]
 
+    mealie_food = get_food(item_id) if item.source == "mealie" else None
+    labels = get_labels() if item.source == "mealie" else []
+
     return templates.TemplateResponse(request, "item_detail.html", {
         "item": item,
         "mapped_items": mapped_items,
+        "mealie_food": mealie_food,
+        "labels": labels,
+        "saved": request.query_params.get("saved") == "1",
+        "edit_error": request.query_params.get("edit_error") == "1",
     })
+
+
+@router.post("/items/{item_id}/edit")
+def edit_mealie_item(
+    item_id: str,
+    name: str = Form(...),
+    plural_name: str = Form(""),
+    description: str = Form(""),
+    label_id: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    item = db.get(Item, item_id)
+    name = name.strip()
+    if not item or item.source != "mealie" or not name:
+        return RedirectResponse(f"/items/{item_id}?edit_error=1", status_code=303)
+
+    try:
+        food = update_food(
+            item_id,
+            name=name,
+            plural_name=plural_name.strip() or None,
+            description=description.strip() or None,
+            label_id=label_id or None,
+        )
+    except Exception:
+        logger.exception("Failed to update Mealie Food %s", item_id)
+        return RedirectResponse(f"/items/{item_id}?edit_error=1", status_code=303)
+
+    aliases_raw = food.get("aliases") or []
+    aliases = [a.get("name", a) if isinstance(a, dict) else a for a in aliases_raw]
+    item.name = food.get("name") or name
+    item.aliases = json.dumps(aliases)
+    item.synced_at = utcnow()
+    db.query(BarcodeMapping).filter(
+        BarcodeMapping.target_type == "food",
+        BarcodeMapping.target_id == item_id,
+    ).update({"target_name": item.name})
+    db.commit()
+
+    return RedirectResponse(f"/items/{item_id}?saved=1", status_code=303)
 
 
 @router.post("/items/{item_id}/remove-mapping/{barcode}")
