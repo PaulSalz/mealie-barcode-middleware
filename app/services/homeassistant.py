@@ -17,8 +17,10 @@ def should_send_scan_webhook(result: str, needs_action: bool = False) -> bool:
     if mode == "all":
         return True
     if mode == "actionable":
-        return needs_action or result in {"unknown", "needs_mapping", "error", "auto_mapped"}
-    return result in {"unknown", "needs_mapping", "error", "retry_failed", "broken"}
+        return needs_action or result in {"unknown", "needs_mapping", "added_as_note", "error", "auto_mapped"}
+    # Default: unknown/unlinked/failed only. A known product that had to be added
+    # as a plain note is still unresolved and should therefore notify.
+    return result in {"unknown", "needs_mapping", "added_as_note", "error", "retry_failed", "broken"}
 
 
 def notify_scan(
