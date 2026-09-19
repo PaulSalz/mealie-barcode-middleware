@@ -135,6 +135,107 @@ def get_labels() -> list[dict]:
         return []
 
 
+def get_food(item_id: str) -> dict | None:
+    """Fetch one Food directly from Mealie."""
+    try:
+        resp = httpx.get(
+            f"{settings.mealie_url}/api/foods/{item_id}",
+            headers=_headers(),
+            timeout=10,
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data = resp.json()
+        return data if isinstance(data, dict) else None
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("Failed to load Mealie Food %s: %s", item_id, e)
+        return None
+
+
+def find_food_by_name(name: str) -> dict | None:
+    """Find an exact Food-name match in Mealie, case-insensitively."""
+    name = name.strip()
+    if not name:
+        return None
+    try:
+        resp = httpx.get(
+            f"{settings.mealie_url}/api/foods",
+            headers=_headers(),
+            params={"search": name, "perPage": 100, "orderBy": "name", "orderDirection": "asc"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        wanted = name.casefold()
+        for food in _items_from_response(resp.json()):
+            if str(food.get("name") or "").strip().casefold() == wanted:
+                return food
+        return None
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("Failed to search Mealie Food '%s': %s", name, e)
+        return None
+
+
+def _food_update_payload(existing: dict, *, name: str, plural_name: str | None, description: str | None, label_id: str | None) -> dict:
+    aliases = existing.get("aliases") or []
+    substitutions = []
+    for sub in existing.get("substitutions") or []:
+        if not isinstance(sub, dict):
+            continue
+        substitute_id = sub.get("substituteFoodId")
+        if not substitute_id and isinstance(sub.get("substituteFood"), dict):
+            substitute_id = sub["substituteFood"].get("id")
+        substitutions.append({
+            "substituteFoodId": substitute_id,
+            "note": sub.get("note"),
+        })
+
+    return {
+        "id": existing.get("id"),
+        "name": name,
+        "pluralName": plural_name or None,
+        "description": description or "",
+        "labelId": label_id or None,
+        "aliases": aliases,
+        "substitutions": substitutions,
+        "householdsWithIngredientFood": existing.get("householdsWithIngredientFood") or [],
+        "extras": existing.get("extras") or {},
+    }
+
+
+def update_food(
+    item_id: str,
+    *,
+    name: str,
+    plural_name: str | None = None,
+    description: str | None = None,
+    label_id: str | None = None,
+) -> dict:
+    """Update a real Mealie Food while preserving aliases/substitutions/extras."""
+    existing = get_food(item_id)
+    if not existing:
+        raise RuntimeError("Mealie Food not found")
+    payload = _food_update_payload(
+        existing,
+        name=name,
+        plural_name=plural_name,
+        description=description,
+        label_id=label_id,
+    )
+    resp = httpx.put(
+        f"{settings.mealie_url}/api/foods/{item_id}",
+        headers=_headers(),
+        json=payload,
+        timeout=15,
+    )
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"Mealie food update returned {resp.status_code}: {resp.text}")
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("id"):
+        raise RuntimeError("Mealie food update returned no Food id")
+    return data
+
+
 def search_recipes(query: str = "", limit: int = 20) -> list[dict]:
     params = {
         "page": 1,
