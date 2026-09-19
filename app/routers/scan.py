@@ -371,6 +371,7 @@ def _save_activity(barcode: str, title: str, message: str, result: str, db: Sess
         result=result,
         is_read=True,
         is_dismissed=True,
+        is_scan_event=True,
     ))
     db.commit()
 
