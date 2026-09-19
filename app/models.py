@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -29,9 +29,6 @@ class BarcodeCache(Base):
     quantity: Mapped[str | None] = mapped_column(String, nullable=True)
     product_type: Mapped[str | None] = mapped_column(String, nullable=True)
     found: Mapped[bool] = mapped_column(Boolean, default=False)
-    # Id of the shopping-list item most recently added to Mealie for this
-    # barcode via a plain note (unknown/unmapped scans). Used to reconcile
-    # that line once the barcode is later linked to an item. Cleared after.
     shopping_item_id: Mapped[str | None] = mapped_column(String, nullable=True)
     lookup_attempted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -41,8 +38,18 @@ class BarcodeMapping(Base):
     __tablename__ = "barcode_mappings"
 
     barcode: Mapped[str] = mapped_column(String, primary_key=True)
-    item_id: Mapped[str] = mapped_column(String, ForeignKey("items.id"), nullable=False)
-    mapped_by: Mapped[str] = mapped_column(String, default="manual")  # auto | manual
+    target_type: Mapped[str] = mapped_column(String, nullable=False, default="food")  # food | recipe
+    target_id: Mapped[str] = mapped_column(String, nullable=False)
+    target_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Food target settings.
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    unit_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Recipe target settings.
+    recipe_scale: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+
+    mapped_by: Mapped[str] = mapped_column(String, default="manual")  # auto | auto_confirmed | manual | generic
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -74,7 +81,7 @@ class Activity(Base):
     barcode: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     message: Mapped[str] = mapped_column(String, nullable=False)
-    result: Mapped[str] = mapped_column(String, nullable=False)  # added | queued | unknown | added_as_note
+    result: Mapped[str] = mapped_column(String, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

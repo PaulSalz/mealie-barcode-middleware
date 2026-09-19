@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ cached.title if cached and cached.title else 'Unknown Barcode' }} — Mealie Barcode Middleware{% endblock %}
+{% block title %}{{ cached.title if cached and cached.title else 'Barcode' }} — Mealie Barcode Middleware{% endblock %}
 
 {% block content %}
 <div class="page-header d-print-none mb-3">
@@ -8,12 +8,8 @@
             <div class="page-pretitle">Barcode {{ cached.barcode if cached else '' }}</div>
             <h2 class="page-title">{{ cached.title if cached and cached.title else ('Not Found' if not cached else 'Unknown product') }}</h2>
         </div>
-        <div class="col-auto ms-auto d-print-none">
-            <div class="btn-list">
-                {% if next_unmapped %}
-                <a href="/barcodes/{{ next_unmapped.barcode|urlencode }}" class="btn btn-outline-primary">Next unmapped →</a>
-                {% endif %}
-            </div>
+        <div class="col-auto ms-auto">
+            {% if next_unmapped %}<a href="/barcodes/{{ next_unmapped.barcode|urlencode }}" class="btn btn-outline-primary">Next unmapped →</a>{% endif %}
         </div>
     </div>
 </div>
@@ -21,267 +17,149 @@
 {% if not cached %}
 <div class="alert alert-warning">This barcode is not in the cache.</div>
 {% else %}
-
 <div class="row row-cards mb-3">
-    <!-- Product info -->
-    <div class="{{ 'col-lg-7' if mapping and is_confirmed and mapped_item else 'col-12' }} {{ 'order-md-first order-last' if mapping and mapping.mapped_by == 'auto' and mapped_item else '' }}">
-        <div class="card">
+    <div class="col-lg-7">
+        <div class="card h-100">
             <div class="card-header"><h3 class="card-title">Product Information</h3></div>
             <div class="card-body">
                 <div class="datagrid">
-                    <div class="datagrid-item">
-                        <div class="datagrid-title">Title</div>
-                        <div class="datagrid-content">{{ cached.title or "—" }}</div>
-                    </div>
-                    <div class="datagrid-item">
-                        <div class="datagrid-title">Brand</div>
-                        <div class="datagrid-content">{{ cached.brand or "—" }}</div>
-                    </div>
-                    <div class="datagrid-item">
-                        <div class="datagrid-title">Quantity</div>
-                        <div class="datagrid-content">{{ cached.quantity or "—" }}</div>
-                    </div>
-                    <div class="datagrid-item">
-                        <div class="datagrid-title">Type</div>
-                        <div class="datagrid-content">{{ cached.product_type or "—" }}</div>
-                    </div>
-                    <div class="datagrid-item">
-                        <div class="datagrid-title">Lookup Source</div>
-                        <div class="datagrid-content">{{ cached.source or "—" }}</div>
-                    </div>
+                    <div class="datagrid-item"><div class="datagrid-title">Title</div><div class="datagrid-content">{{ cached.title or "—" }}</div></div>
+                    <div class="datagrid-item"><div class="datagrid-title">Brand</div><div class="datagrid-content">{{ cached.brand or "—" }}</div></div>
+                    <div class="datagrid-item"><div class="datagrid-title">Package quantity</div><div class="datagrid-content">{{ cached.quantity or "—" }}</div></div>
+                    <div class="datagrid-item"><div class="datagrid-title">Lookup source</div><div class="datagrid-content">{{ cached.source or "—" }}</div></div>
                     <div class="datagrid-item">
                         <div class="datagrid-title">Found</div>
-                        <div class="datagrid-content">
-                            {% if cached.found %}
-                            <span class="badge bg-green text-green-fg">Yes</span>
-                            {% else %}
-                            <span class="badge bg-red text-red-fg">No</span>
-                            {% endif %}
-                        </div>
+                        <div class="datagrid-content">{% if cached.found %}<span class="badge bg-green text-green-fg">Yes</span>{% else %}<span class="badge bg-red text-red-fg">No</span>{% endif %}</div>
                     </div>
-                    <div class="datagrid-item">
-                        <div class="datagrid-title">Last Lookup</div>
-                        <div class="datagrid-content">{{ cached.lookup_attempted_at|localtime }}</div>
-                    </div>
-                    <div class="datagrid-item">
-                        <div class="datagrid-title">First Seen</div>
-                        <div class="datagrid-content">{{ cached.created_at|localtime }}</div>
-                    </div>
+                    <div class="datagrid-item"><div class="datagrid-title">Last lookup</div><div class="datagrid-content">{{ cached.lookup_attempted_at|localtime }}</div></div>
                 </div>
             </div>
             <div class="card-footer d-flex justify-content-between">
-                {% if not cached.found %}
-                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/retry-lookup" class="d-inline">
-                    <button type="submit" class="btn btn-warning">
-                        <i class="ti ti-refresh icon"></i> Retry Lookup
-                    </button>
-                </form>
-                {% else %}
-                <div></div>
-                {% endif %}
-                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/delete" class="d-inline"
-                    data-confirm="Delete barcode {{ cached.barcode }}?"
-                    data-confirm-detail="The barcode entry{% if cached.item_name %} and its link to &quot;{{ cached.item_name }}&quot;{% endif %} will be permanently removed.">
-                    <button type="submit" class="btn btn-outline-danger">
-                        <i class="ti ti-trash icon"></i> Delete
-                    </button>
+                {% if not cached.found and not cached.barcode.upper().startswith('GENERIC:') %}
+                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/retry-lookup"><button type="submit" class="btn btn-warning"><i class="ti ti-refresh icon"></i> Retry Lookup</button></form>
+                {% else %}<div></div>{% endif %}
+                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/delete" data-confirm="Delete barcode {{ cached.barcode }}?">
+                    <button type="submit" class="btn btn-outline-danger"><i class="ti ti-trash icon"></i> Delete</button>
                 </form>
             </div>
         </div>
     </div>
 
-    {% if mapping and is_confirmed and mapped_item %}
-    {# ── STATE 2: Confirmed — compact card beside product info ── #}
     <div class="col-lg-5">
-        <div class="card">
-            <div class="card-header"><h3 class="card-title">Linked Item</h3></div>
+        <div class="card h-100">
+            <div class="card-header"><h3 class="card-title">Current target</h3></div>
             <div class="card-body">
-                <div class="d-flex align-items-center">
+                {% if mapping %}
+                <div class="d-flex align-items-center mb-3">
                     <span class="status-dot status-dot-animated bg-green me-2"></span>
-                    <a href="/items/{{ mapped_item.id }}" class="fw-bold text-reset">{{ mapped_item.name }}</a>
+                    <div>
+                        <div class="fw-bold">
+                            {% if mapping.target_type == 'food' and mapped_item %}<a href="/items/{{ mapped_item.id }}" class="text-reset">{{ mapped_item.name }}</a>{% else %}{{ mapping.target_name or mapping.target_id }}{% endif %}
+                        </div>
+                        <div class="text-secondary small">{{ 'Food' if mapping.target_type == 'food' else 'Recipe' }} · {{ mapping.mapped_by }}</div>
+                    </div>
                 </div>
-                <div class="text-secondary mt-1 small">
-                    {{ 'Mealie' if mapped_item.source == 'mealie' else 'Custom' }} ·
-                    {% if mapping.mapped_by == 'auto_confirmed' %}auto (confirmed){% elif mapping.mapped_by == 'manual' %}linked manually{% else %}{{ mapping.mapped_by }}{% endif %} ·
-                    {{ mapping.created_at|localtime }}
-                </div>
+                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/mapping-settings">
+                    {% if mapping.target_type == 'food' %}
+                    <div class="row g-2">
+                        <div class="col-4"><label class="form-label">Default quantity</label><input class="form-control" type="number" name="quantity" min="0.000001" step="any" value="{{ mapping.quantity or 1 }}"></div>
+                        <div class="col-8">
+                            <label class="form-label">Unit</label>
+                            <select class="form-select" name="unit_id">
+                                <option value="">No unit</option>
+                                {% for unit in units %}<option value="{{ unit.id }}" {{ 'selected' if mapping.unit_id == unit.id }}>{{ unit.name }}{% if unit.abbreviation %} ({{ unit.abbreviation }}){% endif %}</option>{% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <input type="hidden" name="recipe_scale" value="1">
+                    {% else %}
+                    <label class="form-label">Recipe scale</label>
+                    <input class="form-control" type="number" name="recipe_scale" min="0.000001" step="any" value="{{ mapping.recipe_scale or 1 }}">
+                    <input type="hidden" name="quantity" value="1"><input type="hidden" name="unit_id" value="">
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary mt-3">Save defaults</button>
+                </form>
+                {% else %}<div class="text-secondary">No target linked yet.</div>{% endif %}
             </div>
-            <div class="card-footer d-flex justify-content-end">
-                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/unmap">
-                    <button type="submit" class="btn btn-outline-danger">
-                        <i class="ti ti-unlink icon"></i> Unlink
-                    </button>
+            {% if mapping %}
+            <div class="card-footer d-flex gap-2 justify-content-end">
+                {% if mapping.mapped_by == 'auto' %}<form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/confirm"><button type="submit" class="btn btn-success"><i class="ti ti-check icon"></i> Confirm</button></form>{% endif %}
+                <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/unmap"><button type="submit" class="btn btn-outline-danger"><i class="ti ti-unlink icon"></i> Unlink</button></form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">
+        <div class="row w-100 align-items-end g-2">
+            <div class="col"><h3 class="card-title mb-0">Link existing Mealie Food</h3><p class="card-subtitle">A scan adds this Food structurally with the selected quantity and unit.</p></div>
+            <div class="col-md-3"><label class="form-label">Default quantity</label><input id="food-default-quantity" type="number" min="0.000001" step="any" value="1" class="form-control"></div>
+            <div class="col-md-4">
+                <label class="form-label">Unit</label>
+                <select id="food-default-unit" class="form-select"><option value="">No unit</option>{% for unit in units %}<option value="{{ unit.id }}">{{ unit.name }}{% if unit.abbreviation %} ({{ unit.abbreviation }}){% endif %}</option>{% endfor %}</select>
+            </div>
+        </div>
+    </div>
+    <div class="card-body border-bottom"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search icon"></i></span><input type="text" id="item-search" class="form-control" placeholder="Search Mealie Foods…" autocomplete="off"></div></div>
+    <div class="table-responsive">
+        <table class="table table-vcenter card-table" id="item-assign-table" data-barcode="{{ cached.barcode }}">
+            <thead><tr><th>Food</th><th>Match</th><th class="w-1"></th></tr></thead>
+            <tbody id="item-assign-tbody">
+                {% if candidates %}{% for c in candidates %}
+                <tr class="{{ 'table-success' if c.score >= threshold else '' }}">
+                    <td><a href="/items/{{ c.item_id }}">{{ c.item_name }}</a></td>
+                    <td><span class="badge bg-{{ 'green' if c.score >= threshold else 'yellow' if c.score >= 60 else 'red' }} text-{{ 'green' if c.score >= threshold else 'yellow' if c.score >= 60 else 'red' }}-fg">{{ c.score }}%</span></td>
+                    <td><form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/map" class="food-link-form"><input type="hidden" name="item_id" value="{{ c.item_id }}"><input type="hidden" name="quantity" value="1"><input type="hidden" name="unit_id" value=""><button type="submit" class="btn btn-sm btn-primary"><i class="ti ti-link icon"></i> Link</button></form></td>
+                </tr>
+                {% endfor %}{% else %}<tr><td colspan="3" class="text-center text-secondary">Type a Food name to search.</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="row row-cards mb-3">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><div><h3 class="card-title">Create new Mealie Food</h3><p class="card-subtitle">Creates a real Food in Mealie and links this barcode to it.</p></div></div>
+            <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/create-and-map">
+                <div class="card-body">
+                    <div class="mb-3"><label class="form-label">Name</label><input class="form-control" name="name" required value="{{ cached.title or '' }}"></div>
+                    <div class="mb-3"><label class="form-label">Plural name</label><input class="form-control" name="plural_name"></div>
+                    <div class="mb-3"><label class="form-label">Category / label</label><select class="form-select" name="label_id"><option value="">No label</option>{% for label in labels %}<option value="{{ label.id }}">{{ label.name }}</option>{% endfor %}</select></div>
+                    <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="2"></textarea></div>
+                    <div class="row g-2">
+                        <div class="col-4"><label class="form-label">Default quantity</label><input class="form-control" name="quantity" type="number" min="0.000001" step="any" value="1" required></div>
+                        <div class="col-8"><label class="form-label">Unit</label><select class="form-select" name="unit_id"><option value="">No unit</option>{% for unit in units %}<option value="{{ unit.id }}">{{ unit.name }}{% if unit.abbreviation %} ({{ unit.abbreviation }}){% endif %}</option>{% endfor %}</select></div>
+                    </div>
+                </div>
+                <div class="card-footer text-end"><button class="btn btn-success" type="submit"><i class="ti ti-plus icon"></i> Create & link Food</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><div><h3 class="card-title">Link Mealie recipe</h3><p class="card-subtitle">The scan uses Mealie's native recipe-to-shopping-list link.</p></div></div>
+            <div class="card-body">
+                <label class="form-label">Find recipe</label>
+                <div class="input-icon mb-2"><span class="input-icon-addon"><i class="ti ti-search icon"></i></span><input id="recipe-search" class="form-control" placeholder="Recipe name…" autocomplete="off"></div>
+                <div id="recipe-search-results" class="list-group mb-3"></div>
+                <form id="recipe-map-form" method="post" action="/barcodes/{{ cached.barcode|urlencode }}/map-recipe">
+                    <input type="hidden" id="recipe-id" name="recipe_id"><input type="hidden" id="recipe-name" name="recipe_name">
+                    <div class="mb-3"><label class="form-label">Selected recipe</label><input id="recipe-selected-name" class="form-control" readonly placeholder="No recipe selected"></div>
+                    <div class="mb-3"><label class="form-label">Recipe scale</label><input class="form-control" type="number" name="recipe_scale" min="0.000001" step="any" value="1"></div>
+                    <button id="recipe-map-button" class="btn btn-primary" type="submit" disabled><i class="ti ti-receipt icon"></i> Link recipe</button>
                 </form>
             </div>
         </div>
     </div>
-    {% endif %}
-
-    {% if mapping and mapping.mapped_by == 'auto' and mapped_item %}
-    {# ── STATE 1: Auto-mapped, unverified — suggested match card ── #}
-    <div class="col-12 order-first order-md-first">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Suggested Match</h3>
-            </div>
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <span class="status-dot status-dot-animated bg-yellow me-2"></span>
-                    <a href="/items/{{ mapped_item.id }}" class="fw-bold text-reset">{{ mapped_item.name }}</a>
-                </div>
-                <div class="text-secondary mt-1 small">
-                    {{ 'Mealie' if mapped_item.source == 'mealie' else 'Custom' }} ·
-                    auto-matched · {{ mapping.created_at|localtime }}
-                </div>
-            </div>
-            <div class="card-footer">
-                <div class="d-flex gap-2">
-                    <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/confirm">
-                        <button type="submit" class="btn btn-success">
-                            <i class="ti ti-check icon"></i> Confirm
-                        </button>
-                    </form>
-                    <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/unmap">
-                        <button type="submit" class="btn btn-outline-danger">
-                            <i class="ti ti-x icon"></i> Wrong
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 </div>
-
-{% if mapping and mapping.mapped_by == 'auto' and mapped_item %}
-<div class="card mb-3">
-    <div class="card-header">
-        <div class="row w-100 align-items-center">
-            <div class="col">
-                <h3 class="card-title mb-0">Other Candidates</h3>
-            </div>
-            <div class="col-auto">
-                <div class="input-icon">
-                    <span class="input-icon-addon">
-                        <i class="ti ti-search icon" aria-hidden="true"></i>
-                    </span>
-                    <input type="text" id="item-search" class="form-control" placeholder="Find or create…" autocomplete="off">
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-vcenter card-table" id="item-assign-table" data-barcode="{{ cached.barcode }}">
-            <thead>
-                <tr>
-                    <th>Item</th>
-                    <th>Source</th>
-                    <th>Match</th>
-                    <th class="w-1"></th>
-                </tr>
-            </thead>
-            <tbody id="item-assign-tbody">
-                {% for c in candidates %}
-                {% if c.item_id != mapped_item.id %}
-                <tr class="{{ 'table-success' if c.score >= threshold else '' }}">
-                    <td><a href="/items/{{ c.item_id }}">{{ c.item_name }}</a></td>
-                    <td class="text-secondary">{{ 'Mealie' if c.source == 'mealie' else 'Custom' }}</td>
-                    <td>
-                        <span class="badge bg-{{ 'green' if c.score >= threshold else 'yellow' if c.score >= 60 else 'red' }} text-{{ 'green' if c.score >= threshold else 'yellow' if c.score >= 60 else 'red' }}-fg">{{ c.score }}%</span>
-                    </td>
-                    <td>
-                        <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/map" class="d-inline">
-                            <input type="hidden" name="item_id" value="{{ c.item_id }}">
-                            <button type="submit" class="btn btn-sm btn-primary">
-                                <i class="ti ti-link icon"></i> Link
-                            </button>
-                        </form>
-                    </td>
-                </tr>
-                {% endif %}
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-{% elif mapping and not mapped_item %}
-{# Mapped to a deleted item — full width #}
-<div class="card mb-3">
-    <div class="card-header"><h3 class="card-title">Linked Item</h3></div>
-    <div class="card-body">
-        <p class="text-secondary mb-1">Linked to a deleted item</p>
-        <code class="small">{{ mapping.item_id }}</code>
-    </div>
-    <div class="card-footer d-flex justify-content-end">
-        <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/unmap">
-            <button type="submit" class="btn btn-outline-danger">
-                <i class="ti ti-unlink icon"></i> Unlink
-            </button>
-        </form>
-    </div>
-</div>
-
-{% elif not mapping %}
-{# ── STATE 3: Unmapped — full width below ── #}
-<div class="card mb-3">
-    <div class="card-header">
-        <div class="row w-100 align-items-center">
-            <div class="col">
-                <h3 class="card-title mb-0">Link to Item</h3>
-                <p class="card-subtitle">Search existing items or create a new one to map this barcode</p>
-            </div>
-            <div class="col-auto">
-                <div class="input-icon">
-                    <span class="input-icon-addon">
-                        <i class="ti ti-search icon" aria-hidden="true"></i>
-                    </span>
-                    <input type="text" id="item-search" class="form-control" placeholder="Find or create…" autocomplete="off">
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-vcenter card-table" id="item-assign-table" data-barcode="{{ cached.barcode }}">
-            <thead>
-                <tr>
-                    <th>Item</th>
-                    <th>Source</th>
-                    <th>Match</th>
-                    <th class="w-1"></th>
-                </tr>
-            </thead>
-            <tbody id="item-assign-tbody">
-                {% if candidates %}
-                {% for c in candidates %}
-                <tr class="{{ 'table-success' if c.score >= threshold else '' }}">
-                    <td><a href="/items/{{ c.item_id }}">{{ c.item_name }}</a></td>
-                    <td class="text-secondary">{{ 'Mealie' if c.source == 'mealie' else 'Custom' }}</td>
-                    <td>
-                        <span class="badge bg-{{ 'green' if c.score >= threshold else 'yellow' if c.score >= 60 else 'red' }} text-{{ 'green' if c.score >= threshold else 'yellow' if c.score >= 60 else 'red' }}-fg">{{ c.score }}%</span>
-                    </td>
-                    <td>
-                        <form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/map" class="d-inline">
-                            <input type="hidden" name="item_id" value="{{ c.item_id }}">
-                            <button type="submit" class="btn btn-sm btn-primary">
-                                <i class="ti ti-link icon"></i> Link
-                            </button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-                {% else %}
-                <tr class="empty-row"><td colspan="4" class="text-center text-secondary">Type to search or create a new item</td></tr>
-                {% endif %}
-            </tbody>
-        </table>
-    </div>
-</div>
-{% endif %}
-
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/js/item-search.js?v={{ v }}"></script>
+<script src="/static/js/recipe-search.js?v={{ v }}"></script>
 {% endblock %}

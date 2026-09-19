@@ -10,7 +10,6 @@ from app.models import BarcodeMapping, Item
 
 logger = logging.getLogger(__name__)
 
-# Common quantity/size patterns to strip from product titles
 _QUANTITY_PATTERN = re.compile(
     r"\b\d+\s*(x\s*\d+\s*)?(g|kg|ml|l|cl|dl|oz|lb|lbs|fl\.?\s*oz|pack|pcs|ct|count)\b",
     re.IGNORECASE,
@@ -19,25 +18,15 @@ _EXTRA_SPACES = re.compile(r"\s{2,}")
 
 
 def normalise_title(title: str, brand: str | None = None) -> str:
-    """Strip brand and quantity/size info from a product title for matching."""
     result = title
-    # Remove brand name if present as substring
     if brand:
         result = re.sub(re.escape(brand), "", result, flags=re.IGNORECASE)
-    # Remove quantity patterns
     result = _QUANTITY_PATTERN.sub("", result)
-    # Remove common separators and extra spaces
     result = result.replace("-", " ").replace("_", " ")
-    result = _EXTRA_SPACES.sub(" ", result).strip()
-    return result
+    return _EXTRA_SPACES.sub(" ", result).strip()
 
 
 def _score_pair(product: str, item_term: str) -> int:
-    """
-    Score a normalised product title against a single item name/alias.
-    Uses max of token_sort_ratio, token_set_ratio, and partial_ratio
-    for best coverage across languages and partial matches.
-    """
     p = product.lower()
     f = item_term.lower()
     return max(
@@ -53,25 +42,18 @@ def fuzzy_match(
     db: Session,
     threshold: int | None = None,
 ) -> list[dict]:
-    """
-    Score normalised title against all items.
-    Returns list of candidates sorted by score descending.
-    Each entry: {"item_id": str, "item_name": str, "score": int, "source": str}
-    """
     if threshold is None:
-        threshold = 0  # Return all for ranking; caller filters by threshold
+        threshold = 0
 
     normalised = normalise_title(title, brand)
     if not normalised:
         return []
 
-    items = db.query(Item).all()
+    items = db.query(Item).filter(Item.source == "mealie").all()
     candidates = []
 
     for item in items:
-        # Score against item name
         score = _score_pair(normalised, item.name)
-        # Also score against aliases
         aliases = []
         if item.aliases:
             try:
@@ -79,8 +61,7 @@ def fuzzy_match(
             except (json.JSONDecodeError, TypeError):
                 pass
         for alias in aliases:
-            alias_score = _score_pair(normalised, alias)
-            score = max(score, alias_score)
+            score = max(score, _score_pair(normalised, alias))
 
         candidates.append({
             "item_id": item.id,
@@ -94,15 +75,6 @@ def fuzzy_match(
 
 
 def try_auto_map(barcode: str, title: str, brand: str | None, db: Session) -> str | None:
-    """
-    Attempt fuzzy auto-mapping.
-    Only maps if:
-      1. Top score >= threshold
-      2. Gap between #1 and #2 >= ambiguity_gap (avoids false matches when
-         multiple items match equally, e.g. "Tuna" and "Water" both appearing
-         in "Chunk Light Tuna in Water")
-    Returns item_id on success, None otherwise.
-    """
     candidates = fuzzy_match(title, brand, db)
     if not candidates:
         return None
@@ -111,29 +83,39 @@ def try_auto_map(barcode: str, title: str, brand: str | None, db: Session) -> st
     if top["score"] < settings.fuzzy_match_threshold:
         return None
 
-    # Ambiguity check: ensure clear winner
     if len(candidates) >= 2:
         second = candidates[1]
         gap = top["score"] - second["score"]
         if gap < settings.fuzzy_ambiguity_gap:
             logger.info(
-                f"Ambiguous match for {barcode}: "
-                f"{top['item_name']}({top['score']}) vs "
-                f"{second['item_name']}({second['score']}), gap={gap} < {settings.fuzzy_ambiguity_gap}"
+                "Ambiguous match for %s: %s(%s) vs %s(%s), gap=%s < %s",
+                barcode,
+                top["item_name"],
+                top["score"],
+                second["item_name"],
+                second["score"],
+                gap,
+                settings.fuzzy_ambiguity_gap,
             )
             return None
 
-    # Clear winner — insert or update mapping
     existing = db.get(BarcodeMapping, barcode)
-    if existing:
-        existing.item_id = top["item_id"]
-        existing.mapped_by = "auto"
-    else:
-        db.add(BarcodeMapping(
+    if not existing:
+        existing = BarcodeMapping(
             barcode=barcode,
-            item_id=top["item_id"],
-            mapped_by="auto",
-        ))
+            target_type="food",
+            target_id=top["item_id"],
+        )
+        db.add(existing)
+
+    existing.target_type = "food"
+    existing.target_id = top["item_id"]
+    existing.target_name = top["item_name"]
+    existing.quantity = 1.0
+    existing.unit_id = None
+    existing.recipe_scale = 1.0
+    existing.mapped_by = "auto"
     db.commit()
-    logger.info(f"Auto-mapped {barcode} → {top['item_name']} (score={top['score']})")
+
+    logger.info("Auto-mapped %s -> %s (score=%s)", barcode, top["item_name"], top["score"])
     return top["item_id"]

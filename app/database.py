@@ -30,7 +30,13 @@ def init_db():
 
 
 def _migrate():
-    """Add columns introduced after initial schema (idempotent)."""
+    """Small idempotent SQLite migrations.
+
+    Barcode mappings changed from a Food-only foreign key to typed external
+    Mealie targets. The old mapping table is intentionally discarded because
+    there is no safe Recipe/Food inference for legacy rows. Other data remains
+    untouched; a full /data volume reset is also supported for clean installs.
+    """
     insp = inspect(engine)
     tables = insp.get_table_names()
 
@@ -40,11 +46,10 @@ def _migrate():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE api_tokens ADD COLUMN token_prefix VARCHAR(8)"))
 
-    # Rename notifications -> activities (v2 schema)
     if "notifications" in tables and "activities" not in tables:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE notifications RENAME TO activities"))
-        # Re-inspect after rename
+        insp = inspect(engine)
         tables = insp.get_table_names()
 
     if "activities" in tables:
@@ -59,3 +64,9 @@ def _migrate():
         if "shopping_item_id" not in columns:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE barcode_cache ADD COLUMN shopping_item_id VARCHAR"))
+
+    if "barcode_mappings" in tables:
+        columns = {c["name"] for c in insp.get_columns("barcode_mappings")}
+        if "target_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("DROP TABLE barcode_mappings"))
