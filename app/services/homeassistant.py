@@ -77,6 +77,25 @@ def _last_actionable_result(barcode: str) -> str | None:
         return None
 
 
+def _mark_actionable_dismissed(barcode: str) -> None:
+    """Prevent repeated clear webhooks for a notification that was already resolved."""
+    try:
+        from app.database import SessionLocal
+        from app.models import Activity
+
+        db = SessionLocal()
+        try:
+            db.query(Activity).filter(
+                Activity.barcode == barcode,
+                Activity.is_dismissed == False,
+            ).update({"is_dismissed": True, "is_read": True})
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        logger.debug("Could not mark notification dismissed for %s", barcode, exc_info=True)
+
+
 def dismiss_notification(barcode: str, result: str | None = None) -> None:
     """Tell HA to clear a phone notification only if this event type could have created one."""
     url = settings.ha_webhook_url
@@ -97,6 +116,7 @@ def dismiss_notification(barcode: str, result: str | None = None) -> None:
         if resp.status_code >= 400:
             logger.warning("HA dismiss webhook returned %d: %s", resp.status_code, resp.text[:200])
         else:
+            _mark_actionable_dismissed(barcode)
             logger.debug("HA dismiss sent for barcode %s", barcode)
     except httpx.TimeoutException:
         logger.warning("HA dismiss webhook timed out for barcode %s", barcode)
