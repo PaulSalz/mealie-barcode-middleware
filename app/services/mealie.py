@@ -1,6 +1,5 @@
 import json
 import logging
-from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy.orm import Session
@@ -20,6 +19,17 @@ def _headers() -> dict:
     }
 
 
+def _collection_items(data) -> list[dict]:
+    """Normalize Mealie paginated/list responses to a list of dicts."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        items = data.get("items")
+        if isinstance(items, list):
+            return items
+    return []
+
+
 def check_connectivity() -> bool:
     """Check if Mealie is reachable."""
     try:
@@ -34,7 +44,7 @@ def check_connectivity() -> bool:
 
 
 def sync_items(db: Session) -> int:
-    """Fetch all items from Mealie, upsert into items table, detect stale. Returns count."""
+    """Fetch all foods from Mealie, upsert into items table, detect stale. Returns count."""
     url = f"{settings.mealie_url}/api/foods"
     try:
         resp = httpx.get(url, headers=_headers(), params={"perPage": -1}, timeout=30)
@@ -43,16 +53,11 @@ def sync_items(db: Session) -> int:
         logger.error(f"Failed to sync items from Mealie: {e}")
         raise
 
-    data = resp.json()
-    if isinstance(data, dict):
-        items = data.get("items")
-        if items is None:
-            logger.error(f"Unexpected Mealie response structure: {list(data.keys())}")
-            raise ValueError("Mealie API returned unexpected response (no 'items' key)")
-    elif isinstance(data, list):
-        items = data
-    else:
-        raise ValueError(f"Mealie API returned unexpected type: {type(data).__name__}")
+    items = _collection_items(resp.json())
+    if not items and isinstance(resp.json(), dict) and "items" not in resp.json():
+        logger.error(f"Unexpected Mealie response structure: {list(resp.json().keys())}")
+        raise ValueError("Mealie API returned unexpected response (no 'items' key)")
+
     sync_started = utcnow()
     count = 0
 
@@ -83,7 +88,6 @@ def sync_items(db: Session) -> int:
         .all()
     )
     for stale in stale_items:
-        # Find broken mappings
         broken = db.query(BarcodeMapping).filter(BarcodeMapping.item_id == stale.id).all()
         for m in broken:
             db.add(Activity(
@@ -102,13 +106,136 @@ def sync_items(db: Session) -> int:
     return count
 
 
-def add_shopping_item(item_id: str) -> tuple[bool, str | None]:
-    """Add item to Mealie shopping list via food ID. Returns (success, created_item_id)."""
-    payload = {
+def get_units() -> list[dict]:
+    """Return Mealie ingredient units for shopping defaults."""
+    try:
+        resp = httpx.get(
+            f"{settings.mealie_url}/api/units",
+            headers=_headers(),
+            params={"perPage": -1, "orderBy": "name", "orderDirection": "asc"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return _collection_items(resp.json())
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("Failed to fetch Mealie units: %s", e)
+        return []
+
+
+def get_food_labels() -> list[dict]:
+    """Return Mealie multi-purpose labels usable as food categories."""
+    try:
+        resp = httpx.get(
+            f"{settings.mealie_url}/api/groups/labels",
+            headers=_headers(),
+            params={"perPage": -1, "orderBy": "name", "orderDirection": "asc"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return _collection_items(resp.json())
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("Failed to fetch Mealie labels: %s", e)
+        return []
+
+
+def get_recipes() -> list[dict]:
+    """Return recipes from Mealie. Recipe IDs are used for barcode mappings."""
+    try:
+        resp = httpx.get(
+            f"{settings.mealie_url}/api/recipes",
+            headers=_headers(),
+            params={"perPage": -1, "orderBy": "name", "orderDirection": "asc"},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        return _collection_items(resp.json())
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("Failed to fetch Mealie recipes: %s", e)
+        return []
+
+
+def get_recipe(recipe_id: str) -> dict | None:
+    """Fetch a Mealie recipe by ID (Mealie accepts slug or ID on this endpoint)."""
+    try:
+        resp = httpx.get(
+            f"{settings.mealie_url}/api/recipes/{recipe_id}",
+            headers=_headers(),
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        logger.warning("Mealie recipe GET %s returned %s", recipe_id, resp.status_code)
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("Failed to fetch Mealie recipe %s: %s", recipe_id, e)
+    return None
+
+
+def create_food(
+    name: str,
+    plural_name: str | None = None,
+    description: str | None = None,
+    label_id: str | None = None,
+) -> dict:
+    """Create a real structured food in Mealie and return the created object."""
+    payload: dict = {"name": name}
+    if plural_name:
+        payload["pluralName"] = plural_name
+    if description:
+        payload["description"] = description
+    if label_id:
+        payload["labelId"] = label_id
+
+    resp = httpx.post(
+        f"{settings.mealie_url}/api/foods",
+        headers=_headers(),
+        json=payload,
+        timeout=15,
+    )
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"Mealie food create failed ({resp.status_code}): {resp.text}")
+    data = resp.json()
+    if not isinstance(data, dict) or not data.get("id"):
+        raise RuntimeError("Mealie food create returned no food id")
+    return data
+
+
+def upsert_local_food(food: dict, db: Session) -> Item:
+    """Immediately mirror a just-created Mealie food locally without waiting for sync."""
+    item_id = str(food["id"])
+    aliases_raw = food.get("aliases") or []
+    aliases = [a.get("name", a) if isinstance(a, dict) else a for a in aliases_raw]
+    item = db.get(Item, item_id)
+    if item:
+        item.name = food.get("name") or item.name
+        item.aliases = json.dumps(aliases)
+        item.source = "mealie"
+        item.synced_at = utcnow()
+    else:
+        item = Item(
+            id=item_id,
+            name=food.get("name") or item_id,
+            source="mealie",
+            aliases=json.dumps(aliases),
+            synced_at=utcnow(),
+        )
+        db.add(item)
+    db.flush()
+    return item
+
+
+def add_shopping_item(
+    item_id: str,
+    quantity: float = 1.0,
+    unit_id: str | None = None,
+) -> tuple[bool, str | None]:
+    """Add a structured Mealie food to the shopping list."""
+    payload: dict = {
         "shoppingListId": settings.mealie_shopping_list_id,
         "foodId": item_id,
-        "quantity": 1,
+        "quantity": quantity,
     }
+    if unit_id:
+        payload["unitId"] = unit_id
     return _post_shopping_item(payload)
 
 
@@ -121,14 +248,35 @@ def add_shopping_note(note: str) -> tuple[bool, str | None]:
     return _post_shopping_item(payload)
 
 
-def add_to_shopping_list_by_item(item_id: str) -> bool:
+def add_to_shopping_list_by_item(item_id: str, quantity: float = 1.0, unit_id: str | None = None) -> bool:
     """Bool wrapper for callers that don't need the created item id."""
-    return add_shopping_item(item_id)[0]
+    return add_shopping_item(item_id, quantity=quantity, unit_id=unit_id)[0]
 
 
 def add_to_shopping_list_by_note(note: str) -> bool:
     """Bool wrapper for callers that don't need the created item id."""
     return add_shopping_note(note)[0]
+
+
+def add_recipe_to_shopping_list(recipe_id: str, recipe_scale: float = 1.0) -> bool:
+    """Use Mealie's native recipe-to-shopping-list link.
+
+    This deliberately does not expand ingredients in the middleware. Mealie
+    creates/updates the recipe reference and owns the ingredient linkage.
+    """
+    url = f"{settings.mealie_url}/api/households/shopping/lists/{settings.mealie_shopping_list_id}/recipe"
+    payload = [{
+        "recipeId": recipe_id,
+        "recipeIncrementQuantity": recipe_scale,
+    }]
+    try:
+        resp = httpx.post(url, headers=_headers(), json=payload, timeout=15)
+        if resp.status_code in (200, 201):
+            return True
+        logger.warning("Mealie recipe shopping POST returned %s: %s", resp.status_code, resp.text)
+    except httpx.HTTPError as e:
+        logger.error("Mealie recipe shopping POST failed: %s", e)
+    return False
 
 
 def _post_shopping_item(payload: dict) -> tuple[bool, str | None]:
@@ -137,9 +285,7 @@ def _post_shopping_item(payload: dict) -> tuple[bool, str | None]:
     Returns ``(success, created_item_id)``. ``success`` reflects the HTTP
     result only; ``created_item_id`` is the id of the newly created line
     (``createdItems[0].id`` in Mealie's ``ShoppingListItemsCollectionOut``)
-    or ``None`` if it could not be parsed. A successful POST that returns no
-    parseable id is still ``(True, None)`` so callers never mistake it for a
-    failure and enqueue a duplicate retry.
+    or ``None`` if it could not be parsed.
     """
     url = f"{settings.mealie_url}/api/households/shopping/items"
     try:
@@ -161,7 +307,6 @@ def _post_shopping_item(payload: dict) -> tuple[bool, str | None]:
 
 
 def _get_shopping_item(item_id: str) -> dict | None:
-    """GET a single Mealie shopping list item. Returns the item dict or None."""
     url = f"{settings.mealie_url}/api/households/shopping/items/{item_id}"
     try:
         resp = httpx.get(url, headers=_headers(), timeout=3)
@@ -176,7 +321,6 @@ def _get_shopping_item(item_id: str) -> dict | None:
 
 
 def _put_shopping_item(item_id: str, payload: dict) -> bool:
-    """PUT (update) a single Mealie shopping list item. Returns True on success."""
     url = f"{settings.mealie_url}/api/households/shopping/items/{item_id}"
     try:
         resp = httpx.put(url, headers=_headers(), json=payload, timeout=3)
@@ -190,20 +334,7 @@ def _put_shopping_item(item_id: str, payload: dict) -> bool:
 
 
 def reconcile_linked_barcode(barcode: str) -> None:
-    """Reconcile Mealie after a barcode is linked to an item.
-
-    Runs as a background task with its own DB session — never blocks the
-    request and never raises into the caller. Two things happen:
-
-    1. Any *pending* retry-queue payload for this barcode (a note that never
-       made it to Mealie) is rewritten to reference the linked item, so when
-       it eventually posts it lands correctly.
-    2. If a shopping-list line was already created for this barcode via a note
-       (tracked in ``BarcodeCache.shopping_item_id``) it is updated in place
-       via PUT: linked to the food (mealie items) or renamed (manual items),
-       preserving quantity/checked/position. Lines the user already checked
-       off or deleted are left untouched.
-    """
+    """Reconcile a note/queued line after a barcode is linked to a food."""
     from app.database import SessionLocal
 
     db = SessionLocal()
@@ -215,7 +346,6 @@ def reconcile_linked_barcode(barcode: str) -> None:
         if not item:
             return
 
-        # 1) Rewrite any pending retry-queue payload to the linked item.
         pending = db.query(RetryQueue).filter(RetryQueue.barcode == barcode).all()
         rewrote = False
         for entry in pending:
@@ -226,16 +356,20 @@ def reconcile_linked_barcode(barcode: str) -> None:
             if item.source == "mealie":
                 payload.pop("note", None)
                 payload["foodId"] = item.id
-                payload.setdefault("quantity", 1)
+                payload["quantity"] = mapping.quantity or 1
+                if mapping.unit_id:
+                    payload["unitId"] = mapping.unit_id
+                else:
+                    payload.pop("unitId", None)
             else:
                 payload.pop("foodId", None)
+                payload.pop("unitId", None)
                 payload["note"] = item.name
             entry.payload = json.dumps(payload)
             rewrote = True
         if rewrote:
             db.commit()
 
-        # 2) Reconcile an already-added note line, if one was tracked.
         cached = db.get(BarcodeCache, barcode)
         shopping_item_id = cached.shopping_item_id if cached else None
         if not shopping_item_id:
@@ -243,23 +377,23 @@ def reconcile_linked_barcode(barcode: str) -> None:
 
         current = _get_shopping_item(shopping_item_id)
         if current is None or current.get("checked"):
-            # Deleted in Mealie, or already checked off by the user — leave it
-            # alone and just drop our stale handle.
             cached.shopping_item_id = None
             db.commit()
             return
 
         payload = {
             "shoppingListId": current.get("shoppingListId") or settings.mealie_shopping_list_id,
-            "quantity": current.get("quantity", 1),
+            "quantity": mapping.quantity or 1,
             "checked": current.get("checked", False),
             "position": current.get("position", 0),
         }
         if item.source == "mealie":
             payload["foodId"] = item.id
             payload["note"] = ""
+            payload["unitId"] = mapping.unit_id
         else:
             payload["foodId"] = None
+            payload["unitId"] = None
             payload["note"] = item.name
 
         if _put_shopping_item(shopping_item_id, payload):
