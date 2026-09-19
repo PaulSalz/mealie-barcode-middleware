@@ -1,14 +1,15 @@
 /**
- * item-search.js — Search items and show results in the assign table.
- * Fuzzy candidates are shown by default; typing replaces them with search results.
- * Always shows a "Create & Map" row at the bottom when there's text in the search box.
+ * Search Mealie Foods on a barcode detail page.
+ * Quantity/unit are copied into whichever Food link form is submitted.
  */
-(function() {
+(function () {
     'use strict';
 
     var searchInput = document.getElementById('item-search');
     var tbody = document.getElementById('item-assign-tbody');
     var table = document.getElementById('item-assign-table');
+    var quantityInput = document.getElementById('food-default-quantity');
+    var unitSelect = document.getElementById('food-default-unit');
     var timeout = null;
 
     if (!searchInput || !tbody || !table) return;
@@ -16,76 +17,96 @@
     var barcode = table.dataset.barcode;
     var originalRows = tbody.innerHTML;
 
-    function esc(s) {
-        var d = document.createElement('div');
-        d.textContent = s;
-        return d.innerHTML;
+    function setDefaults(form) {
+        var quantity = form.querySelector('input[name="quantity"]');
+        var unit = form.querySelector('input[name="unit_id"]');
+        if (quantity && quantityInput) quantity.value = quantityInput.value || '1';
+        if (unit && unitSelect) unit.value = unitSelect.value || '';
     }
 
-    function buildCreateRow(query) {
-        var tr = document.createElement('tr');
-        tr.className = 'table-active';
-        tr.innerHTML = '<td colspan="3" class="text-muted">' +
-            '<svg xmlns="http://www.w3.org/2000/svg" class="icon" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M5 12l14 0"/></svg>' +
-            'Create <strong>"' + esc(query) + '"</strong> as new item' +
-            '</td>' +
-            '<td>' +
-            '<form method="post" action="/barcodes/' + encodeURIComponent(barcode) + '/create-and-map" class="d-inline">' +
-            '<input type="hidden" name="name" value="' + esc(query) + '">' +
-            '<button type="submit" class="btn btn-success"><i class="ti ti-plus icon"></i> Create &amp; Link</button>' +
-            '</form></td>';
-        return tr;
-    }
+    document.addEventListener('submit', function (event) {
+        var form = event.target.closest('.food-link-form');
+        if (form) setDefaults(form);
+    });
 
     function buildRow(item) {
         var tr = document.createElement('tr');
+
         var tdName = document.createElement('td');
         var a = document.createElement('a');
-        a.href = '/items/' + item.id;
+        a.href = '/items/' + encodeURIComponent(item.id);
         a.textContent = item.name;
         tdName.appendChild(a);
-
-        var tdSource = document.createElement('td');
-        tdSource.className = 'text-secondary';
-        tdSource.textContent = item.source === 'mealie' ? 'Mealie' : 'Custom';
 
         var tdScore = document.createElement('td');
         tdScore.innerHTML = '<span class="text-secondary">—</span>';
 
         var tdAction = document.createElement('td');
-        tdAction.innerHTML = '<form method="post" action="/barcodes/' + encodeURIComponent(barcode) + '/map" class="d-inline">' +
-            '<input type="hidden" name="item_id" value="' + item.id + '">' +
-            '<button type="submit" class="btn btn-sm btn-primary"><i class="ti ti-link icon"></i> Link</button></form>';
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = '/barcodes/' + encodeURIComponent(barcode) + '/map';
+        form.className = 'food-link-form';
+
+        var idInput = document.createElement('input');
+        idInput.type = 'hidden';
+        idInput.name = 'item_id';
+        idInput.value = item.id;
+
+        var qtyInput = document.createElement('input');
+        qtyInput.type = 'hidden';
+        qtyInput.name = 'quantity';
+        qtyInput.value = '1';
+
+        var unitInput = document.createElement('input');
+        unitInput.type = 'hidden';
+        unitInput.name = 'unit_id';
+        unitInput.value = '';
+
+        var button = document.createElement('button');
+        button.type = 'submit';
+        button.className = 'btn btn-sm btn-primary';
+        button.innerHTML = '<i class="ti ti-link icon"></i> Link';
+
+        form.appendChild(idInput);
+        form.appendChild(qtyInput);
+        form.appendChild(unitInput);
+        form.appendChild(button);
+        tdAction.appendChild(form);
 
         tr.appendChild(tdName);
-        tr.appendChild(tdSource);
         tr.appendChild(tdScore);
         tr.appendChild(tdAction);
         return tr;
     }
 
-    searchInput.addEventListener('input', function() {
+    searchInput.addEventListener('input', function () {
         clearTimeout(timeout);
         var q = this.value.trim();
+
         if (q.length < 2) {
             tbody.innerHTML = originalRows;
             return;
         }
-        timeout = setTimeout(function() {
+
+        timeout = setTimeout(function () {
             fetch('/barcodes-search?q=' + encodeURIComponent(q))
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
+                .then(function (response) {
+                    if (!response.ok) throw new Error('Food search failed');
+                    return response.json();
+                })
+                .then(function (data) {
                     tbody.innerHTML = '';
-                    if (data.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary">No matching items</td></tr>';
-                    } else {
-                        data.forEach(function(f) {
-                            tbody.appendChild(buildRow(f));
-                        });
+                    if (!data.length) {
+                        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-secondary">No matching Mealie Foods</td></tr>';
+                        return;
                     }
-                    // Always append the create row as escape hatch
-                    tbody.appendChild(buildCreateRow(q));
+                    data.forEach(function (item) {
+                        tbody.appendChild(buildRow(item));
+                    });
+                })
+                .catch(function () {
+                    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Food search failed</td></tr>';
                 });
-        }, 300);
+        }, 250);
     });
 })();
