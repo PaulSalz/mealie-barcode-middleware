@@ -1,6 +1,8 @@
 services:
   barcode-middleware:
-    build: .
+    build:
+      context: .
+      network: host
     container_name: mealie-barcode-middleware
     restart: unless-stopped
 
