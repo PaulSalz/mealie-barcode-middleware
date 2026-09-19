@@ -32,51 +32,51 @@ def generate_qr_svg(text: str = Query(..., min_length=1)):
     buf = io.BytesIO()
     qr.save(buf, kind="svg", scale=1, border=2, xmldecl=False)
     svg = buf.getvalue().decode()
-    # Replace fixed width/height with viewBox so SVG scales to its container
+
     def _to_viewbox(m):
-        w, h = m.group(1), m.group(2)
-        return f'viewBox="0 0 {w} {h}"'
+        return f'viewBox="0 0 {m.group(1)} {m.group(2)}"'
+
     svg = re.sub(r'width="(\d+)" height="(\d+)"', _to_viewbox, svg, count=1)
     return Response(content=svg.encode(), media_type="image/svg+xml")
 
 
 @router.get("/labels/search")
 def labels_search_items(q: str = Query(default=""), db: Session = Depends(get_db)):
-    """Search items for the label autocomplete."""
     q = q.strip()
     if not q:
         return []
-    words = [w for w in q.split() if len(w) >= 2]
-    if not words:
-        words = [q]
+    words = [w for w in q.split() if len(w) >= 2] or [q]
     conditions = [Item.name.ilike(f"%{word}%") for word in words]
-    items = db.query(Item).filter(or_(*conditions)).order_by(Item.name).limit(20).all()
+    items = (
+        db.query(Item)
+        .filter(Item.source == "mealie", or_(*conditions))
+        .order_by(Item.name)
+        .limit(20)
+        .all()
+    )
     return [{"id": i.id, "name": i.name, "source": i.source} for i in items]
 
 
 @router.get("/labels/fuzzy")
 def labels_fuzzy_match(q: str = Query(default=""), db: Session = Depends(get_db)):
-    """Fuzzy-match free text against items. Read-only, no mutations."""
     q = q.strip()
     if not q:
         return {"candidates": []}
     candidates = fuzzy_match(q, None, db)
     top = [c for c in candidates[:5] if c["score"] >= 60]
     return {
-        "candidates": [{"id": c["item_id"], "name": c["item_name"], "score": c["score"]} for c in top],
+        "candidates": [
+            {"id": c["item_id"], "name": c["item_name"], "score": c["score"]}
+            for c in top
+        ],
     }
 
 
 @router.post("/labels/register", response_class=JSONResponse)
 async def register_labels_batch(request: Request, db: Session = Depends(get_db)):
-    """Batch-register labels at print time.
-
-    Body JSON: { "labels": [{"text": "Milk", "item_id": "uuid-or-null"}, ...] }
-    Creates BarcodeCache for all; creates BarcodeMapping only when item_id is set.
-    """
+    """Register GENERIC labels and optionally link them to real Mealie Foods."""
     body = await request.json()
     labels = body.get("labels", [])
-
     if not labels:
         return JSONResponse({"error": "labels array is required"}, status_code=400)
 
@@ -90,8 +90,6 @@ async def register_labels_batch(request: Request, db: Session = Depends(get_db))
             continue
 
         barcode = f"GENERIC:{text}"
-
-        # Upsert barcode_cache
         existing_cache = db.get(BarcodeCache, barcode)
         if not existing_cache:
             db.add(BarcodeCache(
@@ -103,20 +101,24 @@ async def register_labels_batch(request: Request, db: Session = Depends(get_db))
             ))
             registered += 1
 
-        # Create mapping only if item_id provided and valid
         if item_id:
             item = db.get(Item, item_id)
-            if item:
-                existing_mapping = db.get(BarcodeMapping, barcode)
-                if existing_mapping:
-                    existing_mapping.item_id = item_id
-                    existing_mapping.mapped_by = "manual"
-                else:
-                    db.add(BarcodeMapping(
+            if item and item.source == "mealie":
+                mapping = db.get(BarcodeMapping, barcode)
+                if not mapping:
+                    mapping = BarcodeMapping(
                         barcode=barcode,
-                        item_id=item_id,
-                        mapped_by="manual",
-                    ))
+                        target_type="food",
+                        target_id=item.id,
+                    )
+                    db.add(mapping)
+                mapping.target_type = "food"
+                mapping.target_id = item.id
+                mapping.target_name = item.name
+                mapping.quantity = 1.0
+                mapping.unit_id = None
+                mapping.recipe_scale = 1.0
+                mapping.mapped_by = "manual"
                 mapped += 1
 
     db.commit()
