@@ -18,6 +18,43 @@
     </div>
 </div>
 
+{% if saved %}<div class="alert alert-success"><i class="ti ti-check icon"></i> Food updated in Mealie.</div>{% endif %}
+{% if edit_error %}<div class="alert alert-danger"><i class="ti ti-alert-triangle icon"></i> Food could not be updated. Check the Mealie permissions/logs or whether that name already exists.</div>{% endif %}
+
+{% if item.source == 'mealie' and mealie_food %}
+<div class="card mb-3">
+    <div class="card-header"><div><h3 class="card-title">Edit Food</h3><p class="card-subtitle">Changes are written directly to Mealie and then reflected in all barcode mappings.</p></div></div>
+    <form method="post" action="/items/{{ item.id }}/edit">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Name</label>
+                    <input class="form-control" name="name" required value="{{ mealie_food.name or item.name }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Plural name</label>
+                    <input class="form-control" name="plural_name" value="{{ mealie_food.pluralName or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Category / label</label>
+                    <select class="form-select" name="label_id">
+                        <option value="">No label</option>
+                        {% for label in labels %}
+                        <option value="{{ label.id }}" {{ 'selected' if mealie_food.labelId == label.id }}>{{ label.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" name="description" rows="3">{{ mealie_food.description or '' }}</textarea>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer text-end"><button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Save in Mealie</button></div>
+    </form>
+</div>
+{% endif %}
+
 <div class="card mb-3">
     <div class="card-header"><h3 class="card-title">Details</h3></div>
     <div class="card-body">
