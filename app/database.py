@@ -44,7 +44,7 @@ def _migrate():
     if "notifications" in tables and "activities" not in tables:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE notifications RENAME TO activities"))
-        # Re-inspect after rename
+        insp = inspect(engine)
         tables = insp.get_table_names()
 
     if "activities" in tables:
@@ -59,3 +59,13 @@ def _migrate():
         if "shopping_item_id" not in columns:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE barcode_cache ADD COLUMN shopping_item_id VARCHAR"))
+
+    # Per-barcode shopping defaults for structured Mealie foods.
+    if "barcode_mappings" in tables:
+        columns = {c["name"] for c in insp.get_columns("barcode_mappings")}
+        with engine.begin() as conn:
+            if "quantity" not in columns:
+                conn.execute(text("ALTER TABLE barcode_mappings ADD COLUMN quantity FLOAT DEFAULT 1"))
+            if "unit_id" not in columns:
+                conn.execute(text("ALTER TABLE barcode_mappings ADD COLUMN unit_id VARCHAR"))
+            conn.execute(text("UPDATE barcode_mappings SET quantity = 1 WHERE quantity IS NULL"))
