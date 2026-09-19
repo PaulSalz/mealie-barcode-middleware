@@ -1,7 +1,6 @@
 /**
- * item-search.js — Search items and show results in the assign table.
- * Fuzzy candidates are shown by default; typing replaces them with search results.
- * Always shows a "Create & Map" row at the bottom when there's text in the search box.
+ * Search Mealie/local items on the barcode detail page.
+ * The shared quantity/unit controls are copied into every map request.
  */
 (function() {
     'use strict';
@@ -9,6 +8,8 @@
     var searchInput = document.getElementById('item-search');
     var tbody = document.getElementById('item-assign-tbody');
     var table = document.getElementById('item-assign-table');
+    var quantityInput = document.getElementById('food-default-quantity');
+    var unitSelect = document.getElementById('food-default-unit');
     var timeout = null;
 
     if (!searchInput || !tbody || !table) return;
@@ -22,18 +23,37 @@
         return d.innerHTML;
     }
 
+    function defaults() {
+        return {
+            quantity: quantityInput && quantityInput.value ? quantityInput.value : '1',
+            unit: unitSelect && unitSelect.value ? unitSelect.value : ''
+        };
+    }
+
+    function syncForm(form) {
+        if (!form) return;
+        var d = defaults();
+        var q = form.querySelector('.map-quantity');
+        var u = form.querySelector('.map-unit');
+        if (q) q.value = d.quantity;
+        if (u) u.value = d.unit;
+    }
+
     function buildCreateRow(query) {
         var tr = document.createElement('tr');
         tr.className = 'table-active';
         tr.innerHTML = '<td colspan="3" class="text-muted">' +
-            '<svg xmlns="http://www.w3.org/2000/svg" class="icon" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M5 12l14 0"/></svg>' +
-            'Create <strong>"' + esc(query) + '"</strong> as new item' +
-            '</td>' +
-            '<td>' +
-            '<form method="post" action="/barcodes/' + encodeURIComponent(barcode) + '/create-and-map" class="d-inline">' +
-            '<input type="hidden" name="name" value="' + esc(query) + '">' +
-            '<button type="submit" class="btn btn-success"><i class="ti ti-plus icon"></i> Create &amp; Link</button>' +
-            '</form></td>';
+            '<i class="ti ti-plus icon"></i> Create <strong>"' + esc(query) + '"</strong> as a new Mealie food' +
+            '</td><td><button type="button" class="btn btn-success create-food-shortcut">Use name</button></td>';
+        tr.querySelector('.create-food-shortcut').addEventListener('click', function() {
+            var nameInput = document.getElementById('create-food-name');
+            var card = document.getElementById('create-food-card');
+            if (nameInput) {
+                nameInput.value = query;
+                nameInput.focus();
+            }
+            if (card) card.scrollIntoView({behavior: 'smooth', block: 'start'});
+        });
         return tr;
     }
 
@@ -53,8 +73,10 @@
         tdScore.innerHTML = '<span class="text-secondary">—</span>';
 
         var tdAction = document.createElement('td');
-        tdAction.innerHTML = '<form method="post" action="/barcodes/' + encodeURIComponent(barcode) + '/map" class="d-inline">' +
+        tdAction.innerHTML = '<form method="post" action="/barcodes/' + encodeURIComponent(barcode) + '/map" class="food-map-form d-inline">' +
             '<input type="hidden" name="item_id" value="' + item.id + '">' +
+            '<input type="hidden" name="quantity" value="1" class="map-quantity">' +
+            '<input type="hidden" name="unit_id" value="" class="map-unit">' +
             '<button type="submit" class="btn btn-sm btn-primary"><i class="ti ti-link icon"></i> Link</button></form>';
 
         tr.appendChild(tdName);
@@ -63,6 +85,12 @@
         tr.appendChild(tdAction);
         return tr;
     }
+
+    tbody.addEventListener('submit', function(event) {
+        if (event.target && event.target.classList.contains('food-map-form')) {
+            syncForm(event.target);
+        }
+    });
 
     searchInput.addEventListener('input', function() {
         clearTimeout(timeout);
@@ -79,12 +107,13 @@
                     if (data.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary">No matching items</td></tr>';
                     } else {
-                        data.forEach(function(f) {
-                            tbody.appendChild(buildRow(f));
+                        data.forEach(function(item) {
+                            tbody.appendChild(buildRow(item));
                         });
                     }
-                    // Always append the create row as escape hatch
-                    tbody.appendChild(buildCreateRow(q));
+                    if (document.getElementById('create-food-form')) {
+                        tbody.appendChild(buildCreateRow(q));
+                    }
                 });
         }, 300);
     });
