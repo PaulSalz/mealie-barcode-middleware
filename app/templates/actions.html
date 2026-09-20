@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Actions — Mealie Barcode Middleware{% endblock %}
+{% block content %}
+<div class="page-header d-print-none mb-3">
+  <div class="row g-2 align-items-center">
+    <div class="col"><h2 class="page-title">Actions</h2><div class="text-secondary">Stable ACTION:&lt;id&gt; codes with editable webhook behavior.</div></div>
+    <div class="col-auto"><a class="btn btn-primary" href="/actions/new"><i class="ti ti-plus icon"></i> New action</a></div>
+  </div>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-vcenter card-table">
+      <thead><tr><th>Name</th><th>Code</th><th>Status</th><th>Mode</th><th>Cooldown</th><th>Executions</th><th>Last result</th></tr></thead>
+      <tbody>
+      {% for action in actions %}
+        {% set last = latest_rows.get(action.id) %}
+        <tr>
+          <td><a href="/actions/{{ action.id|urlencode }}">{{ action.name }}</a><div class="text-secondary small">{{ action.description or '' }}</div></td>
+          <td><code>ACTION:{{ action.id }}</code></td>
+          <td>{% if action.enabled %}<span class="badge bg-green text-green-fg">Enabled</span>{% else %}<span class="badge bg-secondary">Disabled</span>{% endif %}</td>
+          <td>{{ action.execution_mode }}</td>
+          <td>{{ action.cooldown_seconds }} s</td>
+          <td>{{ counts.get(action.id, 0) }}</td>
+          <td>{% if last %}<span class="badge {{ 'bg-green text-green-fg' if last.status == 'success' else 'bg-yellow text-yellow-fg' if last.status == 'ignored_cooldown' else 'bg-red text-red-fg' }}">{{ last.status }}</span><div class="text-secondary small">{{ last.created_at|localtime }}</div>{% else %}<span class="text-secondary">Never</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      {% if not actions %}<tr><td colspan="7" class="text-center text-secondary py-4">No actions configured yet.</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
