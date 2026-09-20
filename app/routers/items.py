@@ -35,12 +35,12 @@ def _item_scan_stats(db: Session, item_id: str) -> dict:
         .order_by(Activity.created_at.desc())
         .all()
     )
-    now = utcnow()
+    now = utcnow().replace(tzinfo=None)
     by_barcode = Counter(row.barcode for row in scans)
     return {
         "total": len(scans),
-        "days_7": sum(1 for row in scans if row.created_at >= now - timedelta(days=7)),
-        "days_30": sum(1 for row in scans if row.created_at >= now - timedelta(days=30)),
+        "days_7": sum(1 for row in scans if row.created_at and row.created_at >= now - timedelta(days=7)),
+        "days_30": sum(1 for row in scans if row.created_at and row.created_at >= now - timedelta(days=30)),
         "last_scan": scans[0].created_at if scans else None,
         "first_scan": scans[-1].created_at if scans else None,
         "recent": scans[:25],
