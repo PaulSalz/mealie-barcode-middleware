@@ -64,25 +64,36 @@ def _localtime(value, fmt="%Y-%m-%d %H:%M"):
 
 
 def _relative_time(value):
-    """Compact human-readable age for recent timestamps; absolute local date for older values."""
+    """Compact human-readable age used consistently throughout the UI."""
     value = _as_utc(value)
     if not value:
         return "Never"
     seconds = max(0, int((datetime.now(timezone.utc) - value).total_seconds()))
-    if seconds < 10:
-        return "just now"
     if seconds < 60:
-        return f"{seconds}s ago"
+        return "just now"
+
     minutes = seconds // 60
     if minutes < 60:
-        return f"{minutes}m ago"
+        return f"{minutes} min{'s' if minutes != 1 else ''} ago"
+
     hours = minutes // 60
-    if hours < 48:
-        return f"{hours}h ago"
+    if hours < 24:
+        return f"{hours} hr{'s' if hours != 1 else ''} ago"
+
     days = hours // 24
-    if days < 14:
-        return f"{days}d ago"
-    return value.astimezone(_tz).strftime("%Y-%m-%d")
+    if days < 7:
+        return f"{days} day{'s' if days != 1 else ''} ago"
+
+    weeks = days // 7
+    if days < 35:
+        return f"{weeks} week{'s' if weeks != 1 else ''} ago"
+
+    months = max(1, days // 30)
+    if days < 365:
+        return f"{months} month{'s' if months != 1 else ''} ago"
+
+    years = max(1, days // 365)
+    return f"{years} year{'s' if years != 1 else ''} ago"
 
 
 def _fromjson(value):
