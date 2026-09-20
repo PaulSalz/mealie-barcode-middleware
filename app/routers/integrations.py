@@ -1,10 +1,14 @@
 import time
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import get_db
+from app.services.multitarget import route_targets
+from app.services.targets import ensure_targets
 
 router = APIRouter()
 
@@ -37,3 +41,31 @@ def test_ha_webhook():
         return JSONResponse({"ok": False, "error": "timeout after 3 s"}, status_code=504)
     except httpx.HTTPError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+
+
+@router.post("/api/barcodes/{barcode:path}/test-route")
+def test_barcode_route(barcode: str, db: Session = Depends(get_db)):
+    """Execute the configured destinations once without recording a scanner event."""
+    targets = ensure_targets(barcode, db)
+    if not targets:
+        return JSONResponse({"ok": False, "error": "No targets configured for this barcode"}, status_code=404)
+
+    routed = route_targets(barcode, targets, db, paused=False)
+    results = []
+    for row in routed.get("results", []):
+        target = row.get("target")
+        results.append({
+            "target_id": getattr(target, "id", None),
+            "target_type": getattr(target, "target_type", None),
+            "name": row.get("name"),
+            "ok": bool(row.get("ok")),
+            "result": row.get("result"),
+            "via": row.get("via"),
+            "list_ids": row.get("list_ids") or [],
+        })
+    payload = {
+        "ok": bool(routed.get("ok")),
+        "result": routed.get("result"),
+        "targets": results,
+    }
+    return JSONResponse(payload, status_code=200 if payload["ok"] else 502)
