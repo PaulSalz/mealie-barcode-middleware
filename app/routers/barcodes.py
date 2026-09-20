@@ -115,12 +115,12 @@ def _recipe_mapping(barcode: str, recipe_id: str, recipe_name: str, recipe_scale
 
 def _barcode_stats(db: Session, barcode: str) -> dict:
     scans = db.query(Activity).filter(Activity.is_scan_event == True, Activity.barcode == barcode).order_by(Activity.created_at.desc()).all()
-    now = utcnow()
+    now = utcnow().replace(tzinfo=None)
     results = Counter(row.result for row in scans)
     return {
         "total": len(scans),
-        "days_7": sum(1 for row in scans if row.created_at >= now - timedelta(days=7)),
-        "days_30": sum(1 for row in scans if row.created_at >= now - timedelta(days=30)),
+        "days_7": sum(1 for row in scans if row.created_at and row.created_at >= now - timedelta(days=7)),
+        "days_30": sum(1 for row in scans if row.created_at and row.created_at >= now - timedelta(days=30)),
         "last_scan": scans[0].created_at if scans else None,
         "first_scan": scans[-1].created_at if scans else None,
         "results": results,
@@ -128,16 +128,21 @@ def _barcode_stats(db: Session, barcode: str) -> dict:
     }
 
 
+def _apply_status_filter(query, status: str, mapped_sub):
+    if status == "mapped":
+        return query.filter(or_(BarcodeCache.barcode.in_(mapped_sub), BarcodeCache.source == "action"))
+    if status == "pending":
+        return query.filter(BarcodeCache.found == True, BarcodeCache.source != "action", ~BarcodeCache.barcode.in_(mapped_sub))
+    if status == "unknown":
+        return query.filter(BarcodeCache.found == False, BarcodeCache.source != "action", ~BarcodeCache.barcode.in_(mapped_sub))
+    return query
+
+
 @router.get("/barcodes", response_class=HTMLResponse)
 def barcodes_list(request: Request, status: str = Query(default="all"), db: Session = Depends(get_db)):
     query = db.query(BarcodeCache).order_by(BarcodeCache.created_at.desc())
-    mapped_sub = db.query(BarcodeMapping.barcode).subquery()
-    if status == "mapped":
-        query = query.filter(BarcodeCache.barcode.in_(mapped_sub))
-    elif status == "pending":
-        query = query.filter(BarcodeCache.found == True, ~BarcodeCache.barcode.in_(mapped_sub))
-    elif status == "unknown":
-        query = query.filter(BarcodeCache.found == False, ~BarcodeCache.barcode.in_(mapped_sub))
+    mapped_sub = db.query(BarcodeMapping.barcode)
+    query = _apply_status_filter(query, status, mapped_sub)
 
     barcodes = query.all()
     mappings = {m.barcode: m for m in db.query(BarcodeMapping).all()}
@@ -151,6 +156,8 @@ def barcodes_list(request: Request, status: str = Query(default="all"), db: Sess
         food = foods_map.get(mapping.target_id) if mapping and mapping.target_type == "food" else None
         if mapping:
             bc_status = "mapped"
+        elif bc.source == "action":
+            bc_status = "action"
         elif bc.barcode in queued_barcodes:
             bc_status = "queued"
         elif not bc.found:
@@ -215,6 +222,7 @@ def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)
     next_unmapped = (
         db.query(BarcodeCache)
         .filter(~BarcodeCache.barcode.in_(mapped_barcodes))
+        .filter(BarcodeCache.source != "action")
         .filter(BarcodeCache.barcode != barcode)
         .order_by(BarcodeCache.created_at.desc())
         .first()
@@ -407,14 +415,8 @@ def barcodes_api(status: str = "all", db: Session = Depends(get_db)):
     from app.templating import _localtime
 
     query = db.query(BarcodeCache).order_by(BarcodeCache.created_at.desc())
-    mapped_sub = db.query(BarcodeMapping.barcode).subquery()
-    if status == "mapped":
-        query = query.filter(BarcodeCache.barcode.in_(mapped_sub))
-    elif status == "pending":
-        query = query.filter(BarcodeCache.found == True, ~BarcodeCache.barcode.in_(mapped_sub))
-    elif status == "unknown":
-        query = query.filter(BarcodeCache.found == False, ~BarcodeCache.barcode.in_(mapped_sub))
-
+    mapped_sub = db.query(BarcodeMapping.barcode)
+    query = _apply_status_filter(query, status, mapped_sub)
     barcodes_list = query.limit(200).all()
     mappings = {m.barcode: m for m in db.query(BarcodeMapping).all()}
     queued_barcodes = {r.barcode for r in db.query(RetryQueue).all()}
@@ -423,22 +425,32 @@ def barcodes_api(status: str = "all", db: Session = Depends(get_db)):
         mapping = mappings.get(bc.barcode)
         if mapping:
             bc_status = "mapped"
+        elif bc.source == "action":
+            bc_status = "action"
         elif bc.barcode in queued_barcodes:
             bc_status = "queued"
         elif not bc.found:
             bc_status = "unknown"
         else:
             bc_status = "pending"
+        target_name = mapping.target_name if mapping else None
+        target_id = mapping.target_id if mapping else None
+        target_type = mapping.target_type if mapping else ("action" if bc.source == "action" else None)
+        if target_type == "action" and not target_id and bc.barcode.upper().startswith("ACTION:"):
+            target_id = bc.barcode[7:]
+            target_name = bc.display_title or target_id
         result_items.append({
             "barcode": bc.barcode,
             "title": bc.display_title or "—",
             "brand": bc.display_brand or "—",
             "source": bc.source or "—",
             "status": bc_status,
-            "target_name": mapping.target_name if mapping else None,
-            "target_id": mapping.target_id if mapping else None,
-            "target_type": mapping.target_type if mapping else None,
+            "target_name": target_name,
+            "target_id": target_id,
+            "target_type": target_type,
             "mapped_by": mapping.mapped_by if mapping else None,
+            "item_name": target_name if target_type == "food" else None,
+            "item_id": target_id if target_type == "food" else None,
             "created_at": _localtime(bc.created_at),
         })
     return {"items": result_items}
