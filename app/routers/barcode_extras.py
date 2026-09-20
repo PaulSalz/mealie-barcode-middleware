@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import BarcodeCache, BarcodeTarget, Item
+from app.models import BarcodeCache, BarcodeMapping, BarcodeTarget, Item
 from app.services.barcode_lookup import perform_lookup
 from app.services.fuzzy import fuzzy_match
 from app.services.mealie_extras import cached_units
@@ -17,7 +17,7 @@ from app.services.shopping import (
     get_preferred_unit_for_food,
     get_shopping_lists,
 )
-from app.services.targets import get_barcode_targets
+from app.services.targets import get_barcode_targets, sync_primary_target
 
 router = APIRouter()
 
@@ -34,6 +34,13 @@ class TargetPayload(BaseModel):
     shopping_list_id: str | None = None
     endpoint_url: str | None = None
     enabled: bool = True
+
+
+class PrimarySettingsPayload(BaseModel):
+    quantity: float | None = None
+    unit_id: str | None = None
+    recipe_scale: float | None = None
+    shopping_list_id: str | None = None
 
 
 class MetadataPayload(BaseModel):
@@ -191,6 +198,29 @@ def delete_barcode_target(target_id: int, db: Session = Depends(get_db)):
     db.delete(row)
     db.commit()
     return {"ok": True}
+
+
+@router.put("/api/barcodes/{barcode:path}/primary-target")
+def save_primary_target_settings(barcode: str, payload: PrimarySettingsPayload, db: Session = Depends(get_db)):
+    mapping = db.get(BarcodeMapping, barcode)
+    if not mapping:
+        return JSONResponse({"error": "Primary target not found"}, status_code=404)
+    if mapping.target_type == "food":
+        quantity = payload.quantity
+        mapping.quantity = 0.001 if quantity is None or quantity <= 0 else round(float(quantity), 3)
+        mapping.unit_id = (payload.unit_id or "").strip() or None
+    elif mapping.target_type == "recipe":
+        mapping.recipe_scale = max(round(float(payload.recipe_scale or 1.0), 3), 0.001)
+        list_id = (payload.shopping_list_id or "").strip() or None
+        if list_id:
+            valid = {str(row["id"]) for row in get_shopping_lists()}
+            if list_id not in valid:
+                return JSONResponse({"error": "Selected shopping list no longer exists"}, status_code=400)
+        mapping.shopping_list_id = list_id
+    db.commit()
+    primary = sync_primary_target(db, barcode)
+    db.commit()
+    return {"ok": True, "target": _target_json(primary, db) if primary else None}
 
 
 @router.get("/api/foods/search")
