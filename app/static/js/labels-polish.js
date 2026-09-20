@@ -15,8 +15,6 @@
     function preloadActions() {
         var input = document.getElementById('generator-action-search');
         if (!input) return;
-        // labels-page.js loads the complete enabled action list on focus. Trigger it
-        // immediately so the list is ready before the user opens the Action tab.
         input.dispatchEvent(new Event('focus'));
     }
 
@@ -37,8 +35,8 @@
         var observer = new MutationObserver(function() {
             var buttons = Array.from(results.querySelectorAll('button.list-group-item'));
             var exact = buttons.find(function(button) {
-                var text = (button.querySelector('span') || button).textContent.trim();
-                return text.toLocaleLowerCase() === recipeName.toLocaleLowerCase();
+                var code = button.querySelector('code');
+                return code && code.textContent.trim() === recipeId;
             });
             if (!exact) return;
             observer.disconnect();
