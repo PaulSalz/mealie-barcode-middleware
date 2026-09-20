@@ -27,6 +27,7 @@ def get_db():
 def init_db():
     _migrate()
     Base.metadata.create_all(bind=engine)
+    _backfill_barcode_targets()
 
 
 def _add_column_if_missing(table: str, column: str, sql_type: str, columns: set[str]) -> None:
@@ -106,3 +107,34 @@ def _migrate():
                 conn.execute(text("DROP TABLE barcode_mappings"))
         else:
             _add_column_if_missing("barcode_mappings", "shopping_list_id", "VARCHAR", columns)
+
+
+def _backfill_barcode_targets() -> None:
+    """Mirror legacy single mappings into the new multi-target table once.
+
+    The primary row uses destination_type=inherit so Food mappings preserve the
+    Item-level Mealie/HA routing that existing installations already configured.
+    """
+    insp = inspect(engine)
+    tables = set(insp.get_table_names())
+    if not {"barcode_mappings", "barcode_targets"}.issubset(tables):
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO barcode_targets (
+                barcode, is_primary, enabled, target_type, target_id, target_name,
+                quantity, unit_id, recipe_scale, destination_type,
+                shopping_list_id, endpoint_url, mapped_by, created_at
+            )
+            SELECT
+                m.barcode, 1, 1, m.target_type, m.target_id, m.target_name,
+                CASE WHEN m.quantity <= 0.001 THEN NULL ELSE m.quantity END,
+                m.unit_id, COALESCE(m.recipe_scale, 1.0), 'inherit',
+                m.shopping_list_id, NULL, COALESCE(m.mapped_by, 'manual'), m.created_at
+            FROM barcode_mappings AS m
+            WHERE NOT EXISTS (
+                SELECT 1 FROM barcode_targets AS t
+                WHERE t.barcode = m.barcode AND t.is_primary = 1
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_barcode_targets_barcode ON barcode_targets (barcode)"))
