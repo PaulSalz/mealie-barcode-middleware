@@ -140,6 +140,12 @@
                                 <span class="nav-link-title">Items</span>
                             </a>
                         </li>
+                        <li class="nav-item{{ ' active' if request.url.path.startswith('/actions') }}">
+                            <a class="nav-link" href="/actions">
+                                <span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-bolt icon icon-1"></i></span>
+                                <span class="nav-link-title">Actions</span>
+                            </a>
+                        </li>
                         <li class="nav-item d-md-none{{ ' active' if request.url.path.startswith('/labels') }}">
                             <a class="nav-link" href="/labels">
                                 <span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-qrcode icon icon-1"></i></span>
@@ -264,6 +270,7 @@
     <script src="/static/vendor/tabler/js/tabler.min.js"></script>
     <script src="/static/js/app.js?v={{ v }}"></script>
     <script src="/static/js/confirm-actions.js?v={{ v }}"></script>
+    <script src="/static/js/enhancements.js?v={{ v }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
