@@ -73,7 +73,7 @@
         var input = container.querySelector('.decimal-number');
         if (!input) return;
         // Food quantities are optional. Recipe scale and other numeric steppers remain positive.
-        if (input.name === 'quantity' && !input.dataset.allowEmpty) {
+        if ((input.name === 'quantity' || input.id === 'food-default-quantity') && !input.dataset.allowEmpty) {
             input.dataset.allowEmpty = 'true';
         }
         normalizeInput(input);
