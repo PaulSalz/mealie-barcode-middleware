@@ -4,11 +4,17 @@
 .notif-list { max-height: 20rem; overflow-y: auto; }
 .notif-dismiss { cursor: pointer; opacity: 0; transition: opacity .15s; }
 .list-group-item:hover .notif-dismiss { opacity: 1; }
-.toast-above { z-index: 1090; }
+.toast-above { z-index: 1080; }
+#scan-toasts { top: auto !important; bottom: .75rem !important; }
 .col-message { max-width: 300px; }
 .navbar-divider { height: 1.25rem; }
 .input-group-narrow { max-width: 500px; }
 .token-value { font-size: .8rem; word-break: break-all; }
+.page-header .btn-list { justify-content: flex-end; }
+
+/* Gentle row/cell hover cue on data tables. */
+.table.table-vcenter tbody tr:not(.activity-empty-row):not(.barcodes-empty-row):not(.items-empty-row):hover > td { background: rgba(var(--tblr-primary-rgb), .035); }
+.table.table-vcenter tbody td:hover { box-shadow: inset 0 0 0 9999px rgba(var(--tblr-primary-rgb), .035); }
 
 .markdown table { width: 100%; border-collapse: collapse; }
 .markdown table th, .markdown table td { padding: .5rem .75rem; border: var(--tblr-border-width) solid var(--tblr-border-color); vertical-align: middle; }
@@ -24,7 +30,11 @@
 .label-card input, .label-card select, .label-card img { min-width: 0; max-width: 100%; }
 .label-card .label-remove { position: absolute; top: .25rem; right: .25rem; z-index: 2; opacity: 0; transition: opacity .15s; }
 .label-card:hover .label-remove { opacity: 1; }
-.label-code-preview { width: 132px !important; height: 96px !important; }
+.label-code-preview-frame { width: 148px; height: 96px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: zoom-in; }
+.label-code-preview { width: auto !important; height: auto !important; max-width: 142px !important; max-height: 90px !important; object-fit: contain !important; }
+#code-preview-modal .modal-dialog { max-width: 680px; }
+#code-preview-modal #code-preview-large { width: auto !important; max-width: 100%; margin-inline: auto; display: block; }
+#label-queue-feedback { display: inline-flex; align-items: center; min-height: 1.55rem; padding: .15rem .45rem; border-radius: 999px; font-size: .72rem; font-weight: 600; color: var(--tblr-success); background: var(--tblr-success-lt); }
 .label-preview-page { min-height: 260px; max-height: 72vh; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); background: white; overflow-y: auto; overflow-x: hidden; }
 .label-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, var(--preview-width, 60px)); gap: var(--preview-gap, 3px); padding: var(--preview-margin, 4px); align-content: start; justify-content: center; }
 .label-preview-cell { width: var(--preview-width, 60px); height: var(--preview-height, 60px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--preview-padding, 2px); box-sizing: border-box; overflow: hidden; min-width: 0; }
@@ -52,13 +62,15 @@ select[multiple][name="shopping_list_ids"] option { padding: .3rem .45rem; borde
 #barcode-metadata-form .form-hint.text-success { font-weight: 600; }
 
 .b2m-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: .5rem; }
-.b2m-choice-card { display: flex; align-items: center; min-width: 0; padding: .65rem .75rem; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); cursor: pointer; background: var(--tblr-bg-surface); transition: border-color .12s ease, background .12s ease, box-shadow .12s ease; }
+.b2m-choice-card { display: flex; align-items: center; min-width: 0; padding: .65rem .75rem; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); cursor: pointer; background: var(--tblr-bg-surface); transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, opacity .12s ease; }
 .b2m-choice-card:hover { border-color: rgba(var(--tblr-primary-rgb), .55); }
 .b2m-choice-card:has(input:checked) { border-color: var(--tblr-primary); background: rgba(var(--tblr-primary-rgb), .08); box-shadow: inset 0 0 0 1px rgba(var(--tblr-primary-rgb), .08); }
 .b2m-choice-card span { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
 .b2m-choice-card small { display: block; margin-top: .2rem; color: var(--tblr-secondary); font-weight: 400; }
-.b2m-choice-disabled { opacity: .5; }
+.b2m-choice-disabled { opacity: .48; }
 .b2m-choice-disabled .b2m-choice-card { cursor: not-allowed; }
+.b2m-choice-card.b2m-inherited-active { opacity: .82; border-style: dashed; background: var(--tblr-bg-surface-secondary); }
+.b2m-choice-card.b2m-inherited-active small::after { content: " · inherited"; font-weight: 600; }
 
 .b2m-target-card { margin: .75rem; padding: 0 !important; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); overflow: hidden; background: var(--tblr-bg-surface); }
 .b2m-target-card + .b2m-target-card { margin-top: 1rem; }
@@ -69,9 +81,17 @@ select[multiple][name="shopping_list_ids"] option { padding: .3rem .45rem; borde
 .b2m-target-remove { width: 2.35rem; height: 2.35rem; border-width: 1px; }
 .b2m-target-remove .ti { font-size: 1.15rem; }
 #recipe-selected-name { color: var(--tblr-body-color); background: rgba(var(--tblr-purple-rgb), .06); }
+.b2m-target-save-status { font-size: .75rem; min-height: 1.2rem; }
 
 .b2m-shopping-list-link { transition: border-color .12s ease, transform .12s ease, box-shadow .12s ease; }
 .b2m-shopping-list-link:hover { border-color: var(--tblr-primary) !important; transform: translateY(-1px); box-shadow: var(--tblr-box-shadow-card); }
+
+/* Batch selection */
+.b2m-bulk-col { width: 2.5rem; text-align: center; }
+.b2m-bulk-toolbar { display: inline-flex; align-items: center; gap: .5rem; }
+.b2m-bulk-toolbar .badge { min-width: 1.6rem; }
+tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !important; }
+.b2m-bulk-disabled { opacity: .35; cursor: not-allowed; }
 
 /* System banner */
 .system-banner { display: flex; align-items: center; justify-content: center; gap: .5rem; padding: .5rem 1rem; color: var(--tblr-body-color); font-size: var(--tblr-body-font-size); font-family: var(--tblr-body-font-family); box-shadow: inset 0 -1px rgba(0,0,0,.1); }
