@@ -11,3 +11,4 @@ pydantic-settings>=2.3
 python-multipart>=0.0.9
 mistune>=3.0
 segno>=1.6
+python-barcode>=0.16
