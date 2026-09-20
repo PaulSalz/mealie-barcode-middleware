@@ -9,11 +9,19 @@ to /scan. Business logic stays in the middleware.
 import json
 import logging
 import os
+import socket
+import threading
 import time
 import urllib.error
 import urllib.request
 
 from evdev import InputDevice, ecodes
+
+SCANNER_VERSION = "2.1.0"
+STARTED_MONO = time.monotonic()
+_stats_lock = threading.Lock()
+_stats = {"scans": 0, "errors": 0, "last_latency_ms": 0}
+_runtime = {"device": "", "layout": "de"}
 
 logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
@@ -92,26 +100,48 @@ def scan_url() -> str:
     return base if base.endswith("/scan") else base + "/scan"
 
 
+def heartbeat_url() -> str:
+    explicit = _env("SCANNER_HEARTBEAT_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    url = scan_url()
+    return url[:-5] + "/scanner/heartbeat" if url.endswith("/scan") else url.rstrip("/") + "/scanner/heartbeat"
+
+
 def api_token() -> str:
     token = _env("MIDDLEWARE_TOKEN", "MIDDLEWARE_API_TOKEN", "BARCODE_API_TOKEN", "API_TOKEN", "API_KEY")
     if not token:
-        raise RuntimeError(
-            "No middleware API token configured. Set MIDDLEWARE_TOKEN (or MIDDLEWARE_API_TOKEN/API_TOKEN)."
-        )
+        raise RuntimeError("No middleware API token configured. Set MIDDLEWARE_TOKEN (or MIDDLEWARE_API_TOKEN/API_TOKEN).")
     return token
 
 
-def post_barcode(barcode: str) -> None:
-    payload = json.dumps({"barcode": barcode}).encode("utf-8")
+def telemetry_headers() -> dict[str, str]:
+    with _stats_lock:
+        stats = dict(_stats)
+    return {
+        "Authorization": "Bearer " + api_token(),
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-B2M-Scanner-Version": SCANNER_VERSION,
+        "X-B2M-Scanner-Hostname": socket.gethostname(),
+        "X-B2M-Scanner-Device": _runtime["device"],
+        "X-B2M-Scanner-Layout": _runtime["layout"],
+        "X-B2M-Scanner-Uptime": str(int(time.monotonic() - STARTED_MONO)),
+        "X-B2M-Scanner-Scans": str(stats["scans"]),
+        "X-B2M-Scanner-Errors": str(stats["errors"]),
+        "X-B2M-Scanner-Last-Latency": str(stats["last_latency_ms"]),
+    }
+
+
+def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | None = None) -> bool:
+    if count_scan:
+        with _stats_lock:
+            _stats["scans"] += 1
     request = urllib.request.Request(
-        scan_url(),
-        data=payload,
+        url,
+        data=json.dumps(payload).encode("utf-8"),
         method="POST",
-        headers={
-            "Authorization": "Bearer " + api_token(),
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
+        headers=telemetry_headers(),
     )
     timeout = float(_env("HTTP_TIMEOUT", default="8") or "8")
     started = time.monotonic()
@@ -119,12 +149,40 @@ def post_barcode(barcode: str) -> None:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8", "replace")
             elapsed = int((time.monotonic() - started) * 1000)
-            log.info("scan=%r HTTP %d in %d ms response=%s", barcode, response.status, elapsed, body[:300])
+            with _stats_lock:
+                _stats["last_latency_ms"] = elapsed
+            if log_scan is not None:
+                log.info("scan=%r HTTP %d in %d ms response=%s", log_scan, response.status, elapsed, body[:300])
+            return True
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", "replace")
-        log.error("scan=%r HTTP %d response=%s", barcode, exc.code, body[:500])
+        if count_scan:
+            with _stats_lock:
+                _stats["errors"] += 1
+        if log_scan is not None:
+            log.error("scan=%r HTTP %d response=%s", log_scan, exc.code, body[:500])
+        else:
+            log.debug("heartbeat HTTP %d response=%s", exc.code, body[:200])
     except Exception:
-        log.exception("scan=%r POST failed", barcode)
+        if count_scan:
+            with _stats_lock:
+                _stats["errors"] += 1
+        if log_scan is not None:
+            log.exception("scan=%r POST failed", log_scan)
+        else:
+            log.debug("scanner heartbeat failed", exc_info=True)
+    return False
+
+
+def post_barcode(barcode: str) -> None:
+    _post(scan_url(), {"barcode": barcode}, count_scan=True, log_scan=barcode)
+
+
+def heartbeat_loop(interval: float) -> None:
+    # Initial heartbeat makes the token appear online immediately after service start.
+    while True:
+        _post(heartbeat_url(), {}, count_scan=False)
+        time.sleep(interval)
 
 
 def decode_key(key_name: str, shifted: bool, altgr: bool, layout: str) -> str | None:
@@ -144,11 +202,20 @@ def main() -> int:
     min_length = int(_env("MIN_BARCODE_LENGTH", default="1") or "1")
     max_length = int(_env("MAX_BARCODE_LENGTH", default="256") or "256")
     layout = (_env("SCANNER_KEYBOARD_LAYOUT", default="de") or "de").strip().lower()
+    heartbeat_interval = float(_env("HEARTBEAT_INTERVAL", default="60") or "60")
     if layout not in {"de", "us"}:
         raise RuntimeError("SCANNER_KEYBOARD_LAYOUT must be 'de' or 'us'")
 
+    _runtime["device"] = device_path
+    _runtime["layout"] = layout
     device = InputDevice(device_path)
-    log.info("Listening on %s (%s), layout=%s, posting to %s", device_path, device.name, layout, scan_url())
+    log.info(
+        "Scanner bridge v%s listening on %s (%s), layout=%s, posting to %s",
+        SCANNER_VERSION, device_path, device.name, layout, scan_url(),
+    )
+
+    if heartbeat_interval > 0:
+        threading.Thread(target=heartbeat_loop, args=(max(15.0, heartbeat_interval),), daemon=True).start()
 
     buffer: list[str] = []
     shift_down = False
