@@ -96,6 +96,26 @@ def _apply_form(
     action.updated_at = utcnow()
 
 
+def _stats(db: Session, action_id: str) -> dict:
+    total = db.query(ActionExecution).filter(ActionExecution.action_id == action_id).count()
+    success = db.query(ActionExecution).filter(ActionExecution.action_id == action_id, ActionExecution.status == "success").count()
+    failed = db.query(ActionExecution).filter(ActionExecution.action_id == action_id, ActionExecution.status == "failed").count()
+    ignored = db.query(ActionExecution).filter(ActionExecution.action_id == action_id, ActionExecution.status == "ignored_cooldown").count()
+    avg_ms = db.query(func.avg(ActionExecution.duration_ms)).filter(
+        ActionExecution.action_id == action_id,
+        ActionExecution.duration_ms.isnot(None),
+    ).scalar()
+    latest = db.query(ActionExecution).filter(ActionExecution.action_id == action_id).order_by(ActionExecution.created_at.desc()).first()
+    return {
+        "total": total,
+        "success": success,
+        "failed": failed,
+        "ignored": ignored,
+        "avg_ms": round(float(avg_ms), 1) if avg_ms is not None else None,
+        "last_execution": latest.created_at if latest else None,
+    }
+
+
 @router.get("/actions", response_class=HTMLResponse)
 def actions_page(request: Request, db: Session = Depends(get_db)):
     rows = db.query(Action).order_by(func.lower(Action.name)).all()
@@ -116,10 +136,16 @@ def action_new_page(request: Request):
         id="",
         name="",
         webhook_url=settings.ha_webhook_url or "",
-        payload_json='{"action_id": "{{ action.id }}", "barcode": "{{ scan.barcode }}"}',
+        payload_json='{"action_id": "{{ action.id }}", "action_name": "{{ action.name }}", "barcode": "{{ scan.barcode }}", "params": "{{ params }}"}',
         parameters_json='{"duration_seconds": 600}',
     )
-    return templates.TemplateResponse(request, "action_detail.html", {"action": action, "is_new": True, "executions": []})
+    return templates.TemplateResponse(request, "action_detail.html", {
+        "action": action,
+        "is_new": True,
+        "executions": [],
+        "stats": {"total": 0, "success": 0, "failed": 0, "ignored": 0, "avg_ms": None, "last_execution": None},
+        "id_error": request.query_params.get("error") == "id",
+    })
 
 
 @router.post("/actions/new")
@@ -157,7 +183,9 @@ def action_detail(request: Request, action_id: str, db: Session = Depends(get_db
         "action": action,
         "is_new": False,
         "executions": executions,
+        "stats": _stats(db, action.id),
         "saved": request.query_params.get("saved") == "1",
+        "id_error": False,
     })
 
 
