@@ -51,6 +51,12 @@ class BarcodeCache(Base):
 
 
 class BarcodeMapping(Base):
+    """Legacy/primary barcode target kept for backwards compatibility.
+
+    Additional destinations live in BarcodeTarget. A mirrored primary BarcodeTarget
+    is created automatically so existing installations keep working unchanged.
+    """
+
     __tablename__ = "barcode_mappings"
 
     barcode: Mapped[str] = mapped_column(String, primary_key=True)
@@ -65,6 +71,37 @@ class BarcodeMapping(Base):
     shopping_list_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     mapped_by: Mapped[str] = mapped_column(String, default="manual")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class BarcodeTarget(Base):
+    """One independently routed thing behind a barcode.
+
+    destination_type:
+      inherit       - primary target; preserve the Item's configured route
+      mealie        - add to the selected/default Mealie shopping list
+      homeassistant - POST a shopping_route event to HA_WEBHOOK_URL
+      webhook       - POST the same structured event to endpoint_url
+    """
+
+    __tablename__ = "barcode_targets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    barcode: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    target_type: Mapped[str] = mapped_column(String, nullable=False)  # food | recipe
+    target_id: Mapped[str] = mapped_column(String, nullable=False)
+    target_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    recipe_scale: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+
+    destination_type: Mapped[str] = mapped_column(String, nullable=False, default="mealie")
+    shopping_list_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    endpoint_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mapped_by: Mapped[str] = mapped_column(String, nullable=False, default="manual")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
