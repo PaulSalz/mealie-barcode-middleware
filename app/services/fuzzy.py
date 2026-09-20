@@ -26,14 +26,34 @@ def normalise_title(title: str, brand: str | None = None) -> str:
     return _EXTRA_SPACES.sub(" ", result).strip()
 
 
+def _terms(item: Item) -> list[str]:
+    terms = [item.name]
+    if item.aliases:
+        try:
+            aliases = json.loads(item.aliases)
+            terms.extend(str(alias) for alias in aliases if alias)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return [term.strip() for term in terms if str(term).strip()]
+
+
 def _score_pair(product: str, item_term: str) -> int:
-    p = product.lower()
-    f = item_term.lower()
-    return max(
+    p = product.casefold()
+    f = item_term.casefold()
+    if p == f:
+        return 100
+    # Strongly prefer starts-with before general fuzzy matching. This stops a
+    # short query such as "Tic" from being outranked by an unrelated partial hit.
+    prefix_bonus = 8 if f.startswith(p) or p.startswith(f) else 0
+    score = max(
         fuzz.token_sort_ratio(p, f),
         fuzz.token_set_ratio(p, f),
-        fuzz.partial_ratio(p, f),
+        fuzz.ratio(p, f),
+        # partial_ratio is useful for product titles with extra branding, but cap
+        # its influence so tiny substrings do not dominate the list.
+        min(fuzz.partial_ratio(p, f), 92),
     )
+    return min(100, int(score + prefix_bonus))
 
 
 def fuzzy_match(
@@ -48,29 +68,35 @@ def fuzzy_match(
     normalised = normalise_title(title, brand)
     if not normalised:
         return []
+    wanted = normalised.casefold()
 
     items = db.query(Item).filter(Item.source == "mealie").all()
     candidates = []
 
     for item in items:
-        score = _score_pair(normalised, item.name)
-        aliases = []
-        if item.aliases:
-            try:
-                aliases = json.loads(item.aliases)
-            except (json.JSONDecodeError, TypeError):
-                pass
-        for alias in aliases:
-            score = max(score, _score_pair(normalised, alias))
-
+        terms = _terms(item)
+        folded = [term.casefold() for term in terms]
+        exact = wanted in folded
+        prefix = any(term.startswith(wanted) or wanted.startswith(term) for term in folded)
+        score = max((_score_pair(normalised, term) for term in terms), default=0)
+        if exact:
+            score = 100
         candidates.append({
             "item_id": item.id,
             "item_name": item.name,
             "source": item.source,
             "score": int(score),
+            "exact": exact,
+            "prefix": prefix,
         })
 
-    candidates.sort(key=lambda c: c["score"], reverse=True)
+    candidates = [candidate for candidate in candidates if candidate["score"] >= threshold]
+    candidates.sort(key=lambda c: (
+        0 if c["exact"] else 1,
+        0 if c["prefix"] else 1,
+        -c["score"],
+        c["item_name"].casefold(),
+    ))
     return candidates
 
 
@@ -83,7 +109,9 @@ def try_auto_map(barcode: str, title: str, brand: str | None, db: Session) -> st
     if top["score"] < settings.fuzzy_match_threshold:
         return None
 
-    if len(candidates) >= 2:
+    # An exact Food name/alias is deterministic and must not be rejected merely
+    # because another similar Food also scores highly.
+    if not top.get("exact") and len(candidates) >= 2:
         second = candidates[1]
         gap = top["score"] - second["score"]
         if gap < settings.fuzzy_ambiguity_gap:
@@ -117,5 +145,5 @@ def try_auto_map(barcode: str, title: str, brand: str | None, db: Session) -> st
     existing.mapped_by = "auto"
     db.commit()
 
-    logger.info("Auto-mapped %s -> %s (score=%s)", barcode, top["item_name"], top["score"])
+    logger.info("Auto-mapped %s -> %s (score=%s%s)", barcode, top["item_name"], top["score"], ", exact" if top.get("exact") else "")
     return top["item_id"]
