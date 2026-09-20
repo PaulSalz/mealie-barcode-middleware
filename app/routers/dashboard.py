@@ -74,8 +74,6 @@ def _frequent_targets(db: Session, limit_each: int = 6) -> tuple[list[dict], lis
     if not activities:
         return [], [], []
 
-    # New scan rows contain an immutable target snapshot. For pre-migration rows,
-    # fall back to the current mapping so old history remains useful.
     barcodes = list({a.barcode for a in activities if not a.target_type})
     mappings = {
         m.barcode: m
@@ -109,15 +107,30 @@ def _frequent_targets(db: Session, limit_each: int = 6) -> tuple[list[dict], lis
     return foods, recipes, actions
 
 
+def _summary_counts(db: Session) -> tuple[int, int, int, int, int]:
+    total_barcodes = db.query(BarcodeCache).count()
+    action_codes = db.query(BarcodeCache).filter(BarcodeCache.source == "action").count()
+    mapped_count = db.query(BarcodeMapping).count() + action_codes
+    mapped_sub = db.query(BarcodeMapping.barcode)
+    pending_count = (
+        db.query(BarcodeCache)
+        .filter(BarcodeCache.found == True, BarcodeCache.source != "action")
+        .filter(~BarcodeCache.barcode.in_(mapped_sub))
+        .count()
+    )
+    queue_depth = db.query(RetryQueue).count()
+    unknown_count = (
+        db.query(BarcodeCache)
+        .filter(BarcodeCache.found == False, BarcodeCache.source != "action")
+        .filter(~BarcodeCache.barcode.in_(mapped_sub))
+        .count()
+    )
+    return total_barcodes, mapped_count, pending_count, queue_depth, unknown_count
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)):
-    total_barcodes = db.query(BarcodeCache).count()
-    mapped_count = db.query(BarcodeMapping).count()
-    mapped_sub = db.query(BarcodeMapping.barcode)
-    pending_count = db.query(BarcodeCache).filter(BarcodeCache.found == True).filter(~BarcodeCache.barcode.in_(mapped_sub)).count()
-    queue_depth = db.query(RetryQueue).count()
-    unknown_count = db.query(BarcodeCache).filter(BarcodeCache.found == False).filter(~BarcodeCache.barcode.in_(mapped_sub)).count()
-
+    total_barcodes, mapped_count, pending_count, queue_depth, unknown_count = _summary_counts(db)
     recent_items = _recent_scans(db, 25)
     frequent_foods, frequent_recipes, frequent_actions = _frequent_targets(db)
     mealie_reachable = check_connectivity()
@@ -144,14 +157,8 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/api/dashboard")
 def dashboard_api(db: Session = Depends(get_db)):
-    total_barcodes = db.query(BarcodeCache).count()
-    mapped_count = db.query(BarcodeMapping).count()
-    mapped_sub = db.query(BarcodeMapping.barcode)
-    pending_count = db.query(BarcodeCache).filter(BarcodeCache.found == True).filter(~BarcodeCache.barcode.in_(mapped_sub)).count()
-    queue_depth = db.query(RetryQueue).count()
-    unknown_count = db.query(BarcodeCache).filter(BarcodeCache.found == False).filter(~BarcodeCache.barcode.in_(mapped_sub)).count()
+    total_barcodes, mapped_count, pending_count, queue_depth, unknown_count = _summary_counts(db)
     recent_items = _recent_scans(db, 25)
-
     return {
         "total_barcodes": total_barcodes,
         "mapped_count": mapped_count,
