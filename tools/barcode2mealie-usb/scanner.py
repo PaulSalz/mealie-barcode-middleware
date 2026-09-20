@@ -6,6 +6,7 @@ etc. It only decodes the HID keyboard stream into a full string and POSTs it
 to /scan. Business logic stays in the middleware.
 """
 
+import glob
 import json
 import logging
 import os
@@ -17,11 +18,11 @@ import urllib.request
 
 from evdev import InputDevice, ecodes
 
-SCANNER_VERSION = "2.1.0"
+SCANNER_VERSION = "2.2.0"
 STARTED_MONO = time.monotonic()
 _stats_lock = threading.Lock()
 _stats = {"scans": 0, "errors": 0, "last_latency_ms": 0}
-_runtime = {"device": "", "layout": "de"}
+_runtime = {"device": "disconnected", "layout": "de"}
 
 logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
@@ -30,6 +31,10 @@ logging.basicConfig(
 log = logging.getLogger("barcode2mealie-usb")
 
 DEFAULT_DEVICE = "/dev/input/by-id/usb-Jieli_Technology_Receive-HID_415035383237330C-event-kbd"
+AUTO_DEVICE_GLOBS = (
+    "/dev/input/by-id/*Jieli*event-kbd",
+    "/dev/input/by-id/*Receive-HID*event-kbd",
+)
 
 US_NORMAL = {
     "KEY_1": "1", "KEY_2": "2", "KEY_3": "3", "KEY_4": "4", "KEY_5": "5",
@@ -50,9 +55,10 @@ DE_NORMAL = {
     "KEY_1": "1", "KEY_2": "2", "KEY_3": "3", "KEY_4": "4", "KEY_5": "5",
     "KEY_6": "6", "KEY_7": "7", "KEY_8": "8", "KEY_9": "9", "KEY_0": "0",
     "KEY_MINUS": "ß", "KEY_EQUAL": "´", "KEY_LEFTBRACE": "ü", "KEY_RIGHTBRACE": "+",
-    "KEY_BACKSLASH": "#", "KEY_SEMICOLON": "ö", "KEY_APOSTROPHE": "ä", "KEY_GRAVE": "^",
+    "KEY_BACKSLASH": "#", "KEY_SEMICOLON": ";", "KEY_APOSTROPHE": "ä", "KEY_GRAVE": "^",
     "KEY_COMMA": ",", "KEY_DOT": ".", "KEY_SLASH": "-", "KEY_SPACE": " ",
 }
+DE_NORMAL["KEY_SEMICOLON"] = "ö"
 DE_SHIFT = {
     "KEY_1": "!", "KEY_2": '"', "KEY_3": "§", "KEY_4": "$", "KEY_5": "%",
     "KEY_6": "&", "KEY_7": "/", "KEY_8": "(", "KEY_9": ")", "KEY_0": "=",
@@ -137,15 +143,15 @@ def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | 
     if count_scan:
         with _stats_lock:
             _stats["scans"] += 1
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        method="POST",
-        headers=telemetry_headers(),
-    )
     timeout = float(_env("HTTP_TIMEOUT", default="8") or "8")
     started = time.monotonic()
     try:
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+            headers=telemetry_headers(),
+        )
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8", "replace")
             elapsed = int((time.monotonic() - started) * 1000)
@@ -179,7 +185,8 @@ def post_barcode(barcode: str) -> None:
 
 
 def heartbeat_loop(interval: float) -> None:
-    # Initial heartbeat makes the token appear online immediately after service start.
+    # Heartbeats deliberately continue while the USB scanner is unplugged so the
+    # middleware can distinguish a running bridge from a dead service.
     while True:
         _post(heartbeat_url(), {}, count_scan=False)
         time.sleep(interval)
@@ -197,26 +204,23 @@ def decode_key(key_name: str, shifted: bool, altgr: bool, layout: str) -> str | 
     return table.get(key_name) or US_NORMAL.get(key_name)
 
 
-def main() -> int:
-    device_path = _env("SCANNER_DEVICE", "BARCODE_DEVICE", default=DEFAULT_DEVICE) or DEFAULT_DEVICE
-    min_length = int(_env("MIN_BARCODE_LENGTH", default="1") or "1")
-    max_length = int(_env("MAX_BARCODE_LENGTH", default="256") or "256")
-    layout = (_env("SCANNER_KEYBOARD_LAYOUT", default="de") or "de").strip().lower()
-    heartbeat_interval = float(_env("HEARTBEAT_INTERVAL", default="60") or "60")
-    if layout not in {"de", "us"}:
-        raise RuntimeError("SCANNER_KEYBOARD_LAYOUT must be 'de' or 'us'")
+def resolve_device_path(device_spec: str) -> str | None:
+    """Resolve an explicit device path or auto-discover the Jieli HID scanner."""
+    spec = (device_spec or "auto").strip()
+    if spec.lower() != "auto":
+        return spec if os.path.exists(spec) else None
 
-    _runtime["device"] = device_path
-    _runtime["layout"] = layout
-    device = InputDevice(device_path)
-    log.info(
-        "Scanner bridge v%s listening on %s (%s), layout=%s, posting to %s",
-        SCANNER_VERSION, device_path, device.name, layout, scan_url(),
-    )
+    candidates: list[str] = []
+    if os.path.exists(DEFAULT_DEVICE):
+        candidates.append(DEFAULT_DEVICE)
+    for pattern in AUTO_DEVICE_GLOBS:
+        candidates.extend(glob.glob(pattern))
 
-    if heartbeat_interval > 0:
-        threading.Thread(target=heartbeat_loop, args=(max(15.0, heartbeat_interval),), daemon=True).start()
+    unique = sorted(dict.fromkeys(path for path in candidates if os.path.exists(path)))
+    return unique[0] if unique else None
 
+
+def _read_device(device: InputDevice, layout: str, min_length: int, max_length: int) -> None:
     buffer: list[str] = []
     shift_down = False
     altgr_down = False
@@ -265,7 +269,66 @@ def main() -> int:
         elif char is None:
             log.debug("Unhandled HID key: %s", key_name)
 
-    return 0
+
+def main() -> int:
+    device_spec = _env("SCANNER_DEVICE", "BARCODE_DEVICE", default="auto") or "auto"
+    min_length = int(_env("MIN_BARCODE_LENGTH", default="1") or "1")
+    max_length = int(_env("MAX_BARCODE_LENGTH", default="256") or "256")
+    layout = (_env("SCANNER_KEYBOARD_LAYOUT", default="de") or "de").strip().lower()
+    heartbeat_interval = float(_env("HEARTBEAT_INTERVAL", default="60") or "60")
+    reconnect_interval = max(0.5, float(_env("SCANNER_RECONNECT_INTERVAL", default="2") or "2"))
+    if layout not in {"de", "us"}:
+        raise RuntimeError("SCANNER_KEYBOARD_LAYOUT must be 'de' or 'us'")
+
+    # Validate the token up front. Missing scanner hardware is tolerated; missing
+    # authentication is a real configuration error and should still fail loudly.
+    api_token()
+    _runtime["layout"] = layout
+    _runtime["device"] = device_spec if device_spec.lower() != "auto" else "disconnected"
+
+    log.info(
+        "Scanner bridge v%s starting, device=%s, layout=%s, posting to %s",
+        SCANNER_VERSION, device_spec, layout, scan_url(),
+    )
+
+    if heartbeat_interval > 0:
+        threading.Thread(target=heartbeat_loop, args=(max(15.0, heartbeat_interval),), daemon=True).start()
+
+    waiting_logged = False
+    while True:
+        device_path = resolve_device_path(device_spec)
+        if not device_path:
+            _runtime["device"] = device_spec if device_spec.lower() != "auto" else "disconnected"
+            if not waiting_logged:
+                log.warning("Scanner not connected; waiting for USB device (device=%s)", device_spec)
+                waiting_logged = True
+            time.sleep(reconnect_interval)
+            continue
+
+        device = None
+        try:
+            device = InputDevice(device_path)
+            _runtime["device"] = device_path
+            waiting_logged = False
+            log.info(
+                "Scanner connected on %s (%s), layout=%s",
+                device_path, device.name, layout,
+            )
+            _read_device(device, layout, min_length, max_length)
+            log.warning("Scanner device %s closed; waiting for reconnect", device_path)
+        except (FileNotFoundError, OSError) as exc:
+            _runtime["device"] = device_path
+            if not waiting_logged:
+                log.warning("Scanner unavailable/disconnected: %s; waiting for reconnect", exc)
+                waiting_logged = True
+        finally:
+            if device is not None:
+                try:
+                    device.close()
+                except Exception:
+                    pass
+
+        time.sleep(reconnect_interval)
 
 
 if __name__ == "__main__":
