@@ -124,18 +124,22 @@ def _create_retry_failed_activity(item: RetryQueue, db):
 
 
 def _purge_old_activities():
-    """Delete read activity entries older than 7 days."""
+    """Delete old read notification activities while preserving scan history used by statistics."""
     db = SessionLocal()
     try:
         cutoff = utcnow() - timedelta(days=7)
         deleted = (
             db.query(Activity)
-            .filter(Activity.is_read == True, Activity.created_at < cutoff)
+            .filter(
+                Activity.is_read == True,
+                Activity.is_scan_event == False,
+                Activity.created_at < cutoff,
+            )
             .delete()
         )
         db.commit()
         if deleted:
-            logger.info(f"Purged {deleted} old read activities")
+            logger.info(f"Purged {deleted} old read notification activities")
     except Exception as e:
         logger.error(f"Activity purge failed: {e}")
     finally:
