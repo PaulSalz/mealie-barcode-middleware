@@ -1,6 +1,8 @@
 (function() {
     'use strict';
 
+    var EMPTY_SENTINEL = 0.001;
+
     function allowEmpty(input) {
         return input.dataset.allowEmpty === 'true';
     }
@@ -47,6 +49,10 @@
         }
         var value = Number.parseFloat(raw);
         if (!Number.isFinite(value)) return;
+        if (allowEmpty(input) && value <= EMPTY_SENTINEL) {
+            input.value = '';
+            return;
+        }
         setValue(input, value);
     }
 
@@ -70,6 +76,7 @@
         if (input.name === 'quantity' && !input.dataset.allowEmpty) {
             input.dataset.allowEmpty = 'true';
         }
+        normalizeInput(input);
 
         container.querySelectorAll('[data-decimal-step]').forEach(function(button) {
             button.addEventListener('click', function() {
@@ -100,5 +107,11 @@
             input.setRangeText(normalized, input.selectionStart || 0, input.selectionEnd || 0, 'end');
             setTimeout(function() { normalizeInput(input); }, 0);
         });
+
+        if (allowEmpty(input) && input.form) {
+            input.form.addEventListener('submit', function() {
+                if (!rawValue(input)) input.value = String(EMPTY_SENTINEL);
+            });
+        }
     });
 })();
