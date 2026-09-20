@@ -1,14 +1,17 @@
 import io
 import logging
+import re
 
+import barcode as barcode_lib
 import segno
+from barcode.writer import SVGWriter
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import BarcodeCache, BarcodeMapping, Item
+from app.models import Action, BarcodeCache, BarcodeMapping, Item
 from app.services.fuzzy import fuzzy_match
 from app.templating import templates
 from app.utils import utcnow
@@ -16,28 +19,125 @@ from app.utils import utcnow
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+GENERIC_EXAMPLES = [
+    "Brot", "Brötchen", "Milch", "Eier", "Butter", "Reis", "Nudeln",
+    "Mehl", "Zucker", "Kaffee", "Tee", "Kartoffeln", "Zwiebeln",
+]
+RECIPE_EXAMPLES = [
+    "Pizza", "Pfannkuchen", "Pasta", "Lasagne", "Curry", "Chili",
+    "Salat", "Suppe", "Burger", "Wraps",
+]
+
+
+def _prefill(request: Request, db: Session) -> dict | None:
+    food_id = request.query_params.get("food")
+    action_id = request.query_params.get("action")
+    raw_code = request.query_params.get("code")
+
+    if food_id:
+        item = db.get(Item, food_id)
+        if item:
+            return {
+                "code": f"FOOD:{item.id}",
+                "label": item.name,
+                "target_type": "food",
+                "target_id": item.id,
+                "target_name": item.name,
+                "kind": "qr",
+            }
+    if action_id:
+        action = db.get(Action, action_id)
+        if action:
+            return {
+                "code": f"ACTION:{action.id}",
+                "label": action.name,
+                "target_type": "action",
+                "target_id": action.id,
+                "target_name": action.name,
+                "kind": "qr",
+            }
+    if raw_code:
+        cached = db.get(BarcodeCache, raw_code)
+        mapping = db.get(BarcodeMapping, raw_code)
+        return {
+            "code": raw_code,
+            "label": (cached.display_title if cached else None) or raw_code,
+            "target_type": mapping.target_type if mapping else "custom",
+            "target_id": mapping.target_id if mapping else "",
+            "target_name": mapping.target_name if mapping else "",
+            "kind": "qr",
+        }
+    return None
+
 
 @router.get("/labels", response_class=HTMLResponse)
-def labels_page(request: Request):
-    return templates.TemplateResponse(request, "labels.html", {})
+def labels_page(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(request, "labels.html", {
+        "generic_examples": GENERIC_EXAMPLES,
+        "recipe_examples": RECIPE_EXAMPLES,
+        "prefill": _prefill(request, db),
+    })
 
 
-@router.get("/labels/qr.svg")
-def generate_qr_svg(text: str = Query(..., min_length=1)):
-    """Generate a QR code SVG for GENERIC:{text}."""
-    import re
-
-    content = f"GENERIC:{text}"
-    qr = segno.make(content, error="m")
+def _qr_svg(value: str) -> bytes:
+    qr = segno.make(value, error="m")
     buf = io.BytesIO()
     qr.save(buf, kind="svg", scale=1, border=2, xmldecl=False)
     svg = buf.getvalue().decode()
+    svg = re.sub(
+        r'width="(\d+)" height="(\d+)"',
+        lambda m: f'viewBox="0 0 {m.group(1)} {m.group(2)}"',
+        svg,
+        count=1,
+    )
+    return svg.encode()
 
-    def _to_viewbox(m):
-        return f'viewBox="0 0 {m.group(1)} {m.group(2)}"'
 
-    svg = re.sub(r'width="(\d+)" height="(\d+)"', _to_viewbox, svg, count=1)
-    return Response(content=svg.encode(), media_type="image/svg+xml")
+def _linear_svg(kind: str, value: str) -> bytes:
+    value = value.strip()
+    if kind == "code128":
+        cls = barcode_lib.get_barcode_class("code128")
+        code_value = value
+    elif kind == "ean13":
+        if not value.isdigit() or len(value) not in (12, 13):
+            raise ValueError("EAN-13 requires 12 or 13 digits")
+        cls = barcode_lib.get_barcode_class("ean13")
+        code_value = value[:12]
+    elif kind == "upca":
+        if not value.isdigit() or len(value) not in (11, 12):
+            raise ValueError("UPC-A requires 11 or 12 digits")
+        cls = barcode_lib.get_barcode_class("upca")
+        code_value = value[:11]
+    else:
+        raise ValueError("Unsupported symbology")
+
+    buf = io.BytesIO()
+    code = cls(code_value, writer=SVGWriter())
+    code.write(buf, options={
+        "write_text": False,
+        "quiet_zone": 2.0,
+        "module_height": 12.0,
+        "font_size": 0,
+    })
+    return buf.getvalue()
+
+
+@router.get("/labels/code.svg")
+def generate_code_svg(
+    value: str = Query(..., min_length=1, max_length=256),
+    kind: str = Query("qr"),
+):
+    try:
+        content = _qr_svg(value) if kind == "qr" else _linear_svg(kind, value)
+    except ValueError as exc:
+        return Response(content=str(exc), status_code=422, media_type="text/plain")
+    return Response(content=content, media_type="image/svg+xml")
+
+
+# Backward-compatible endpoint for old bookmarks / JS.
+@router.get("/labels/qr.svg")
+def generate_qr_svg(text: str = Query(..., min_length=1)):
+    return Response(content=_qr_svg(f"GENERIC:{text}"), media_type="image/svg+xml")
 
 
 @router.get("/labels/search")
@@ -57,6 +157,16 @@ def labels_search_items(q: str = Query(default=""), db: Session = Depends(get_db
     return [{"id": i.id, "name": i.name, "source": i.source} for i in items]
 
 
+@router.get("/labels/actions-search")
+def labels_search_actions(q: str = Query(default=""), db: Session = Depends(get_db)):
+    query = db.query(Action).filter(Action.enabled == True)
+    q = q.strip()
+    if q:
+        query = query.filter(Action.name.ilike(f"%{q}%") | Action.id.ilike(f"%{q}%"))
+    actions = query.order_by(Action.name).limit(20).all()
+    return [{"id": a.id, "name": a.name, "code": f"ACTION:{a.id}"} for a in actions]
+
+
 @router.get("/labels/fuzzy")
 def labels_fuzzy_match(q: str = Query(default=""), db: Session = Depends(get_db)):
     q = q.strip()
@@ -64,62 +174,83 @@ def labels_fuzzy_match(q: str = Query(default=""), db: Session = Depends(get_db)
         return {"candidates": []}
     candidates = fuzzy_match(q, None, db)
     top = [c for c in candidates[:5] if c["score"] >= 60]
-    return {
-        "candidates": [
-            {"id": c["item_id"], "name": c["item_name"], "score": c["score"]}
-            for c in top
-        ],
-    }
+    return {"candidates": [{"id": c["item_id"], "name": c["item_name"], "score": c["score"]} for c in top]}
+
+
+def _upsert_cache(code: str, label: str, source: str, db: Session) -> BarcodeCache:
+    cached = db.get(BarcodeCache, code)
+    now = utcnow()
+    if not cached:
+        cached = BarcodeCache(
+            barcode=code,
+            source=source,
+            title=label or code,
+            custom_title=label or None,
+            found=True,
+            lookup_attempted_at=now,
+            created_at=now,
+        )
+        db.add(cached)
+    else:
+        if label:
+            cached.custom_title = label
+        if source in {"generator", "action", "generic"}:
+            cached.source = source
+        cached.found = True
+    return cached
 
 
 @router.post("/labels/register", response_class=JSONResponse)
 async def register_labels_batch(request: Request, db: Session = Depends(get_db)):
-    """Register GENERIC labels and optionally link them to real Mealie Foods."""
     body = await request.json()
     labels = body.get("labels", [])
-    if not labels:
+    if not isinstance(labels, list) or not labels:
         return JSONResponse({"error": "labels array is required"}, status_code=400)
 
     registered = 0
     mapped = 0
-
+    errors = []
     for entry in labels:
-        text = entry.get("text", "").strip()
-        item_id = entry.get("item_id")
-        if not text:
+        if not isinstance(entry, dict):
+            continue
+        code = str(entry.get("code") or "").strip()
+        label = str(entry.get("label") or code).strip()
+        target_type = str(entry.get("target_type") or "custom").strip().lower()
+        target_id = str(entry.get("target_id") or "").strip()
+        target_name = str(entry.get("target_name") or label).strip()
+        if not code or len(code) > 256:
+            errors.append(f"Invalid code: {code[:40]}")
             continue
 
-        barcode = f"GENERIC:{text}"
-        existing_cache = db.get(BarcodeCache, barcode)
-        if not existing_cache:
-            db.add(BarcodeCache(
-                barcode=barcode,
-                source="generic",
-                title=text,
-                found=True,
-                lookup_attempted_at=utcnow(),
-            ))
+        source = "action" if target_type == "action" else "generic" if code.upper().startswith("GENERIC:") else "generator"
+        existed = db.get(BarcodeCache, code) is not None
+        _upsert_cache(code, label, source, db)
+        if not existed:
             registered += 1
 
-        if item_id:
-            item = db.get(Item, item_id)
-            if item and item.source == "mealie":
-                mapping = db.get(BarcodeMapping, barcode)
-                if not mapping:
-                    mapping = BarcodeMapping(
-                        barcode=barcode,
-                        target_type="food",
-                        target_id=item.id,
-                    )
-                    db.add(mapping)
-                mapping.target_type = "food"
-                mapping.target_id = item.id
-                mapping.target_name = item.name
-                mapping.quantity = 1.0
-                mapping.unit_id = None
-                mapping.recipe_scale = 1.0
-                mapping.mapped_by = "manual"
-                mapped += 1
+        if target_type in {"food", "recipe"} and target_id:
+            mapping = db.get(BarcodeMapping, code)
+            if not mapping:
+                mapping = BarcodeMapping(barcode=code, target_type=target_type, target_id=target_id)
+                db.add(mapping)
+            mapping.target_type = target_type
+            mapping.target_id = target_id
+            mapping.target_name = target_name or target_id
+            mapping.quantity = 1.0
+            mapping.unit_id = None
+            mapping.recipe_scale = 1.0
+            mapping.mapped_by = "manual"
+            mapped += 1
+        elif target_type == "action":
+            if not target_id or not db.get(Action, target_id):
+                errors.append(f"Action not found for {code}")
+            elif code != f"ACTION:{target_id}":
+                errors.append(f"Action code must remain ACTION:{target_id}")
 
     db.commit()
-    return {"registered": registered, "mapped": mapped, "total": len(labels)}
+    return {
+        "registered": registered,
+        "mapped": mapped,
+        "total": len(labels),
+        "errors": errors,
+    }
