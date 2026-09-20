@@ -6,7 +6,7 @@ import time
 import httpx
 
 from app.config import settings
-from app.models import Activity, BarcodeMapping, Item
+from app.models import Activity, BarcodeMapping, BarcodeTarget, Item
 from app.services.mealie import get_labels, get_units
 from app.utils import utcnow
 
@@ -62,8 +62,14 @@ def _food_label(food: dict) -> tuple[str | None, str | None]:
     label = food.get("label")
     if isinstance(label, dict):
         return label.get("id"), label.get("name")
-    label_id = food.get("labelId")
-    return label_id, None
+    return food.get("labelId"), None
+
+
+def _food_unit(food: dict) -> tuple[str | None, str | None]:
+    unit = food.get("unit")
+    if isinstance(unit, dict):
+        return food.get("unitId") or unit.get("id"), unit.get("name") or unit.get("abbreviation")
+    return food.get("unitId"), None
 
 
 def sync_items_enhanced(db) -> int:
@@ -71,9 +77,7 @@ def sync_items_enhanced(db) -> int:
     try:
         resp = httpx.get(
             f"{settings.mealie_url}/api/foods",
-            headers=_headers(),
-            params={"perPage": -1},
-            timeout=30,
+            headers=_headers(), params={"perPage": -1}, timeout=30,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -96,6 +100,7 @@ def sync_items_enhanced(db) -> int:
         aliases_list = [a.get("name", a) if isinstance(a, dict) else a for a in aliases_raw]
         aliases_json = json.dumps(aliases_list)
         label_id, label_name = _food_label(food)
+        unit_id, unit_name = _food_unit(food)
 
         existing = db.get(Item, item_id)
         if existing:
@@ -104,26 +109,25 @@ def sync_items_enhanced(db) -> int:
                 (existing.aliases or "[]") != aliases_json,
                 existing.label_id != label_id,
                 existing.label_name != label_name,
+                existing.default_unit_id != unit_id,
+                existing.default_unit_name != unit_name,
             ])
             existing.name = name
             existing.aliases = aliases_json
             existing.label_id = label_id
             existing.label_name = label_name
+            existing.default_unit_id = unit_id
+            existing.default_unit_name = unit_name
             existing.source = "mealie"
             existing.synced_at = sync_started
             if changed:
                 existing.updated_at = sync_started
         else:
             db.add(Item(
-                id=item_id,
-                name=name,
-                source="mealie",
-                aliases=aliases_json,
-                label_id=label_id,
-                label_name=label_name,
-                created_at=sync_started,
-                updated_at=sync_started,
-                synced_at=sync_started,
+                id=item_id, name=name, source="mealie", aliases=aliases_json,
+                label_id=label_id, label_name=label_name,
+                default_unit_id=unit_id, default_unit_name=unit_name,
+                created_at=sync_started, updated_at=sync_started, synced_at=sync_started,
             ))
         count += 1
 
@@ -131,20 +135,26 @@ def sync_items_enhanced(db) -> int:
     stale_items = db.query(Item).filter(Item.source == "mealie", Item.synced_at < sync_started).all()
     for stale in stale_items:
         broken = db.query(BarcodeMapping).filter(
-            BarcodeMapping.target_type == "food",
-            BarcodeMapping.target_id == stale.id,
+            BarcodeMapping.target_type == "food", BarcodeMapping.target_id == stale.id,
         ).all()
-        for mapping in broken:
+        target_rows = db.query(BarcodeTarget).filter(
+            BarcodeTarget.target_type == "food", BarcodeTarget.target_id == stale.id,
+        ).all()
+        affected = {row.barcode for row in broken} | {row.barcode for row in target_rows}
+        for barcode in affected:
             db.add(Activity(
-                barcode=mapping.barcode,
+                barcode=barcode,
                 title="Mapping broken",
                 message=f"{stale.name} was deleted in Mealie — remap needed",
                 result="broken",
             ))
+        for mapping in broken:
             db.delete(mapping)
+        for target in target_rows:
+            db.delete(target)
         db.delete(stale)
-        if broken:
-            logger.warning("Stale item '%s' removed, %d mapping(s) broken", stale.name, len(broken))
+        if affected:
+            logger.warning("Stale item '%s' removed, %d barcode(s) affected", stale.name, len(affected))
 
     db.commit()
     clear_catalog_cache()
@@ -157,17 +167,16 @@ def refresh_open_shopping_items_for_food(food_id: str) -> int:
     try:
         resp = httpx.get(
             f"{settings.mealie_url}/api/households/shopping/items",
-            headers=_headers(),
-            params={"perPage": -1},
-            timeout=10,
+            headers=_headers(), params={"perPage": -1}, timeout=10,
         )
         resp.raise_for_status()
-        data = resp.json()
-        items = _items_from_response(data)
+        items = _items_from_response(resp.json())
     except (httpx.HTTPError, ValueError, AttributeError) as exc:
         logger.warning("Could not load shopping items while refreshing Food %s: %s", food_id, exc)
         return 0
 
+    from app.services.shopping import get_default_shopping_list_id
+    default_list_id = get_default_shopping_list_id()
     updated = 0
     for item in items:
         if not isinstance(item, dict) or item.get("checked"):
@@ -178,12 +187,11 @@ def refresh_open_shopping_items_for_food(food_id: str) -> int:
             item_food_id = item["food"].get("id")
         if str(item_food_id or "") != str(food_id):
             continue
-
         item_id = item.get("id")
         if not item_id:
             continue
         payload = {
-            "shoppingListId": shopping_list_id or settings.mealie_shopping_list_id,
+            "shoppingListId": shopping_list_id or default_list_id,
             "quantity": item.get("quantity") or 1,
             "checked": bool(item.get("checked", False)),
             "position": item.get("position", 0),
@@ -194,9 +202,7 @@ def refresh_open_shopping_items_for_food(food_id: str) -> int:
         try:
             put = httpx.put(
                 f"{settings.mealie_url}/api/households/shopping/items/{item_id}",
-                headers=_headers(),
-                json=payload,
-                timeout=10,
+                headers=_headers(), json=payload, timeout=10,
             )
             if put.status_code in (200, 201):
                 updated += 1
