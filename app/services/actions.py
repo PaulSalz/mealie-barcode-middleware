@@ -108,8 +108,13 @@ def execute_action(action_id: str, barcode: str | None = None, *, force: bool = 
                 .order_by(ActionExecution.created_at.desc())
                 .first()
             )
-            if latest and utcnow() < latest.created_at + timedelta(seconds=action.cooldown_seconds):
-                return _record(db, action, barcode, "ignored_cooldown")
+            if latest:
+                now = utcnow()
+                latest_at = latest.created_at
+                if latest_at.tzinfo is None:
+                    now = now.replace(tzinfo=None)
+                if now < latest_at + timedelta(seconds=action.cooldown_seconds):
+                    return _record(db, action, barcode, "ignored_cooldown")
 
         params = _json(action.parameters_json, {})
         context = {
