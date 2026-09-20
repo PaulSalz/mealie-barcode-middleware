@@ -1,0 +1,44 @@
+.b2m-option-card {
+    border-color: color-mix(in srgb, var(--tblr-primary) 25%, var(--tblr-border-color));
+    background: color-mix(in srgb, var(--tblr-primary) 3%, var(--tblr-bg-surface));
+}
+
+.b2m-option-card > .card-header {
+    background: color-mix(in srgb, var(--tblr-primary) 6%, transparent);
+}
+
+.decimal-stepper .btn {
+    border-width: 1px;
+    box-shadow: none;
+    padding-left: .55rem;
+    padding-right: .55rem;
+}
+
+#release-extra-targets .list-group-item,
+#release-dashboard-lists .border {
+    min-width: 0;
+}
+
+#release-target-results {
+    max-height: 15rem;
+    overflow-y: auto;
+}
+
+#release-target-results:empty {
+    display: none;
+}
+
+.b2m-unit-warning {
+    font-size: .875rem;
+}
+
+#release-primary-summary strong {
+    font-weight: 700;
+}
+
+@media (max-width: 767.98px) {
+    #release-extra-targets .card-header {
+        align-items: flex-start;
+        gap: .75rem;
+    }
+}
