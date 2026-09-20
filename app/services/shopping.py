@@ -54,9 +54,17 @@ def get_shopping_lists(force: bool = False) -> list[dict]:
             return list(_list_cache[1]) if _list_cache else []
 
 
+def _explicit_quantity(quantity: float | None) -> float | None:
+    """0.001 is the legacy DB-safe sentinel for 'no explicit quantity'."""
+    if quantity is None or quantity <= 0.001:
+        return None
+    return quantity
+
+
 def add_food_to_list(food_id: str, quantity: float | None, unit_id: str | None, list_id: str) -> bool:
     payload = {"shoppingListId": list_id, "foodId": food_id}
-    if quantity is not None and quantity > 0:
+    quantity = _explicit_quantity(quantity)
+    if quantity is not None:
         payload["quantity"] = quantity
     if unit_id:
         payload["unitId"] = unit_id
@@ -112,6 +120,7 @@ def route_item_scan(
     if route == "default":
         route = "mealie"
     list_id = item.shopping_list_id or settings.mealie_shopping_list_id
+    explicit_quantity = _explicit_quantity(quantity)
 
     mealie_required = route in {"mealie", "both"}
     ha_required = route in {"homeassistant", "both"}
@@ -120,7 +129,7 @@ def route_item_scan(
 
     if mealie_required:
         if item.source == "mealie":
-            mealie_ok = add_food_to_list(item.id, quantity, unit_id, list_id)
+            mealie_ok = add_food_to_list(item.id, explicit_quantity, unit_id, list_id)
         else:
             mealie_ok = add_note_to_list(item.name, list_id)
     else:
@@ -131,7 +140,7 @@ def route_item_scan(
             barcode=barcode,
             item_id=item.id,
             item_name=item.name,
-            quantity=quantity,
+            quantity=explicit_quantity,
             unit_id=unit_id,
             route=route,
         )
