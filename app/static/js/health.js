@@ -7,6 +7,8 @@
     var scannerOnline = document.getElementById('stat-scanner-online');
     var scannerTotal = document.getElementById('stat-scanner-total');
     var listRoot = document.getElementById('shopping-lists-status');
+    var mealieButton = document.querySelector('.page-header a.btn-primary[target="_blank"]');
+    var mealieUrl = mealieButton ? mealieButton.href.replace(/\/$/, '') : '';
     if (!indicator || !statusEl) return;
     var timer = null;
 
@@ -23,7 +25,8 @@
             return;
         }
         listRoot.innerHTML = rows.map(function(row) {
-            return '<div class="col-sm-6 col-lg-3" data-shopping-list-id="' + esc(row.id) + '"><div class="border rounded p-3 h-100"><div class="d-flex align-items-center"><span class="avatar bg-blue-lt text-blue me-3"><i class="ti ti-list-check"></i></span><div class="min-w-0"><div class="fw-medium text-truncate">' + esc(row.name) + (row.default ? ' <span class="badge bg-blue-lt">default</span>' : '') + '</div><div class="h2 mb-0"><span class="shopping-list-count">' + Number(row.count || 0) + '</span> <span class="fs-5 fw-normal text-secondary">items</span></div></div></div></div></div>';
+            var href = mealieUrl ? mealieUrl + '/shopping-lists/' + encodeURIComponent(row.id) : '#';
+            return '<div class="col-sm-6 col-lg-3" data-shopping-list-id="' + esc(row.id) + '"><a href="' + esc(href) + '" target="_blank" rel="noopener" class="border rounded p-3 h-100 d-block text-reset text-decoration-none b2m-shopping-list-link"><div class="d-flex align-items-center"><span class="avatar bg-blue-lt text-blue me-3"><i class="ti ti-list-check"></i></span><div class="min-w-0 flex-fill"><div class="fw-medium text-truncate">' + esc(row.name) + (row.default ? ' <span class="badge bg-blue-lt">default</span>' : '') + '</div><div class="h2 mb-0"><span class="shopping-list-count">' + Number(row.count || 0) + '</span> <span class="fs-5 fw-normal text-secondary">items</span></div></div><i class="ti ti-external-link text-secondary ms-2"></i></div></a></div>';
         }).join('');
     }
 
