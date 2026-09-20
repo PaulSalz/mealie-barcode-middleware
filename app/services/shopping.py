@@ -54,8 +54,10 @@ def get_shopping_lists(force: bool = False) -> list[dict]:
             return list(_list_cache[1]) if _list_cache else []
 
 
-def add_food_to_list(food_id: str, quantity: float, unit_id: str | None, list_id: str) -> bool:
-    payload = {"shoppingListId": list_id, "foodId": food_id, "quantity": quantity or 1.0}
+def add_food_to_list(food_id: str, quantity: float | None, unit_id: str | None, list_id: str) -> bool:
+    payload = {"shoppingListId": list_id, "foodId": food_id}
+    if quantity is not None and quantity > 0:
+        payload["quantity"] = quantity
     if unit_id:
         payload["unitId"] = unit_id
     try:
@@ -103,7 +105,7 @@ def route_item_scan(
     item: Item,
     *,
     barcode: str,
-    quantity: float,
+    quantity: float | None,
     unit_id: str | None,
 ) -> dict:
     route = (item.shopping_route or "default").lower()
