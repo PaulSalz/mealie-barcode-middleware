@@ -1,10 +1,21 @@
 (function() {
     'use strict';
 
+    var EMPTY_SENTINEL = 0.001;
+
+    function allowEmpty(input) {
+        return input.dataset.allowEmpty === 'true';
+    }
+
+    function rawValue(input) {
+        return String(input.value || '').trim().replace(',', '.');
+    }
+
     function parseValue(input) {
-        var value = String(input.value || '').trim().replace(',', '.');
+        var value = rawValue(input);
+        if (!value) return null;
         var number = Number.parseFloat(value);
-        return Number.isFinite(number) ? number : 0;
+        return Number.isFinite(number) ? number : null;
     }
 
     function formatValue(value) {
@@ -12,28 +23,60 @@
         return String(rounded);
     }
 
+    function dispatch(input) {
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     function setValue(input, value) {
+        if (allowEmpty(input) && (value == null || value <= 0)) {
+            input.value = '';
+            dispatch(input);
+            return;
+        }
         var min = Number.parseFloat(input.dataset.min || '0.001');
         if (!Number.isFinite(min)) min = 0.001;
-        input.value = formatValue(Math.max(value, min));
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+        var normalized = Number.isFinite(value) ? Math.max(value, min) : min;
+        input.value = formatValue(normalized);
+        dispatch(input);
     }
 
     function normalizeInput(input) {
-        var raw = String(input.value || '').trim();
-        if (!raw) return;
-        var value = Number.parseFloat(raw.replace(',', '.'));
+        var raw = rawValue(input);
+        if (!raw) {
+            if (allowEmpty(input)) input.value = '';
+            return;
+        }
+        var value = Number.parseFloat(raw);
         if (!Number.isFinite(value)) return;
+        if (allowEmpty(input) && value <= EMPTY_SENTINEL) {
+            input.value = '';
+            return;
+        }
         setValue(input, value);
     }
 
     function step(input, delta) {
-        setValue(input, parseValue(input) + delta);
+        var current = parseValue(input);
+        if (allowEmpty(input)) {
+            if (current == null) {
+                if (delta > 0) setValue(input, 1);
+                return;
+            }
+            setValue(input, current + delta);
+            return;
+        }
+        setValue(input, (current == null ? 0 : current) + delta);
     }
 
     document.querySelectorAll('.decimal-stepper').forEach(function(container) {
         var input = container.querySelector('.decimal-number');
         if (!input) return;
+        // Food quantities are optional. Recipe scale and other numeric steppers remain positive.
+        if ((input.name === 'quantity' || input.id === 'food-default-quantity') && !input.dataset.allowEmpty) {
+            input.dataset.allowEmpty = 'true';
+        }
+        normalizeInput(input);
 
         container.querySelectorAll('[data-decimal-step]').forEach(function(button) {
             button.addEventListener('click', function() {
@@ -64,5 +107,11 @@
             input.setRangeText(normalized, input.selectionStart || 0, input.selectionEnd || 0, 'end');
             setTimeout(function() { normalizeInput(input); }, 0);
         });
+
+        if (allowEmpty(input) && input.form) {
+            input.form.addEventListener('submit', function() {
+                if (!rawValue(input)) input.value = String(EMPTY_SENTINEL);
+            });
+        }
     });
 })();

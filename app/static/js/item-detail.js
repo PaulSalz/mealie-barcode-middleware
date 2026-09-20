@@ -42,6 +42,24 @@
     bindPreviews();
   }
 
+  function cardByTitle(root, title) {
+    const heading = Array.from(root.querySelectorAll('h3.card-title')).find((el) => el.textContent.trim().toLowerCase() === title.toLowerCase());
+    return heading ? heading.closest('.card') : null;
+  }
+
+  async function refreshRecentHistory() {
+    try {
+      const response = await fetch(window.location.pathname + '?live=1', {headers: {'Accept': 'text/html'}});
+      if (!response.ok) return;
+      const fresh = new DOMParser().parseFromString(await response.text(), 'text/html');
+      const currentCard = cardByTitle(document, 'Recent scans');
+      const freshCard = cardByTitle(fresh, 'Recent scans');
+      if (currentCard && freshCard) currentCard.replaceWith(freshCard);
+    } catch (e) {
+      console.debug('Item recent history refresh failed', e);
+    }
+  }
+
   async function refreshStats() {
     try {
       const response = await fetch('/api/items/' + encodeURIComponent(itemId) + '/stats', {headers: {'Accept': 'application/json'}});
@@ -54,6 +72,7 @@
       last.textContent = data.last_scan;
       last.title = data.last_scan_absolute || '';
       renderBarcodes(data.by_barcode || []);
+      await refreshRecentHistory();
     } catch (e) {
       console.debug('Item stats refresh failed', e);
     }
@@ -80,5 +99,6 @@
   if (window.EventSource) {
     const events = new EventSource('/events');
     events.addEventListener('scan', scheduleRefresh);
+    window.addEventListener('beforeunload', () => events.close());
   }
 })();

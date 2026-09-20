@@ -87,17 +87,16 @@ def labels_page(request: Request, db: Session = Depends(get_db)):
 
 
 def _qr_svg(value: str) -> bytes:
+    """Render a QR SVG with intrinsic dimensions intact.
+
+    Keeping Segno's native width/height is important when the SVG is loaded through
+    an <img>: replacing them with only a viewBox can leave the image without a usable
+    intrinsic size in some browser/flex layouts.
+    """
     qr = segno.make(value, error="m")
     buf = io.BytesIO()
-    qr.save(buf, kind="svg", scale=1, border=2, xmldecl=False)
-    svg = buf.getvalue().decode()
-    svg = re.sub(
-        r'width="(\d+)" height="(\d+)"',
-        lambda m: f'viewBox="0 0 {m.group(1)} {m.group(2)}"',
-        svg,
-        count=1,
-    )
-    return svg.encode()
+    qr.save(buf, kind="svg", scale=4, border=2, xmldecl=False)
+    return buf.getvalue()
 
 
 def _linear_svg(kind: str, value: str) -> bytes:

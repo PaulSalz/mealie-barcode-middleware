@@ -5,6 +5,7 @@
 (function () {
     'use strict';
 
+    var EMPTY_SENTINEL = '0.001';
     var searchInput = document.getElementById('item-search');
     var tbody = document.getElementById('item-assign-tbody');
     var table = document.getElementById('item-assign-table');
@@ -20,7 +21,10 @@
     function setDefaults(form) {
         var quantity = form.querySelector('input[name="quantity"]');
         var unit = form.querySelector('input[name="unit_id"]');
-        if (quantity && quantityInput) quantity.value = quantityInput.value || '1';
+        if (quantity && quantityInput) {
+            var rawQuantity = String(quantityInput.value || '').trim();
+            quantity.value = rawQuantity === '' ? EMPTY_SENTINEL : rawQuantity;
+        }
         if (unit && unitSelect) unit.value = unitSelect.value || '';
     }
 
