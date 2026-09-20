@@ -328,3 +328,31 @@
 .b2m-stat-card .avatar {
     flex: 0 0 auto;
 }
+
+/* Barcode/action compact statistic cards get stronger hierarchy without changing markup. */
+.card.card-sm .card-body:has(> .font-weight-medium) {
+    position: relative;
+    overflow: hidden;
+    padding-left: 1.25rem;
+    min-height: 4.75rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.card.card-sm .card-body:has(> .font-weight-medium)::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--tblr-primary);
+}
+.card.card-sm .card-body > .font-weight-medium:first-child {
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+.card.card-sm:hover {
+    transform: translateY(-1px);
+    transition: transform .12s ease, box-shadow .12s ease;
+    box-shadow: var(--tblr-box-shadow-card);
+}
