@@ -1,6 +1,13 @@
 (function() {
     'use strict';
 
+    function exposeLabelsNav() {
+        document.querySelectorAll('a.nav-link[href="/labels"]').forEach(function(link) {
+            var item = link.closest('.nav-item');
+            if (item) item.classList.remove('d-md-none');
+        });
+    }
+
     function addHaWebhookTestButton() {
         var input = document.getElementById('setting_ha_webhook_url');
         if (!input || document.getElementById('ha-webhook-test')) return;
@@ -47,6 +54,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        exposeLabelsNav();
         addHaWebhookTestButton();
     });
 })();
