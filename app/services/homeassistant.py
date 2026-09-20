@@ -18,11 +18,11 @@ def should_send_scan_webhook(result: str, needs_action: bool = False) -> bool:
     if mode == "actionable":
         return needs_action or result in {
             "unknown", "unknown_action", "needs_mapping", "added_as_note", "error",
-            "action_disabled", "auto_mapped",
+            "action_disabled", "auto_mapped", "partial",
         }
     return result in {
         "unknown", "unknown_action", "needs_mapping", "added_as_note", "error",
-        "action_disabled", "retry_failed", "broken",
+        "action_disabled", "retry_failed", "broken", "partial",
     }
 
 
@@ -64,37 +64,41 @@ def notify_shopping_route(
     barcode: str,
     item_id: str | None,
     item_name: str,
-    quantity: float = 1.0,
+    quantity: float | None = 1.0,
     unit_id: str | None = None,
     route: str = "homeassistant",
+    url_override: str | None = None,
+    target_type: str = "food",
+    shopping_list_id: str | None = None,
 ) -> bool:
-    """Send a shopping-routing event to HA regardless of notification mode.
+    """Send one independently-routed target event.
 
-    Reuses HA_WEBHOOK_URL so existing installations do not need another secret.
-    The automation can distinguish this from notification traffic via
-    result_type=shopping_route.
+    ``url_override`` lets an individual barcode target use a separate endpoint;
+    when omitted the existing global Home Assistant webhook remains the default.
     """
-    url = settings.ha_webhook_url
+    url = (url_override or settings.ha_webhook_url or "").strip()
     if not url:
         return False
     payload = {
         "action": "shopping_route",
         "result_type": "shopping_route",
         "barcode": barcode,
+        "target_type": target_type,
         "item_id": item_id,
         "item": item_name,
         "quantity": quantity,
         "unit_id": unit_id,
         "route": route,
+        "shopping_list_id": shopping_list_id,
     }
     try:
-        resp = httpx.post(url, json=payload, timeout=3)
+        resp = httpx.post(url, json=payload, timeout=5)
         if resp.status_code >= 400:
-            logger.warning("HA shopping route returned %d: %s", resp.status_code, resp.text[:200])
+            logger.warning("Shopping-route webhook returned %d: %s", resp.status_code, resp.text[:200])
             return False
         return True
     except Exception:
-        logger.warning("HA shopping route failed for barcode %s", barcode, exc_info=True)
+        logger.warning("Shopping-route webhook failed for barcode %s", barcode, exc_info=True)
         return False
 
 
