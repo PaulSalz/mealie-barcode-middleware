@@ -1,5 +1,5 @@
 /**
- * Search Mealie Foods on a barcode detail page.
+ * Ranked Food search on a barcode detail page.
  * Quantity/unit are copied into whichever Food link form is submitted.
  */
 (function () {
@@ -18,6 +18,12 @@
     var barcode = table.dataset.barcode;
     var originalRows = tbody.innerHTML;
 
+    function esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
     function setDefaults(form) {
         var quantity = form.querySelector('input[name="quantity"]');
         var unit = form.querySelector('input[name="unit_id"]');
@@ -34,83 +40,40 @@
     });
 
     function buildRow(item) {
-        var tr = document.createElement('tr');
-
-        var tdName = document.createElement('td');
-        var a = document.createElement('a');
-        a.href = '/items/' + encodeURIComponent(item.id);
-        a.textContent = item.name;
-        tdName.appendChild(a);
-
-        var tdScore = document.createElement('td');
-        tdScore.innerHTML = '<span class="text-secondary">—</span>';
-
-        var tdAction = document.createElement('td');
-        var form = document.createElement('form');
-        form.method = 'post';
-        form.action = '/barcodes/' + encodeURIComponent(barcode) + '/map';
-        form.className = 'food-link-form';
-
-        var idInput = document.createElement('input');
-        idInput.type = 'hidden';
-        idInput.name = 'item_id';
-        idInput.value = item.id;
-
-        var qtyInput = document.createElement('input');
-        qtyInput.type = 'hidden';
-        qtyInput.name = 'quantity';
-        qtyInput.value = '1';
-
-        var unitInput = document.createElement('input');
-        unitInput.type = 'hidden';
-        unitInput.name = 'unit_id';
-        unitInput.value = '';
-
-        var button = document.createElement('button');
-        button.type = 'submit';
-        button.className = 'btn btn-sm btn-primary';
-        button.innerHTML = '<i class="ti ti-link icon"></i> Link';
-
-        form.appendChild(idInput);
-        form.appendChild(qtyInput);
-        form.appendChild(unitInput);
-        form.appendChild(button);
-        tdAction.appendChild(form);
-
-        tr.appendChild(tdName);
-        tr.appendChild(tdScore);
-        tr.appendChild(tdAction);
-        return tr;
+        var scoreClass = item.exact ? 'green' : item.score >= 85 ? 'green' : item.score >= 60 ? 'yellow' : 'secondary';
+        var matchText = item.exact ? 'Exact' : item.score + '%';
+        return '<tr>' +
+            '<td><a href="/items/' + encodeURIComponent(item.id) + '">' + esc(item.name) + '</a></td>' +
+            '<td><span class="badge bg-' + scoreClass + '-lt">' + matchText + '</span></td>' +
+            '<td><form method="post" action="/barcodes/' + encodeURIComponent(barcode) + '/map" class="food-link-form">' +
+            '<input type="hidden" name="item_id" value="' + esc(item.id) + '">' +
+            '<input type="hidden" name="quantity" value="1"><input type="hidden" name="unit_id" value="">' +
+            '<button type="submit" class="btn btn-sm btn-primary"><i class="ti ti-link icon"></i> Link</button></form></td>' +
+            '</tr>';
     }
 
     searchInput.addEventListener('input', function () {
         clearTimeout(timeout);
         var q = this.value.trim();
-
         if (q.length < 2) {
             tbody.innerHTML = originalRows;
             return;
         }
-
         timeout = setTimeout(function () {
-            fetch('/barcodes-search?q=' + encodeURIComponent(q))
+            fetch('/api/foods/search?q=' + encodeURIComponent(q) + '&limit=6')
                 .then(function (response) {
                     if (!response.ok) throw new Error('Food search failed');
                     return response.json();
                 })
                 .then(function (data) {
-                    tbody.innerHTML = '';
-                    if (!data.length) {
-                        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-secondary">No matching Mealie Foods</td></tr>';
-                        return;
-                    }
-                    data.forEach(function (item) {
-                        tbody.appendChild(buildRow(item));
-                    });
+                    var items = data.items || [];
+                    tbody.innerHTML = items.length
+                        ? items.map(buildRow).join('')
+                        : '<tr><td colspan="3" class="text-center text-secondary">No matching Mealie Foods</td></tr>';
                 })
                 .catch(function () {
                     tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Food search failed</td></tr>';
                 });
-        }, 250);
+        }, 180);
     });
 })();
