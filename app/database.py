@@ -45,6 +45,15 @@ def _migrate():
     if "api_tokens" in tables:
         columns = {c["name"] for c in insp.get_columns("api_tokens")}
         _add_column_if_missing("api_tokens", "token_prefix", "VARCHAR(8)", columns)
+        _add_column_if_missing("api_tokens", "scanner_version", "VARCHAR", columns)
+        _add_column_if_missing("api_tokens", "scanner_hostname", "VARCHAR", columns)
+        _add_column_if_missing("api_tokens", "scanner_device", "VARCHAR", columns)
+        _add_column_if_missing("api_tokens", "scanner_layout", "VARCHAR", columns)
+        _add_column_if_missing("api_tokens", "scanner_last_seen_at", "DATETIME", columns)
+        _add_column_if_missing("api_tokens", "scanner_uptime_seconds", "INTEGER", columns)
+        _add_column_if_missing("api_tokens", "scanner_total_scans", "INTEGER", columns)
+        _add_column_if_missing("api_tokens", "scanner_errors", "INTEGER", columns)
+        _add_column_if_missing("api_tokens", "scanner_last_latency_ms", "INTEGER", columns)
 
     if "notifications" in tables and "activities" not in tables:
         with engine.begin() as conn:
@@ -80,6 +89,10 @@ def _migrate():
         columns = {c["name"] for c in insp.get_columns("items")}
         _add_column_if_missing("items", "label_id", "VARCHAR", columns)
         _add_column_if_missing("items", "label_name", "VARCHAR", columns)
+        _add_column_if_missing("items", "shopping_route", "VARCHAR DEFAULT 'default'", columns)
+        _add_column_if_missing("items", "shopping_list_id", "VARCHAR", columns)
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE items SET shopping_route = 'default' WHERE shopping_route IS NULL OR shopping_route = ''"))
         if "updated_at" not in columns:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE items ADD COLUMN updated_at DATETIME"))
@@ -91,3 +104,5 @@ def _migrate():
         if "target_id" not in columns:
             with engine.begin() as conn:
                 conn.execute(text("DROP TABLE barcode_mappings"))
+        else:
+            _add_column_if_missing("barcode_mappings", "shopping_list_id", "VARCHAR", columns)

@@ -153,7 +153,7 @@ def sync_items_enhanced(db) -> int:
 
 
 def refresh_open_shopping_items_for_food(food_id: str) -> int:
-    """Touch open shopping-list entries for *food_id* so Mealie rehydrates changed Food metadata."""
+    """Touch every open shopping-list entry for *food_id* so Mealie rehydrates changed Food metadata."""
     try:
         resp = httpx.get(
             f"{settings.mealie_url}/api/households/shopping/items",
@@ -173,8 +173,6 @@ def refresh_open_shopping_items_for_food(food_id: str) -> int:
         if not isinstance(item, dict) or item.get("checked"):
             continue
         shopping_list_id = item.get("shoppingListId")
-        if shopping_list_id and str(shopping_list_id) != str(settings.mealie_shopping_list_id):
-            continue
         item_food_id = item.get("foodId")
         if not item_food_id and isinstance(item.get("food"), dict):
             item_food_id = item["food"].get("id")

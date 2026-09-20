@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import ApiToken
+from app.utils import utcnow
 
 
 def hash_token(raw_token: str) -> str:
@@ -20,6 +21,32 @@ def generate_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _header_int(request: Request, name: str) -> int | None:
+    value = request.headers.get(name)
+    if value is None:
+        return None
+    try:
+        return max(0, int(float(value)))
+    except ValueError:
+        return None
+
+
+def _update_scanner_telemetry(request: Request, token: ApiToken, db: Session) -> None:
+    version = request.headers.get("X-B2M-Scanner-Version")
+    if not version:
+        return
+    token.scanner_version = version[:64]
+    token.scanner_hostname = (request.headers.get("X-B2M-Scanner-Hostname") or "")[:128] or None
+    token.scanner_device = (request.headers.get("X-B2M-Scanner-Device") or "")[:255] or None
+    token.scanner_layout = (request.headers.get("X-B2M-Scanner-Layout") or "")[:16] or None
+    token.scanner_uptime_seconds = _header_int(request, "X-B2M-Scanner-Uptime")
+    token.scanner_total_scans = _header_int(request, "X-B2M-Scanner-Scans")
+    token.scanner_errors = _header_int(request, "X-B2M-Scanner-Errors")
+    token.scanner_last_latency_ms = _header_int(request, "X-B2M-Scanner-Last-Latency")
+    token.scanner_last_seen_at = utcnow()
+    db.commit()
+
+
 def require_token(request: Request, db: Session = Depends(get_db)) -> ApiToken:
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -28,15 +55,12 @@ def require_token(request: Request, db: Session = Depends(get_db)) -> ApiToken:
             detail="Missing or invalid Authorization header",
         )
     raw_token = auth_header.removeprefix("Bearer ").strip()
-    return _authenticate_raw_token(raw_token, db)
+    token = _authenticate_raw_token(raw_token, db)
+    _update_scanner_telemetry(request, token, db)
+    return token
 
 
 def verify_psk(device_id: str, db: Session) -> ApiToken:
-    """Authenticate using a pre-shared key (e.g. BinaryEye's deviceId field).
-
-    Same token verification as Bearer auth, but the raw token comes from
-    the request body instead of the Authorization header.
-    """
     if not device_id or not device_id.strip():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -46,23 +70,18 @@ def verify_psk(device_id: str, db: Session) -> ApiToken:
 
 
 def _authenticate_raw_token(raw_token: str, db: Session) -> ApiToken:
-    """Core token verification logic shared by Bearer and PSK auth."""
     prefix = raw_token[:8]
-
-    # Fast path: query by prefix (covers tokens created with prefix column)
     candidates = db.query(ApiToken).filter(ApiToken.token_prefix == prefix).all()
-    for t in candidates:
-        if verify_token(raw_token, t.token_hash):
-            return t
+    for token in candidates:
+        if verify_token(raw_token, token.token_hash):
+            return token
 
-    # Fallback: check tokens without prefix (legacy, pre-migration)
     legacy = db.query(ApiToken).filter(ApiToken.token_prefix.is_(None)).all()
-    for t in legacy:
-        if verify_token(raw_token, t.token_hash):
-            # Backfill prefix for future lookups
-            t.token_prefix = prefix
+    for token in legacy:
+        if verify_token(raw_token, token.token_hash):
+            token.token_prefix = prefix
             db.commit()
-            return t
+            return token
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

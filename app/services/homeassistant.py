@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 
 def should_send_scan_webhook(result: str, needs_action: bool = False) -> bool:
-    """Return whether the current HA notification mode allows this scan event."""
     mode = settings.ha_notification_mode
     if mode == "off":
         return False
@@ -21,7 +20,6 @@ def should_send_scan_webhook(result: str, needs_action: bool = False) -> bool:
             "unknown", "unknown_action", "needs_mapping", "added_as_note", "error",
             "action_disabled", "auto_mapped",
         }
-    # Default: unresolved/unlinked/failed only. Successful action scans remain quiet.
     return result in {
         "unknown", "unknown_action", "needs_mapping", "added_as_note", "error",
         "action_disabled", "retry_failed", "broken",
@@ -36,7 +34,6 @@ def notify_scan(
     added_to_list: bool = True,
     paused: bool = False,
 ) -> None:
-    """POST scan data to the HA webhook. Fire-and-forget, never raises."""
     url = settings.ha_webhook_url
     if not url:
         return
@@ -62,8 +59,46 @@ def notify_scan(
         logger.warning("HA webhook failed for barcode %s", barcode, exc_info=True)
 
 
+def notify_shopping_route(
+    *,
+    barcode: str,
+    item_id: str | None,
+    item_name: str,
+    quantity: float = 1.0,
+    unit_id: str | None = None,
+    route: str = "homeassistant",
+) -> bool:
+    """Send a shopping-routing event to HA regardless of notification mode.
+
+    Reuses HA_WEBHOOK_URL so existing installations do not need another secret.
+    The automation can distinguish this from notification traffic via
+    result_type=shopping_route.
+    """
+    url = settings.ha_webhook_url
+    if not url:
+        return False
+    payload = {
+        "action": "shopping_route",
+        "result_type": "shopping_route",
+        "barcode": barcode,
+        "item_id": item_id,
+        "item": item_name,
+        "quantity": quantity,
+        "unit_id": unit_id,
+        "route": route,
+    }
+    try:
+        resp = httpx.post(url, json=payload, timeout=3)
+        if resp.status_code >= 400:
+            logger.warning("HA shopping route returned %d: %s", resp.status_code, resp.text[:200])
+            return False
+        return True
+    except Exception:
+        logger.warning("HA shopping route failed for barcode %s", barcode, exc_info=True)
+        return False
+
+
 def _last_actionable_result(barcode: str) -> str | None:
-    """Resolve the last bell-notification type even if viewing the page marked it read."""
     try:
         from app.database import SessionLocal
         from app.models import Activity
@@ -85,7 +120,6 @@ def _last_actionable_result(barcode: str) -> str | None:
 
 
 def _mark_actionable_dismissed(barcode: str) -> None:
-    """Prevent repeated clear webhooks for a notification that was already resolved."""
     try:
         from app.database import SessionLocal
         from app.models import Activity
@@ -104,7 +138,6 @@ def _mark_actionable_dismissed(barcode: str) -> None:
 
 
 def dismiss_notification(barcode: str, result: str | None = None) -> None:
-    """Tell HA to clear a phone notification only if this event type could have created one."""
     url = settings.ha_webhook_url
     if not url or settings.ha_notification_mode == "off":
         return

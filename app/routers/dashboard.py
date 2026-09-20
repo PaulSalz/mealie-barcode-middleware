@@ -1,16 +1,19 @@
 import asyncio
 from collections import Counter
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from starlette.responses import StreamingResponse
 
+from app.config import settings
 from app.database import get_db
 from app.events import scan_events
 from app.models import Activity, ApiToken, BarcodeCache, BarcodeMapping, Item, RetryQueue
 from app.services.mealie import check_connectivity
-from app.templating import _localtime, templates
+from app.templating import _localtime, _relative_time, templates
+from app.utils import utcnow
 
 router = APIRouter()
 
@@ -128,16 +131,26 @@ def _summary_counts(db: Session) -> tuple[int, int, int, int, int]:
     return total_barcodes, mapped_count, pending_count, queue_depth, unknown_count
 
 
+def _scanner_summary(db: Session) -> tuple[int, int]:
+    tokens = db.query(ApiToken).filter(ApiToken.scanner_version.isnot(None)).all()
+    cutoff = utcnow().replace(tzinfo=None) - timedelta(minutes=3)
+    online = sum(1 for token in tokens if token.scanner_last_seen_at and token.scanner_last_seen_at >= cutoff)
+    return online, len(tokens)
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)):
     total_barcodes, mapped_count, pending_count, queue_depth, unknown_count = _summary_counts(db)
     recent_items = _recent_scans(db, 25)
     frequent_foods, frequent_recipes, frequent_actions = _frequent_targets(db)
     mealie_reachable = check_connectivity()
+    scanner_online, scanner_total = _scanner_summary(db)
 
     last_sync = db.query(Item.synced_at).filter(Item.source == "mealie").order_by(Item.synced_at.desc()).first()
     last_sync_time = last_sync[0] if last_sync else None
     has_tokens = db.query(ApiToken).first() is not None
+    mealie_url = settings.mealie_url.rstrip("/")
+    shopping_list_url = f"{mealie_url}/shopping-lists/{settings.mealie_shopping_list_id}"
 
     return templates.TemplateResponse(request, "dashboard.html", {
         "total_barcodes": total_barcodes,
@@ -152,6 +165,10 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         "mealie_reachable": mealie_reachable,
         "last_sync_time": last_sync_time,
         "has_tokens": has_tokens,
+        "mealie_url": mealie_url,
+        "shopping_list_url": shopping_list_url,
+        "scanner_online": scanner_online,
+        "scanner_total": scanner_total,
     })
 
 
@@ -159,12 +176,15 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 def dashboard_api(db: Session = Depends(get_db)):
     total_barcodes, mapped_count, pending_count, queue_depth, unknown_count = _summary_counts(db)
     recent_items = _recent_scans(db, 25)
+    scanner_online, scanner_total = _scanner_summary(db)
     return {
         "total_barcodes": total_barcodes,
         "mapped_count": mapped_count,
         "pending_count": pending_count,
         "queue_depth": queue_depth,
         "unknown_count": unknown_count,
+        "scanner_online": scanner_online,
+        "scanner_total": scanner_total,
         "recent_items": [
             {
                 "barcode": row["barcode"],
@@ -177,7 +197,8 @@ def dashboard_api(db: Session = Depends(get_db)):
                 "source": row["source"] or "—",
                 "status": row["status"],
                 "result": row["result"],
-                "created_at": _localtime(row["created_at"]),
+                "created_at": _relative_time(row["created_at"]),
+                "created_at_absolute": _localtime(row["created_at"]),
             }
             for row in recent_items
         ],

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 # Paths exempt from CSRF check (token-authenticated API)
-_CSRF_EXEMPT_PREFIXES = ("/scan", "/scan/app")
+_CSRF_EXEMPT_PREFIXES = ("/scan", "/scan/app", "/scanner/heartbeat")
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -54,7 +54,7 @@ class CSRFOriginMiddleware(BaseHTTPMiddleware):
     the Origin or Referer header matches the request's host. Rejects
     cross-origin form submissions from attacker sites.
 
-    Exempt: token-authenticated endpoints (/scan).
+    Exempt: token-authenticated endpoints (/scan and scanner heartbeat).
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -172,6 +172,7 @@ _AUTH_EXEMPT_PREFIXES = (
     "/setup",
     "/static",
     "/scan",
+    "/scanner/heartbeat",
     "/health",
     "/api/docs",
     "/api/redoc",
@@ -211,7 +212,8 @@ def get_session_secret() -> str:
 class LoginRequiredMiddleware(BaseHTTPMiddleware):
     """Redirect unauthenticated users to /login for UI routes.
 
-    Exempt: scanner API (/scan), static files, health check, login/setup pages.
+    Exempt: scanner API (/scan), scanner heartbeat, static files, health check,
+    login/setup pages.
 
     On every authenticated request, re-validates the user from the database
     to detect deleted accounts and privilege changes (admin demotion).

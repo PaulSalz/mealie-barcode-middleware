@@ -4,10 +4,11 @@ from collections import Counter
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models import Activity, BarcodeCache, BarcodeMapping, Item
 from app.services.mealie import get_food, update_food
@@ -17,7 +18,8 @@ from app.services.mealie_extras import (
     refresh_open_shopping_items_for_food,
     sync_items_enhanced,
 )
-from app.templating import templates
+from app.services.shopping import get_shopping_lists
+from app.templating import _localtime, _relative_time, templates
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -36,7 +38,12 @@ def _item_scan_stats(db: Session, item_id: str) -> dict:
         .all()
     )
     now = utcnow().replace(tzinfo=None)
-    by_barcode = Counter(row.barcode for row in scans)
+    by_barcode = Counter()
+    last_by_barcode = {}
+    for row in scans:
+        by_barcode[row.barcode] += 1
+        if row.barcode not in last_by_barcode:
+            last_by_barcode[row.barcode] = row.created_at
     return {
         "total": len(scans),
         "days_7": sum(1 for row in scans if row.created_at and row.created_at >= now - timedelta(days=7)),
@@ -44,8 +51,38 @@ def _item_scan_stats(db: Session, item_id: str) -> dict:
         "last_scan": scans[0].created_at if scans else None,
         "first_scan": scans[-1].created_at if scans else None,
         "recent": scans[:25],
-        "by_barcode": by_barcode.most_common(),
+        "by_barcode": [
+            {"barcode": barcode, "count": count, "last_scan": last_by_barcode.get(barcode)}
+            for barcode, count in by_barcode.most_common()
+        ],
     }
+
+
+def _stats_json(stats: dict) -> dict:
+    return {
+        "total": stats["total"],
+        "days_7": stats["days_7"],
+        "days_30": stats["days_30"],
+        "last_scan": _relative_time(stats["last_scan"]),
+        "last_scan_absolute": _localtime(stats["last_scan"]),
+        "first_scan": _relative_time(stats["first_scan"]),
+        "by_barcode": [
+            {
+                "barcode": row["barcode"],
+                "count": row["count"],
+                "last_scan": _relative_time(row["last_scan"]),
+                "last_scan_absolute": _localtime(row["last_scan"]),
+            }
+            for row in stats["by_barcode"]
+        ],
+    }
+
+
+@router.get("/api/items/{item_id}/stats")
+def item_stats_api(item_id: str, db: Session = Depends(get_db)):
+    if not db.get(Item, item_id):
+        return JSONResponse({"error": "Item not found"}, status_code=404)
+    return _stats_json(_item_scan_stats(db, item_id))
 
 
 @router.get("/items", response_class=HTMLResponse)
@@ -135,28 +172,16 @@ def items_list(
 def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
     item = db.get(Item, item_id)
     if not item:
-        return templates.TemplateResponse(
-            request,
-            "404.html",
-            {"message": "Item not found"},
-            status_code=404,
-        )
+        return templates.TemplateResponse(request, "404.html", {"message": "Item not found"}, status_code=404)
 
     mappings = db.query(BarcodeMapping).filter(
         BarcodeMapping.target_type == "food",
         BarcodeMapping.target_id == item_id,
     ).all()
     barcode_ids = [m.barcode for m in mappings]
-    barcodes = (
-        db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(barcode_ids)).all()
-        if barcode_ids
-        else []
-    )
+    barcodes = db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(barcode_ids)).all() if barcode_ids else []
     barcode_map = {bc.barcode: bc for bc in barcodes}
-    mapped_items = [
-        {"mapping": mapping, "barcode": barcode_map.get(mapping.barcode)}
-        for mapping in mappings
-    ]
+    mapped_items = [{"mapping": mapping, "barcode": barcode_map.get(mapping.barcode)} for mapping in mappings]
 
     mealie_food = get_food(item_id) if item.source == "mealie" else None
     labels = cached_labels() if item.source == "mealie" else []
@@ -173,9 +198,32 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
         "labels": labels,
         "current_label_id": current_label_id,
         "stats": _item_scan_stats(db, item_id),
+        "shopping_lists": get_shopping_lists(),
+        "default_shopping_list_id": settings.mealie_shopping_list_id,
         "saved": request.query_params.get("saved") == "1",
+        "routing_saved": request.query_params.get("routing_saved") == "1",
         "edit_error": request.query_params.get("edit_error") == "1",
     })
+
+
+@router.post("/items/{item_id}/routing")
+def save_item_routing(
+    item_id: str,
+    shopping_route: str = Form("default"),
+    shopping_list_id: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    item = db.get(Item, item_id)
+    if not item:
+        return RedirectResponse("/items", status_code=303)
+    route = shopping_route.strip().lower()
+    if route not in {"default", "mealie", "homeassistant", "both", "none"}:
+        route = "default"
+    item.shopping_route = route
+    item.shopping_list_id = shopping_list_id.strip() or None
+    item.updated_at = utcnow()
+    db.commit()
+    return RedirectResponse(f"/items/{item_id}?routing_saved=1", status_code=303)
 
 
 @router.post("/items/{item_id}/edit")
@@ -212,8 +260,7 @@ def edit_mealie_item(
     item.aliases = json.dumps(aliases)
     item.label_id = food.get("labelId") or (returned_label.get("id") if returned_label else None) or (label_id or None)
     item.label_name = returned_label.get("name") if returned_label else next(
-        (label.get("name") for label in cached_labels() if label.get("id") == item.label_id),
-        None,
+        (label.get("name") for label in cached_labels() if label.get("id") == item.label_id), None,
     )
     item.updated_at = utcnow()
     item.synced_at = utcnow()

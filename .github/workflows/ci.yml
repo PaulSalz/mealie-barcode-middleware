@@ -12,6 +12,7 @@ jobs:
       MEALIE_URL: http://127.0.0.1:9000
       MEALIE_API_KEY: ci-test-key
       MEALIE_SHOPPING_LIST_ID: 00000000-0000-4000-8000-000000000001
+      MIDDLEWARE_BASE_URL: http://b2m.local:9930
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,13 +29,18 @@ jobs:
           import app.models
           import app.services.actions
           import app.services.mealie_extras
+          import app.services.niimblue
+          import app.services.recipes
+          import app.services.shopping
           import app.routers.actions
           import app.routers.barcodes
           import app.routers.dashboard
           import app.routers.integrations
           import app.routers.items
           import app.routers.labels
+          import app.routers.recipes
           import app.routers.scan
+          import app.routers.scanner
           print('imports ok')
           PY
       - name: Parse Jinja templates
@@ -49,7 +55,7 @@ jobs:
           PY
       - name: Check JavaScript syntax
         run: |
-          node --check app/static/js/action-page.js
-          node --check app/static/js/decimal-number.js
-          node --check app/static/js/enhancements.js
-          node --check app/static/js/labels-page.js
+          for file in app/static/js/*.js; do
+            echo "checking $file"
+            node --check "$file"
+          done
