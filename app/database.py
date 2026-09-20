@@ -110,11 +110,7 @@ def _migrate():
 
 
 def _backfill_barcode_targets() -> None:
-    """Mirror legacy single mappings into the new multi-target table once.
-
-    The primary row uses destination_type=inherit so Food mappings preserve the
-    Item-level Mealie/HA routing that existing installations already configured.
-    """
+    """Mirror legacy single mappings into the new multi-target table once."""
     insp = inspect(engine)
     tables = set(insp.get_table_names())
     if not {"barcode_mappings", "barcode_targets"}.issubset(tables):
@@ -138,3 +134,13 @@ def _backfill_barcode_targets() -> None:
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_barcode_targets_barcode ON barcode_targets (barcode)"))
+        # BarcodeTarget intentionally has no hard FK because this DB predates the
+        # table. A trigger gives existing SQLite files the expected cascade when the
+        # user chooses Delete barcode.
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS trg_barcode_cache_delete_targets
+            AFTER DELETE ON barcode_cache
+            BEGIN
+                DELETE FROM barcode_targets WHERE barcode = OLD.barcode;
+            END
+        """))
