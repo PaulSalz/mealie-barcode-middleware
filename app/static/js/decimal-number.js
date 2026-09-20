@@ -42,10 +42,7 @@
     function normalizeInput(input) {
         var raw = rawValue(input);
         if (!raw) {
-            if (allowEmpty(input)) {
-                input.value = '';
-                return;
-            }
+            if (allowEmpty(input)) input.value = '';
             return;
         }
         var value = Number.parseFloat(raw);
@@ -69,6 +66,10 @@
     document.querySelectorAll('.decimal-stepper').forEach(function(container) {
         var input = container.querySelector('.decimal-number');
         if (!input) return;
+        // Food quantities are optional. Recipe scale and other numeric steppers remain positive.
+        if (input.name === 'quantity' && !input.dataset.allowEmpty) {
+            input.dataset.allowEmpty = 'true';
+        }
 
         container.querySelectorAll('[data-decimal-step]').forEach(function(button) {
             button.addEventListener('click', function() {
