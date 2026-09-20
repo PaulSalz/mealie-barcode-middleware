@@ -1,3 +1,4 @@
+import json
 import logging
 import threading
 import time
@@ -5,7 +6,9 @@ import time
 import httpx
 
 from app.config import settings
+from app.models import Activity, BarcodeMapping, Item
 from app.services.mealie import get_labels, get_units
+from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,108 @@ def _headers() -> dict:
     }
 
 
+def _items_from_response(data) -> list[dict]:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        return data["items"]
+    return []
+
+
+def _food_label(food: dict) -> tuple[str | None, str | None]:
+    label = food.get("label")
+    if isinstance(label, dict):
+        return label.get("id"), label.get("name")
+    label_id = food.get("labelId")
+    return label_id, None
+
+
+def sync_items_enhanced(db) -> int:
+    """Mirror Mealie Foods and track actual changes separately from sync time."""
+    try:
+        resp = httpx.get(
+            f"{settings.mealie_url}/api/foods",
+            headers=_headers(),
+            params={"perPage": -1},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.error("Failed to sync items from Mealie: %s", exc)
+        raise
+
+    items = _items_from_response(data)
+    if isinstance(data, dict) and "items" not in data:
+        raise ValueError("Mealie API returned unexpected response (no 'items' key)")
+
+    sync_started = utcnow()
+    count = 0
+    for food in items:
+        item_id = food.get("id")
+        if not item_id:
+            continue
+        name = food.get("name") or food.get("label") or ""
+        aliases_raw = food.get("aliases") or []
+        aliases_list = [a.get("name", a) if isinstance(a, dict) else a for a in aliases_raw]
+        aliases_json = json.dumps(aliases_list)
+        label_id, label_name = _food_label(food)
+
+        existing = db.get(Item, item_id)
+        if existing:
+            changed = any([
+                existing.name != name,
+                (existing.aliases or "[]") != aliases_json,
+                existing.label_id != label_id,
+                existing.label_name != label_name,
+            ])
+            existing.name = name
+            existing.aliases = aliases_json
+            existing.label_id = label_id
+            existing.label_name = label_name
+            existing.source = "mealie"
+            existing.synced_at = sync_started
+            if changed:
+                existing.updated_at = sync_started
+        else:
+            db.add(Item(
+                id=item_id,
+                name=name,
+                source="mealie",
+                aliases=aliases_json,
+                label_id=label_id,
+                label_name=label_name,
+                created_at=sync_started,
+                updated_at=sync_started,
+                synced_at=sync_started,
+            ))
+        count += 1
+
+    db.flush()
+    stale_items = db.query(Item).filter(Item.source == "mealie", Item.synced_at < sync_started).all()
+    for stale in stale_items:
+        broken = db.query(BarcodeMapping).filter(
+            BarcodeMapping.target_type == "food",
+            BarcodeMapping.target_id == stale.id,
+        ).all()
+        for mapping in broken:
+            db.add(Activity(
+                barcode=mapping.barcode,
+                title="Mapping broken",
+                message=f"{stale.name} was deleted in Mealie — remap needed",
+                result="broken",
+            ))
+            db.delete(mapping)
+        db.delete(stale)
+        if broken:
+            logger.warning("Stale item '%s' removed, %d mapping(s) broken", stale.name, len(broken))
+
+    db.commit()
+    clear_catalog_cache()
+    logger.info("Synced %d items from Mealie", count)
+    return count
+
+
 def refresh_open_shopping_items_for_food(food_id: str) -> int:
     """Touch open shopping-list entries for *food_id* so Mealie rehydrates changed Food metadata."""
     try:
@@ -58,7 +163,7 @@ def refresh_open_shopping_items_for_food(food_id: str) -> int:
         )
         resp.raise_for_status()
         data = resp.json()
-        items = data if isinstance(data, list) else data.get("items", []) if isinstance(data, dict) else []
+        items = _items_from_response(data)
     except (httpx.HTTPError, ValueError, AttributeError) as exc:
         logger.warning("Could not load shopping items while refreshing Food %s: %s", food_id, exc)
         return 0
