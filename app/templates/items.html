@@ -2,6 +2,7 @@
 {% block title %}Items — Mealie Barcode Middleware{% endblock %}
 
 {% block content %}
+<div id="items-page-config" class="d-none" data-filter="{{ current_filter }}" data-label="{{ current_label }}" data-sort="{{ current_sort }}" data-order="{{ current_order }}"></div>
 <div class="page-header d-print-none mb-3">
     <div class="row g-2 align-items-center">
         <div class="col"><h2 class="page-title">Items</h2></div>
@@ -19,12 +20,12 @@
     </form></div></div>
 </div>
 
-<div class="card">
+<div class="card" id="items-card">
     <div class="card-header d-block">
         <div class="row g-3 align-items-end">
-            <div class="col-lg-3"><h3 class="card-title mb-0">{{ items|length }} item{{ 's' if items|length != 1 }}</h3><p class="text-secondary m-0">{% if last_synced %}Last Mealie sync {{ last_synced|localtime }}{% else %}Not synced yet{% endif %}</p></div>
+            <div class="col-lg-3"><h3 class="card-title mb-0" id="items-count">{{ items|length }} item{{ 's' if items|length != 1 }}</h3><p class="text-secondary m-0" id="items-last-sync">{% if last_synced %}Last Mealie sync <span title="{{ last_synced|localtime }}">{{ last_synced|relative_time }}</span>{% else %}Not synced yet{% endif %}</p></div>
             <div class="col-lg-7">
-                <form method="get" action="/items" class="row g-2">
+                <form method="get" action="/items" class="row g-2" id="items-filter-form">
                     <div class="col-md-3"><label class="form-label">Filter</label><select class="form-select" name="filter" onchange="this.form.submit()">
                         {% for value, text in [('all','All items'),('linked','With barcode'),('unlinked','Without barcode'),('scanned','Scanned'),('never','Never scanned'),('mealie','Mealie'),('manual','Custom')] %}<option value="{{ value }}" {{ 'selected' if current_filter == value }}>{{ text }}</option>{% endfor %}
                     </select></div>
@@ -51,16 +52,16 @@
                 <th><button class="table-sort" data-sort="sort-last-scan">Last scan</button></th>
                 <th><button class="table-sort" data-sort="sort-updated">Updated</button></th>
             </tr></thead>
-            <tbody class="table-tbody">
+            <tbody class="table-tbody" id="items-table-body">
             {% for entry in items %}
-                <tr>
+                <tr data-item-id="{{ entry.item.id }}">
                     <td class="sort-name"><a href="/items/{{ entry.item.id }}">{{ entry.item.name }}</a>{% if entry.item.aliases %}<div class="text-secondary small">{{ entry.item.aliases|fromjson|join(', ') }}</div>{% endif %}</td>
                     <td class="sort-category">{{ entry.item.label_name or '—' }}</td>
                     <td class="sort-source">{% if entry.item.source == 'mealie' %}<span class="badge bg-blue text-blue-fg">Mealie</span>{% else %}<span class="badge bg-purple text-purple-fg">Custom</span>{% endif %}</td>
                     <td class="sort-mappings" data-sort-value="{{ entry.mapping_count }}">{{ entry.mapping_count }}</td>
                     <td class="sort-scans" data-sort-value="{{ entry.scan_count }}">{{ entry.scan_count }}</td>
-                    <td class="sort-last-scan" data-sort-value="{{ entry.last_scan.timestamp() if entry.last_scan else 0 }}">{{ entry.last_scan|localtime if entry.last_scan else 'Never' }}</td>
-                    <td class="sort-updated" data-sort-value="{{ (entry.item.updated_at or entry.item.created_at).timestamp() }}">{{ (entry.item.updated_at or entry.item.created_at)|localtime }}</td>
+                    <td class="sort-last-scan" data-sort-value="{{ entry.last_scan.timestamp() if entry.last_scan else 0 }}"{% if entry.last_scan %} title="{{ entry.last_scan|localtime }}"{% endif %}>{{ entry.last_scan|relative_time if entry.last_scan else 'Never' }}</td>
+                    {% set updated = entry.item.updated_at or entry.item.created_at %}<td class="sort-updated" data-sort-value="{{ updated.timestamp() }}" title="{{ updated|localtime }}">{{ updated|relative_time }}</td>
                 </tr>
             {% endfor %}
             {% if not items %}<tr class="items-empty-row"><td colspan="7"><div class="empty py-4"><div class="empty-icon"><i class="ti ti-apple icon icon-lg"></i></div><p class="empty-title">No matching items</p></div></td></tr>{% endif %}
