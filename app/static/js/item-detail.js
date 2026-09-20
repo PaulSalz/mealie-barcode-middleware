@@ -24,13 +24,38 @@
     });
   }
 
+  function installDeleteButton() {
+    const list = document.querySelector('.page-header .btn-list');
+    if (!list || list.querySelector('form[action$="/delete"]') || document.getElementById('item-delete-source')) return;
+    const synced = /synced from mealie/i.test(document.querySelector('.page-pretitle')?.textContent || '');
+    const button = document.createElement('button');
+    button.type = 'button'; button.id = 'item-delete-source'; button.className = 'btn btn-outline-danger';
+    button.innerHTML = '<i class="ti ti-trash icon"></i> Delete Item';
+    list.appendChild(button);
+    button.addEventListener('click', function() {
+      const detail = synced
+        ? 'This deletes the Food in Mealie first, then removes its B2M targets and mappings. This cannot be undone.'
+        : 'This removes the item and its local B2M links.';
+      if (!window.showConfirm) return;
+      window.showConfirm('Delete this item?', detail, async function() {
+        button.disabled = true;
+        try {
+          const response = await fetch('/api/items/' + encodeURIComponent(itemId), {method:'DELETE', headers:{'Accept':'application/json'}});
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.error || 'Delete failed');
+          window.location.href = '/items';
+        } catch (error) {
+          button.disabled = false;
+          window.alert(error.message);
+        }
+      }, 'Delete Item');
+    });
+  }
+
   function renderBarcodes(rows) {
     const root = document.getElementById('item-barcode-stats');
     if (!root) return;
-    if (!rows.length) {
-      root.innerHTML = '<div class="list-group-item text-secondary">No scan history yet.</div>';
-      return;
-    }
+    if (!rows.length) { root.innerHTML = '<div class="list-group-item text-secondary">No scan history yet.</div>'; return; }
     root.innerHTML = rows.map((row) =>
       '<div class="list-group-item d-flex align-items-center gap-2">' +
       '<button type="button" class="btn btn-ghost-primary p-0 font-monospace text-start text-break barcode-preview-trigger" data-barcode="' + esc(row.barcode) + '" data-bs-toggle="modal" data-bs-target="#item-code-preview">' + esc(row.barcode) + '</button>' +
@@ -67,10 +92,8 @@
       document.getElementById('item-stat-7').textContent = data.days_7;
       document.getElementById('item-stat-30').textContent = data.days_30;
       const last = document.getElementById('item-stat-last');
-      last.textContent = data.last_scan;
-      last.title = data.last_scan_absolute || '';
-      renderBarcodes(data.by_barcode || []);
-      await refreshRecentHistory();
+      last.textContent = data.last_scan; last.title = data.last_scan_absolute || '';
+      renderBarcodes(data.by_barcode || []); await refreshRecentHistory();
     } catch (e) { console.debug('Item stats refresh failed', e); }
   }
 
@@ -80,7 +103,6 @@
     const route = document.getElementById('shopping-route');
     const list = document.getElementById('shopping-list-id');
     if (!route) return;
-
     route.classList.add('d-none');
     const wrapper = document.createElement('div');
     wrapper.className = 'b2m-choice-grid b2m-item-route-choices';
@@ -124,6 +146,7 @@
   }
 
   bindPreviews();
+  installDeleteButton();
   installRoutingChoices();
 
   if (window.EventSource) {
