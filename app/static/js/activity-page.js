@@ -5,7 +5,7 @@ window._activitiesTable = initAdvancedTable({
     pageSizeId: 'activity-page-size-label',
     defaultSort: 'sort-time',
     defaultAsc: false,
-    numericCols: [],
+    numericCols: ['sort-time'],
     emptyRowClass: 'activity-empty-row'
 });
 // Make rows clickable
