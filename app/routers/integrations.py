@@ -22,6 +22,8 @@ from app.models import (
 )
 from app.services.multitarget import route_targets
 from app.services.targets import ensure_targets, sync_legacy_primary
+from app.templating import set_cached_theme
+from app.theme import get_theme, save_theme
 
 router = APIRouter()
 
@@ -99,6 +101,23 @@ def test_barcode_route(barcode: str, db: Session = Depends(get_db)):
         "target_count": len(results),
     }
     return JSONResponse(payload, status_code=200 if payload["ok"] else 502)
+
+
+@router.post("/api/theme/accessibility")
+async def save_accessibility_theme(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("is_admin", False):
+        return JSONResponse({"error": "admin required"}, status_code=403)
+    body = await request.json()
+    current = get_theme(db)
+    current["epaper"] = "true" if bool(body.get("epaper")) else "false"
+    try:
+        current["contrast"] = str(max(0, min(100, int(float(body.get("contrast", current.get("contrast", 65)))))))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "contrast must be 0–100"}, status_code=400)
+    save_theme(db, current)
+    fresh = get_theme(db)
+    set_cached_theme(fresh)
+    return {"ok": True, "theme": fresh}
 
 
 class BulkDeleteRequest(BaseModel):
