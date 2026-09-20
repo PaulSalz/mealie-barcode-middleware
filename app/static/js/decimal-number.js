@@ -1,10 +1,19 @@
 (function() {
     'use strict';
 
+    function allowEmpty(input) {
+        return input.dataset.allowEmpty === 'true';
+    }
+
+    function rawValue(input) {
+        return String(input.value || '').trim().replace(',', '.');
+    }
+
     function parseValue(input) {
-        var value = String(input.value || '').trim().replace(',', '.');
+        var value = rawValue(input);
+        if (!value) return null;
         var number = Number.parseFloat(value);
-        return Number.isFinite(number) ? number : 0;
+        return Number.isFinite(number) ? number : null;
     }
 
     function formatValue(value) {
@@ -12,23 +21,49 @@
         return String(rounded);
     }
 
+    function dispatch(input) {
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     function setValue(input, value) {
+        if (allowEmpty(input) && (value == null || value <= 0)) {
+            input.value = '';
+            dispatch(input);
+            return;
+        }
         var min = Number.parseFloat(input.dataset.min || '0.001');
         if (!Number.isFinite(min)) min = 0.001;
-        input.value = formatValue(Math.max(value, min));
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+        var normalized = Number.isFinite(value) ? Math.max(value, min) : min;
+        input.value = formatValue(normalized);
+        dispatch(input);
     }
 
     function normalizeInput(input) {
-        var raw = String(input.value || '').trim();
-        if (!raw) return;
-        var value = Number.parseFloat(raw.replace(',', '.'));
+        var raw = rawValue(input);
+        if (!raw) {
+            if (allowEmpty(input)) {
+                input.value = '';
+                return;
+            }
+            return;
+        }
+        var value = Number.parseFloat(raw);
         if (!Number.isFinite(value)) return;
         setValue(input, value);
     }
 
     function step(input, delta) {
-        setValue(input, parseValue(input) + delta);
+        var current = parseValue(input);
+        if (allowEmpty(input)) {
+            if (current == null) {
+                if (delta > 0) setValue(input, 1);
+                return;
+            }
+            setValue(input, current + delta);
+            return;
+        }
+        setValue(input, (current == null ? 0 : current) + delta);
     }
 
     document.querySelectorAll('.decimal-stepper').forEach(function(container) {
