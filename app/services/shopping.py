@@ -1,4 +1,6 @@
 import logging
+import threading
+import time
 
 import httpx
 
@@ -7,6 +9,8 @@ from app.models import Item
 from app.services.homeassistant import notify_shopping_route
 
 logger = logging.getLogger(__name__)
+_list_cache_lock = threading.Lock()
+_list_cache: tuple[float, list[dict]] | None = None
 
 
 def _headers() -> dict:
@@ -25,31 +29,33 @@ def _items(data) -> list[dict]:
     return []
 
 
-def get_shopping_lists() -> list[dict]:
+def get_shopping_lists(force: bool = False) -> list[dict]:
+    global _list_cache
+    now = time.monotonic()
+    with _list_cache_lock:
+        if not force and _list_cache and now - _list_cache[0] < 120:
+            return list(_list_cache[1])
     try:
         response = httpx.get(
             f"{settings.mealie_url}/api/households/shopping/lists",
-            headers=_headers(),
-            params={"perPage": -1},
-            timeout=10,
+            headers=_headers(), params={"perPage": -1}, timeout=10,
         )
         response.raise_for_status()
-        rows = _items(response.json())
-        return [
+        rows = [
             {"id": str(row.get("id")), "name": row.get("name") or "Shopping list"}
-            for row in rows if row.get("id")
+            for row in _items(response.json()) if row.get("id")
         ]
+        with _list_cache_lock:
+            _list_cache = (now, rows)
+        return list(rows)
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("Could not load Mealie shopping lists: %s", exc)
-        return []
+        with _list_cache_lock:
+            return list(_list_cache[1]) if _list_cache else []
 
 
 def add_food_to_list(food_id: str, quantity: float, unit_id: str | None, list_id: str) -> bool:
-    payload = {
-        "shoppingListId": list_id,
-        "foodId": food_id,
-        "quantity": quantity or 1.0,
-    }
+    payload = {"shoppingListId": list_id, "foodId": food_id, "quantity": quantity or 1.0}
     if unit_id:
         payload["unitId"] = unit_id
     try:
@@ -130,12 +136,6 @@ def route_item_scan(
     else:
         ha_ok = None
 
-    required_results = [v for v in (mealie_ok if mealie_required else None, ha_ok if ha_required else None) if v is not None]
+    required_results = [result for result in (mealie_ok, ha_ok) if result is not None]
     ok = bool(required_results) and all(required_results)
-    return {
-        "ok": ok,
-        "mealie": mealie_ok,
-        "ha": ha_ok,
-        "via": route,
-        "list_id": list_id,
-    }
+    return {"ok": ok, "mealie": mealie_ok, "ha": ha_ok, "via": route, "list_id": list_id}
