@@ -108,12 +108,21 @@ def scan_url() -> str:
     return base if base.endswith("/scan") else base + "/scan"
 
 
+def middleware_base_url() -> str:
+    url = scan_url()
+    return url[:-5] if url.endswith("/scan") else url.rstrip("/")
+
+
 def heartbeat_url() -> str:
     explicit = _env("SCANNER_HEARTBEAT_URL")
     if explicit:
         return explicit.rstrip("/")
-    url = scan_url()
-    return url[:-5] + "/scanner/heartbeat" if url.endswith("/scan") else url.rstrip("/") + "/scanner/heartbeat"
+    return middleware_base_url() + "/scanner/heartbeat"
+
+
+def received_url() -> str:
+    explicit = _env("SCANNER_RECEIVED_URL")
+    return explicit.rstrip("/") if explicit else middleware_base_url() + "/scanner/received"
 
 
 def api_token() -> str:
@@ -141,11 +150,11 @@ def telemetry_headers() -> dict[str, str]:
     }
 
 
-def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | None = None) -> bool:
+def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | None = None, timeout_override: float | None = None) -> bool:
     if count_scan:
         with _stats_lock:
             _stats["scans"] += 1
-    timeout = float(_env("HTTP_TIMEOUT", default="8") or "8")
+    timeout = timeout_override if timeout_override is not None else float(_env("HTTP_TIMEOUT", default="8") or "8")
     started = time.monotonic()
     try:
         request = urllib.request.Request(
@@ -157,8 +166,9 @@ def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | 
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8", "replace")
             elapsed = int((time.monotonic() - started) * 1000)
-            with _stats_lock:
-                _stats["last_latency_ms"] = elapsed
+            if count_scan:
+                with _stats_lock:
+                    _stats["last_latency_ms"] = elapsed
             if log_scan is not None:
                 log.info("scan=%r HTTP %d in %d ms response=%s", log_scan, response.status, elapsed, body[:300])
             return True
@@ -170,7 +180,7 @@ def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | 
         if log_scan is not None:
             log.error("scan=%r HTTP %d response=%s", log_scan, exc.code, body[:500])
         else:
-            log.debug("heartbeat HTTP %d response=%s", exc.code, body[:200])
+            log.debug("auxiliary POST HTTP %d response=%s", exc.code, body[:200])
     except Exception:
         if count_scan:
             with _stats_lock:
@@ -178,7 +188,7 @@ def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | 
         if log_scan is not None:
             log.exception("scan=%r POST failed", log_scan)
         else:
-            log.debug("scanner heartbeat failed", exc_info=True)
+            log.debug("scanner auxiliary POST failed", exc_info=True)
     return False
 
 
@@ -204,6 +214,9 @@ def scan_sender_loop() -> None:
     while True:
         barcode = _scan_queue.get()
         try:
+            # Fast acknowledgement gives the web UI immediate feedback; failure here
+            # must never block the real scan request.
+            _post(received_url(), {"barcode": barcode}, timeout_override=1.5)
             post_barcode(barcode)
         finally:
             _scan_queue.task_done()
