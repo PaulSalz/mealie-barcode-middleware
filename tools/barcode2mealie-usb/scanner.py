@@ -55,10 +55,9 @@ DE_NORMAL = {
     "KEY_1": "1", "KEY_2": "2", "KEY_3": "3", "KEY_4": "4", "KEY_5": "5",
     "KEY_6": "6", "KEY_7": "7", "KEY_8": "8", "KEY_9": "9", "KEY_0": "0",
     "KEY_MINUS": "ß", "KEY_EQUAL": "´", "KEY_LEFTBRACE": "ü", "KEY_RIGHTBRACE": "+",
-    "KEY_BACKSLASH": "#", "KEY_SEMICOLON": ";", "KEY_APOSTROPHE": "ä", "KEY_GRAVE": "^",
+    "KEY_BACKSLASH": "#", "KEY_SEMICOLON": "ö", "KEY_APOSTROPHE": "ä", "KEY_GRAVE": "^",
     "KEY_COMMA": ",", "KEY_DOT": ".", "KEY_SLASH": "-", "KEY_SPACE": " ",
 }
-DE_NORMAL["KEY_SEMICOLON"] = "ö"
 DE_SHIFT = {
     "KEY_1": "!", "KEY_2": '"', "KEY_3": "§", "KEY_4": "$", "KEY_5": "%",
     "KEY_6": "&", "KEY_7": "/", "KEY_8": "(", "KEY_9": ")", "KEY_0": "=",
