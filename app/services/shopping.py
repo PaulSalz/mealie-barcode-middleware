@@ -11,6 +11,7 @@ from app.services.homeassistant import notify_shopping_route
 logger = logging.getLogger(__name__)
 _list_cache_lock = threading.Lock()
 _list_cache: tuple[float, list[dict]] | None = None
+_counts_cache: tuple[float, list[dict]] | None = None
 
 
 def _headers() -> dict:
@@ -27,6 +28,19 @@ def _items(data) -> list[dict]:
     if isinstance(data, dict) and isinstance(data.get("items"), list):
         return data["items"]
     return []
+
+
+def test_mealie_connection() -> dict:
+    started = time.monotonic()
+    try:
+        response = httpx.get(
+            f"{settings.mealie_url.rstrip('/')}/api/households/shopping/lists",
+            headers=_headers(), params={"perPage": 1}, timeout=8,
+        )
+        response.raise_for_status()
+        return {"ok": True, "status": response.status_code, "latency_ms": int((time.monotonic() - started) * 1000)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "latency_ms": int((time.monotonic() - started) * 1000)}
 
 
 def get_shopping_lists(force: bool = False) -> list[dict]:
@@ -54,8 +68,81 @@ def get_shopping_lists(force: bool = False) -> list[dict]:
             return list(_list_cache[1]) if _list_cache else []
 
 
+def get_default_shopping_list_id(db=None, *, force_lists: bool = False) -> str:
+    """Runtime-selected default list; legacy env ID is only a fallback."""
+    close_db = False
+    if db is None:
+        from app.database import SessionLocal
+        db = SessionLocal()
+        close_db = True
+    try:
+        from app.models import SystemState
+        row = db.get(SystemState, "mealie.default_shopping_list_id")
+        configured = (row.value or "").strip() if row else ""
+        lists = get_shopping_lists(force=force_lists)
+        available = {str(item["id"]) for item in lists}
+        if configured and (not available or configured in available):
+            return configured
+        legacy = (getattr(settings, "mealie_shopping_list_id", "") or "").strip()
+        if legacy and (not available or legacy in available):
+            return legacy
+        return str(lists[0]["id"]) if lists else legacy
+    finally:
+        if close_db:
+            db.close()
+
+
+def set_default_shopping_list_id(list_id: str, db) -> str:
+    from app.models import SystemState
+    list_id = str(list_id or "").strip()
+    available = {str(row["id"]) for row in get_shopping_lists(force=True)}
+    if not list_id or list_id not in available:
+        raise ValueError("Selected shopping list is not available in Mealie")
+    row = db.get(SystemState, "mealie.default_shopping_list_id")
+    if row:
+        row.value = list_id
+    else:
+        db.add(SystemState(key="mealie.default_shopping_list_id", value=list_id))
+    db.commit()
+    return list_id
+
+
+def get_shopping_list_counts(force: bool = False) -> list[dict]:
+    """Return unchecked item count per Mealie shopping list."""
+    global _counts_cache
+    now = time.monotonic()
+    with _list_cache_lock:
+        if not force and _counts_cache and now - _counts_cache[0] < 20:
+            return list(_counts_cache[1])
+    lists = get_shopping_lists(force=force)
+    counts = {str(row["id"]): 0 for row in lists}
+    try:
+        response = httpx.get(
+            f"{settings.mealie_url}/api/households/shopping/items",
+            headers=_headers(), params={"perPage": -1}, timeout=10,
+        )
+        response.raise_for_status()
+        for row in _items(response.json()):
+            if not isinstance(row, dict) or row.get("checked"):
+                continue
+            list_id = row.get("shoppingListId")
+            if not list_id and isinstance(row.get("shoppingList"), dict):
+                list_id = row["shoppingList"].get("id")
+            if list_id is not None:
+                counts[str(list_id)] = counts.get(str(list_id), 0) + 1
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Could not count Mealie shopping items: %s", exc)
+    default_id = get_default_shopping_list_id()
+    result = [
+        {"id": str(row["id"]), "name": row["name"], "count": counts.get(str(row["id"]), 0), "default": str(row["id"]) == str(default_id)}
+        for row in lists
+    ]
+    with _list_cache_lock:
+        _counts_cache = (now, result)
+    return list(result)
+
+
 def _explicit_quantity(quantity: float | None) -> float | None:
-    """0.001 is the legacy DB-safe sentinel for 'no explicit quantity'."""
     if quantity is None or quantity <= 0.001:
         return None
     return quantity
@@ -109,29 +196,48 @@ def add_recipe_to_list(recipe_id: str, scale: float, list_id: str) -> bool:
     return False
 
 
+def effective_list_ids(list_ids: list[str] | None, db=None, fallback: str | None = None) -> list[str]:
+    cleaned = list(dict.fromkeys(str(value).strip() for value in (list_ids or []) if str(value).strip()))
+    if cleaned:
+        return cleaned
+    if fallback:
+        return [fallback]
+    default_id = get_default_shopping_list_id(db)
+    return [default_id] if default_id else []
+
+
 def route_item_scan(
     item: Item,
     *,
     barcode: str,
     quantity: float | None,
     unit_id: str | None,
+    route_override: str | None = None,
+    list_ids_override: list[str] | None = None,
+    db=None,
 ) -> dict:
-    route = (item.shopping_route or "default").lower()
+    route = (route_override or "inherit").lower()
+    if route == "inherit":
+        route = (item.shopping_route or "default").lower()
     if route == "default":
         route = "mealie"
-    list_id = item.shopping_list_id or settings.mealie_shopping_list_id
+    fallback_list = item.shopping_list_id or get_default_shopping_list_id(db)
+    list_ids = effective_list_ids(list_ids_override, db, fallback=fallback_list)
     explicit_quantity = _explicit_quantity(quantity)
 
     mealie_required = route in {"mealie", "both"}
     ha_required = route in {"homeassistant", "both"}
     if route == "none":
-        return {"ok": True, "mealie": None, "ha": None, "via": "none", "list_id": list_id}
+        return {"ok": True, "mealie": None, "ha": None, "via": "none", "list_ids": list_ids, "list_id": list_ids[0] if list_ids else ""}
 
+    mealie_results = []
     if mealie_required:
-        if item.source == "mealie":
-            mealie_ok = add_food_to_list(item.id, explicit_quantity, unit_id, list_id)
-        else:
-            mealie_ok = add_note_to_list(item.name, list_id)
+        for list_id in list_ids:
+            if item.source == "mealie":
+                mealie_results.append(add_food_to_list(item.id, explicit_quantity, unit_id, list_id))
+            else:
+                mealie_results.append(add_note_to_list(item.name, list_id))
+        mealie_ok = bool(mealie_results) and all(mealie_results)
     else:
         mealie_ok = None
 
@@ -149,4 +255,12 @@ def route_item_scan(
 
     required_results = [result for result in (mealie_ok, ha_ok) if result is not None]
     ok = bool(required_results) and all(required_results)
-    return {"ok": ok, "mealie": mealie_ok, "ha": ha_ok, "via": route, "list_id": list_id}
+    return {
+        "ok": ok,
+        "mealie": mealie_ok,
+        "mealie_results": mealie_results,
+        "ha": ha_ok,
+        "via": route,
+        "list_ids": list_ids,
+        "list_id": list_ids[0] if list_ids else "",
+    }

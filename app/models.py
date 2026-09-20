@@ -17,6 +17,8 @@ class Item(Base):
     aliases: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
     label_id: Mapped[str | None] = mapped_column(String, nullable=True)
     label_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    default_unit_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    default_unit_name: Mapped[str | None] = mapped_column(String, nullable=True)
     # default | mealie | homeassistant | both | none
     shopping_route: Mapped[str] = mapped_column(String, nullable=False, default="default")
     shopping_list_id: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -51,19 +53,43 @@ class BarcodeCache(Base):
 
 
 class BarcodeMapping(Base):
+    """Legacy/primary mapping kept for backwards compatibility.
+
+    New installations can attach multiple BarcodeTarget rows to one barcode.  The
+    first target is mirrored here so older views/integrations continue to work.
+    """
     __tablename__ = "barcode_mappings"
 
     barcode: Mapped[str] = mapped_column(String, primary_key=True)
-    target_type: Mapped[str] = mapped_column(String, nullable=False, default="food")  # food | recipe
+    target_type: Mapped[str] = mapped_column(String, nullable=False, default="food")
     target_id: Mapped[str] = mapped_column(String, nullable=False)
     target_name: Mapped[str | None] = mapped_column(String, nullable=True)
-
     quantity: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     unit_id: Mapped[str | None] = mapped_column(String, nullable=True)
     recipe_scale: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
-    # Mainly used for recipe mappings. Food mappings normally inherit the Item route/list.
     shopping_list_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    mapped_by: Mapped[str] = mapped_column(String, default="manual")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
+
+class BarcodeTarget(Base):
+    """One destination/thing executed by a physical barcode scan."""
+    __tablename__ = "barcode_targets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    barcode: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String, nullable=False)  # food | recipe
+    target_id: Mapped[str] = mapped_column(String, nullable=False)
+    target_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # inherit uses the Food's route; recipe inherit resolves to Mealie.
+    route: Mapped[str] = mapped_column(String, nullable=False, default="inherit")
+    # JSON array. Empty means effective/default list.
+    shopping_list_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    quantity: Mapped[float | None] = mapped_column(Float, nullable=True, default=1.0)
+    unit_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    recipe_scale: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     mapped_by: Mapped[str] = mapped_column(String, default="manual")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -76,8 +102,6 @@ class ApiToken(Base):
     token_hash: Mapped[str] = mapped_column(String, nullable=False)
     token_prefix: Mapped[str | None] = mapped_column(String(8), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-
-    # Optional telemetry reported by the USB scanner bridge. Phone/app tokens leave these NULL.
     scanner_version: Mapped[str | None] = mapped_column(String, nullable=True)
     scanner_hostname: Mapped[str | None] = mapped_column(String, nullable=True)
     scanner_device: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -114,6 +138,7 @@ class Activity(Base):
     target_type: Mapped[str | None] = mapped_column(String, nullable=True)
     target_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     target_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    targets_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     quantity_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit_id_snapshot: Mapped[str | None] = mapped_column(String, nullable=True)
     recipe_scale_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)

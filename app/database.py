@@ -27,6 +27,7 @@ def get_db():
 def init_db():
     _migrate()
     Base.metadata.create_all(bind=engine)
+    _backfill_barcode_targets()
 
 
 def _add_column_if_missing(table: str, column: str, sql_type: str, columns: set[str]) -> None:
@@ -72,6 +73,7 @@ def _migrate():
         _add_column_if_missing("activities", "target_type", "VARCHAR", columns)
         _add_column_if_missing("activities", "target_id", "VARCHAR", columns)
         _add_column_if_missing("activities", "target_name", "VARCHAR", columns)
+        _add_column_if_missing("activities", "targets_json", "TEXT", columns)
         _add_column_if_missing("activities", "quantity_snapshot", "FLOAT", columns)
         _add_column_if_missing("activities", "unit_id_snapshot", "VARCHAR", columns)
         _add_column_if_missing("activities", "recipe_scale_snapshot", "FLOAT", columns)
@@ -89,6 +91,8 @@ def _migrate():
         columns = {c["name"] for c in insp.get_columns("items")}
         _add_column_if_missing("items", "label_id", "VARCHAR", columns)
         _add_column_if_missing("items", "label_name", "VARCHAR", columns)
+        _add_column_if_missing("items", "default_unit_id", "VARCHAR", columns)
+        _add_column_if_missing("items", "default_unit_name", "VARCHAR", columns)
         _add_column_if_missing("items", "shopping_route", "VARCHAR DEFAULT 'default'", columns)
         _add_column_if_missing("items", "shopping_list_id", "VARCHAR", columns)
         with engine.begin() as conn:
@@ -106,3 +110,30 @@ def _migrate():
                 conn.execute(text("DROP TABLE barcode_mappings"))
         else:
             _add_column_if_missing("barcode_mappings", "shopping_list_id", "VARCHAR", columns)
+
+
+def _backfill_barcode_targets() -> None:
+    """Copy each legacy mapping once into the additive multi-target table."""
+    insp = inspect(engine)
+    tables = set(insp.get_table_names())
+    if not {"barcode_mappings", "barcode_targets"}.issubset(tables):
+        return
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO barcode_targets (
+                barcode, target_type, target_id, target_name, route,
+                shopping_list_ids_json, quantity, unit_id, recipe_scale,
+                position, enabled, mapped_by, created_at
+            )
+            SELECT
+                m.barcode, m.target_type, m.target_id, m.target_name, 'inherit',
+                CASE WHEN m.shopping_list_id IS NULL OR m.shopping_list_id = ''
+                     THEN '[]' ELSE '[\"' || replace(m.shopping_list_id, '\"', '\\\"') || '\"]' END,
+                CASE WHEN m.target_type = 'food' AND m.quantity <= 0.001 THEN NULL ELSE m.quantity END,
+                m.unit_id, m.recipe_scale, 0, 1, m.mapped_by, m.created_at
+            FROM barcode_mappings m
+            WHERE NOT EXISTS (
+                SELECT 1 FROM barcode_targets t WHERE t.barcode = m.barcode
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_barcode_targets_barcode ON barcode_targets (barcode)"))

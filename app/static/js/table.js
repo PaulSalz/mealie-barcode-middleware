@@ -1,21 +1,9 @@
-/**
- * table.js — Reusable client-side sort, filter, and pagination for Tabler tables.
- *
- * Usage: call initAdvancedTable(options) with:
- *   tableId:      ID of the <table>
- *   searchId:     ID of the search <input>
- *   paginationId: ID of the pagination <ul>
- *   pageSizeId:   ID of the page-size label <span>
- *   defaultSort:  data-sort value for initial column (e.g. 'sort-name')
- *   numericCols:  array of data-sort values that should sort numerically
- *   emptyRowClass: class on the "no data" row to exclude from sorting
- */
+/** Reusable client-side sort, filter, and pagination for Tabler tables. */
 function initAdvancedTable(opts) {
     'use strict';
 
     var table = document.getElementById(opts.tableId);
     if (!table) return;
-
     var tbody = table.querySelector('.table-tbody') || table.querySelector('tbody');
     var searchInput = document.getElementById(opts.searchId);
     var pagination = document.getElementById(opts.paginationId);
@@ -25,73 +13,51 @@ function initAdvancedTable(opts) {
 
     var allRows = Array.from(tbody.querySelectorAll('tr:not(.' + emptyRowClass + ')'));
     var filteredRows = allRows.slice();
-    var pageSize = 20;
+    var pageSize = opts.pageSize || 20;
     var currentPage = 1;
     var sortCol = opts.defaultSort || '';
     var sortAsc = opts.defaultAsc !== undefined ? opts.defaultAsc : true;
 
+    function getCell(row, col) { return row.querySelector('.' + col); }
     function getText(row, col) {
-        var td = row.querySelector('.' + col);
+        var td = getCell(row, col);
         return td ? td.textContent.trim().toLowerCase() : '';
     }
-
     function getNumeric(row, col) {
-        var txt = getText(row, col);
-        var n = parseFloat(txt);
+        var td = getCell(row, col);
+        var raw = td && td.dataset.sortValue != null ? td.dataset.sortValue : getText(row, col);
+        var n = parseFloat(raw);
         return isNaN(n) ? 0 : n;
     }
-
     function sortRows() {
         if (!sortCol) return;
         var isNumeric = numericCols.indexOf(sortCol) !== -1;
         filteredRows.sort(function(a, b) {
-            var av, bv;
-            if (isNumeric) {
-                av = getNumeric(a, sortCol);
-                bv = getNumeric(b, sortCol);
-            } else {
-                av = getText(a, sortCol);
-                bv = getText(b, sortCol);
-            }
+            var av = isNumeric ? getNumeric(a, sortCol) : getText(a, sortCol);
+            var bv = isNumeric ? getNumeric(b, sortCol) : getText(b, sortCol);
             if (av < bv) return sortAsc ? -1 : 1;
             if (av > bv) return sortAsc ? 1 : -1;
             return 0;
         });
     }
-
     function filterRows() {
         var q = searchInput ? searchInput.value.toLowerCase() : '';
-        filteredRows = allRows.filter(function(row) {
-            if (!q) return true;
-            return row.textContent.toLowerCase().indexOf(q) !== -1;
-        });
+        filteredRows = allRows.filter(function(row) { return !q || row.textContent.toLowerCase().indexOf(q) !== -1; });
         currentPage = 1;
         sortRows();
     }
-
     function render() {
         var totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
         if (currentPage > totalPages) currentPage = totalPages;
-
-        // Hide all, show current page in sorted DOM order
         tbody.querySelectorAll('tr').forEach(function(r) { r.style.display = 'none'; });
-
-        // Show empty-state row when no data
         var emptyRow = tbody.querySelector('.' + emptyRowClass);
         if (filteredRows.length === 0) {
             if (emptyRow) emptyRow.style.display = '';
             if (pagination) pagination.innerHTML = '';
             return;
         }
-
         var start = (currentPage - 1) * pageSize;
-        var end = start + pageSize;
-        filteredRows.slice(start, end).forEach(function(r) {
-            tbody.appendChild(r);
-            r.style.display = '';
-        });
-
-        // Render pagination
+        filteredRows.slice(start, start + pageSize).forEach(function(r) { tbody.appendChild(r); r.style.display = ''; });
         if (!pagination) return;
         pagination.innerHTML = '';
         if (totalPages <= 1) return;
@@ -116,54 +82,30 @@ function initAdvancedTable(opts) {
         }
     }
 
-    // Sort handlers on th buttons
     table.querySelectorAll('.table-sort').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var col = btn.dataset.sort;
-            if (sortCol === col) {
-                sortAsc = !sortAsc;
-            } else {
-                sortCol = col;
-                sortAsc = true;
-            }
-            table.querySelectorAll('.table-sort').forEach(function(b) {
-                b.classList.remove('active', 'asc', 'desc');
-            });
+            if (sortCol === col) sortAsc = !sortAsc;
+            else { sortCol = col; sortAsc = true; }
+            table.querySelectorAll('.table-sort').forEach(function(b) { b.classList.remove('active', 'asc', 'desc'); });
             btn.classList.add('active', sortAsc ? 'asc' : 'desc');
-            sortRows();
-            currentPage = 1;
-            render();
+            sortRows(); currentPage = 1; render();
         });
     });
-
-    // Search
-    if (searchInput) {
-        searchInput.addEventListener('input', function() { filterRows(); render(); });
-    }
-
-    // Page size
+    if (searchInput) searchInput.addEventListener('input', function() { filterRows(); render(); });
     document.querySelectorAll('[data-page-size]').forEach(function(a) {
-        // Scope to the table's container
         if (table.closest('.card') && !table.closest('.card').contains(a)) return;
         a.addEventListener('click', function(e) {
             e.preventDefault();
-            pageSize = parseInt(a.dataset.pageSize);
+            pageSize = parseInt(a.dataset.pageSize, 10) || 20;
             if (pageSizeLabel) pageSizeLabel.textContent = pageSize;
-            currentPage = 1;
-            render();
+            currentPage = 1; render();
         });
     });
-
-    // Expose reload for external callers (e.g. live-refresh)
     function reload() {
         allRows = Array.from(tbody.querySelectorAll('tr:not(.' + emptyRowClass + ')'));
-        filterRows();
-        render();
+        filterRows(); render();
     }
-
-    // Initial sort + render
-    sortRows();
-    render();
-
-    return { reload: reload };
+    sortRows(); render();
+    return {reload: reload};
 }

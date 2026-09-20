@@ -1,16 +1,14 @@
 import json
 import logging
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db
-from app.models import Activity, BarcodeCache, BarcodeMapping, Item
+from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, Item
 from app.services.mealie import get_food, update_food
 from app.services.mealie_extras import (
     cached_labels,
@@ -18,7 +16,8 @@ from app.services.mealie_extras import (
     refresh_open_shopping_items_for_food,
     sync_items_enhanced,
 )
-from app.services.shopping import get_shopping_lists
+from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
+from app.services.targets import sync_legacy_primary
 from app.templating import _localtime, _relative_time, templates
 from app.utils import utcnow
 
@@ -26,17 +25,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _activity_food_ids(row: Activity) -> set[str]:
+    result = set()
+    if row.target_type == "food" and row.target_id:
+        result.add(str(row.target_id))
+    if row.targets_json:
+        try:
+            for target in json.loads(row.targets_json):
+                if isinstance(target, dict) and target.get("type") == "food" and target.get("id"):
+                    result.add(str(target["id"]))
+        except (TypeError, ValueError):
+            pass
+    return result
+
+
 def _item_scan_stats(db: Session, item_id: str) -> dict:
-    scans = (
+    candidates = (
         db.query(Activity)
-        .filter(
-            Activity.is_scan_event == True,
-            Activity.target_type == "food",
-            Activity.target_id == item_id,
-        )
+        .filter(Activity.is_scan_event == True)
         .order_by(Activity.created_at.desc())
         .all()
     )
+    scans = [row for row in candidates if item_id in _activity_food_ids(row)]
     now = utcnow().replace(tzinfo=None)
     by_barcode = Counter()
     last_by_barcode = {}
@@ -85,6 +95,55 @@ def item_stats_api(item_id: str, db: Session = Depends(get_db)):
     return _stats_json(_item_scan_stats(db, item_id))
 
 
+def _item_list_entries(db: Session, q: str, filter_value: str, label: str) -> tuple[list[dict], list[Item]]:
+    query = db.query(Item)
+    if q:
+        query = query.filter(Item.name.ilike(f"%{q}%") | Item.aliases.ilike(f"%{q}%"))
+    all_items = query.all()
+
+    barcode_sets: dict[str, set[str]] = defaultdict(set)
+    targets = db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.enabled == True).all()
+    for target in targets:
+        barcode_sets[str(target.target_id)].add(target.barcode)
+    # Legacy-only rows are included for pre-migration / unusual recovery states.
+    for mapping in db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food").all():
+        barcode_sets[str(mapping.target_id)].add(mapping.barcode)
+
+    scan_counts = Counter()
+    last_scans = {}
+    for row in db.query(Activity).filter(Activity.is_scan_event == True).order_by(Activity.created_at.desc()).all():
+        for item_id in _activity_food_ids(row):
+            scan_counts[item_id] += 1
+            if item_id not in last_scans:
+                last_scans[item_id] = row.created_at
+
+    entries = []
+    for item in all_items:
+        mapping_count = len(barcode_sets.get(str(item.id), set()))
+        scan_count = scan_counts.get(str(item.id), 0)
+        if filter_value == "linked" and mapping_count == 0:
+            continue
+        if filter_value == "unlinked" and mapping_count > 0:
+            continue
+        if filter_value == "scanned" and scan_count == 0:
+            continue
+        if filter_value == "never" and scan_count > 0:
+            continue
+        if filter_value == "mealie" and item.source != "mealie":
+            continue
+        if filter_value == "manual" and item.source != "manual":
+            continue
+        if label and item.label_id != label:
+            continue
+        entries.append({
+            "item": item,
+            "mapping_count": mapping_count,
+            "scan_count": scan_count,
+            "last_scan": last_scans.get(str(item.id)),
+        })
+    return entries, all_items
+
+
 @router.get("/items", response_class=HTMLResponse)
 def items_list(
     request: Request,
@@ -95,49 +154,7 @@ def items_list(
     label: str = Query(""),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Item)
-    if q:
-        query = query.filter(Item.name.ilike(f"%{q}%") | Item.aliases.ilike(f"%{q}%"))
-    all_items = query.all()
-
-    mapping_counts = Counter()
-    for mapping in db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food").all():
-        mapping_counts[mapping.target_id] += 1
-
-    scan_rows = (
-        db.query(Activity.target_id, func.count(Activity.id), func.max(Activity.created_at))
-        .filter(Activity.is_scan_event == True, Activity.target_type == "food", Activity.target_id.isnot(None))
-        .group_by(Activity.target_id)
-        .all()
-    )
-    scan_counts = {row[0]: int(row[1]) for row in scan_rows}
-    last_scans = {row[0]: row[2] for row in scan_rows}
-
-    entries = []
-    for item in all_items:
-        mapping_count = mapping_counts.get(item.id, 0)
-        scan_count = scan_counts.get(item.id, 0)
-        if filter == "linked" and mapping_count == 0:
-            continue
-        if filter == "unlinked" and mapping_count > 0:
-            continue
-        if filter == "scanned" and scan_count == 0:
-            continue
-        if filter == "never" and scan_count > 0:
-            continue
-        if filter == "mealie" and item.source != "mealie":
-            continue
-        if filter == "manual" and item.source != "manual":
-            continue
-        if label and item.label_id != label:
-            continue
-        entries.append({
-            "item": item,
-            "mapping_count": mapping_count,
-            "scan_count": scan_count,
-            "last_scan": last_scans.get(item.id),
-        })
-
+    entries, all_items = _item_list_entries(db, q, filter, label)
     reverse = order == "desc"
     key_map = {
         "name": lambda e: (e["item"].name or "").casefold(),
@@ -152,10 +169,9 @@ def items_list(
     synced_values = [i.synced_at for i in all_items if i.source == "mealie" and i.synced_at]
     last_synced = max(synced_values) if synced_values else None
     labels = sorted(
-        {(i.label_id, i.label_name) for i in all_items if i.label_id and i.label_name},
+        {(i.label_id, i.label_name) for i in db.query(Item).all() if i.label_id and i.label_name},
         key=lambda row: row[1].casefold(),
     )
-
     return templates.TemplateResponse(request, "items.html", {
         "items": entries,
         "search_query": q,
@@ -174,14 +190,22 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
     if not item:
         return templates.TemplateResponse(request, "404.html", {"message": "Item not found"}, status_code=404)
 
-    mappings = db.query(BarcodeMapping).filter(
-        BarcodeMapping.target_type == "food",
-        BarcodeMapping.target_id == item_id,
-    ).all()
-    barcode_ids = [m.barcode for m in mappings]
+    target_rows = (
+        db.query(BarcodeTarget)
+        .filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item_id)
+        .order_by(BarcodeTarget.barcode, BarcodeTarget.position, BarcodeTarget.id)
+        .all()
+    )
+    by_barcode = {}
+    for target in target_rows:
+        by_barcode.setdefault(target.barcode, target)
+    # Include legacy mappings not yet represented in BarcodeTarget.
+    for mapping in db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food", BarcodeMapping.target_id == item_id).all():
+        by_barcode.setdefault(mapping.barcode, mapping)
+    barcode_ids = list(by_barcode)
     barcodes = db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(barcode_ids)).all() if barcode_ids else []
     barcode_map = {bc.barcode: bc for bc in barcodes}
-    mapped_items = [{"mapping": mapping, "barcode": barcode_map.get(mapping.barcode)} for mapping in mappings]
+    mapped_items = [{"mapping": row, "barcode": barcode_map.get(barcode)} for barcode, row in by_barcode.items()]
 
     mealie_food = get_food(item_id) if item.source == "mealie" else None
     labels = cached_labels() if item.source == "mealie" else []
@@ -199,7 +223,7 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
         "current_label_id": current_label_id,
         "stats": _item_scan_stats(db, item_id),
         "shopping_lists": get_shopping_lists(),
-        "default_shopping_list_id": settings.mealie_shopping_list_id,
+        "default_shopping_list_id": get_default_shopping_list_id(db),
         "saved": request.query_params.get("saved") == "1",
         "routing_saved": request.query_params.get("routing_saved") == "1",
         "edit_error": request.query_params.get("edit_error") == "1",
@@ -240,7 +264,6 @@ def edit_mealie_item(
     name = name.strip()
     if not item or item.source != "mealie" or not name:
         return RedirectResponse(f"/items/{item_id}?edit_error=1", status_code=303)
-
     try:
         food = update_food(
             item_id,
@@ -256,18 +279,19 @@ def edit_mealie_item(
     aliases_raw = food.get("aliases") or []
     aliases = [a.get("name", a) if isinstance(a, dict) else a for a in aliases_raw]
     returned_label = food.get("label") if isinstance(food.get("label"), dict) else None
+    returned_unit = food.get("unit") if isinstance(food.get("unit"), dict) else None
     item.name = food.get("name") or name
     item.aliases = json.dumps(aliases)
     item.label_id = food.get("labelId") or (returned_label.get("id") if returned_label else None) or (label_id or None)
     item.label_name = returned_label.get("name") if returned_label else next(
         (label.get("name") for label in cached_labels() if label.get("id") == item.label_id), None,
     )
+    item.default_unit_id = food.get("unitId") or (returned_unit.get("id") if returned_unit else item.default_unit_id)
+    item.default_unit_name = returned_unit.get("name") if returned_unit else item.default_unit_name
     item.updated_at = utcnow()
     item.synced_at = utcnow()
-    db.query(BarcodeMapping).filter(
-        BarcodeMapping.target_type == "food",
-        BarcodeMapping.target_id == item_id,
-    ).update({"target_name": item.name})
+    db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food", BarcodeMapping.target_id == item_id).update({"target_name": item.name})
+    db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item_id).update({"target_name": item.name})
     db.commit()
 
     clear_catalog_cache()
@@ -277,10 +301,13 @@ def edit_mealie_item(
 
 @router.post("/items/{item_id}/remove-mapping/{barcode}")
 def remove_item_mapping(item_id: str, barcode: str, db: Session = Depends(get_db)):
-    mapping = db.get(BarcodeMapping, barcode)
-    if mapping and mapping.target_type == "food" and mapping.target_id == item_id:
-        db.delete(mapping)
-        db.commit()
+    db.query(BarcodeTarget).filter(
+        BarcodeTarget.barcode == barcode,
+        BarcodeTarget.target_type == "food",
+        BarcodeTarget.target_id == item_id,
+    ).delete()
+    db.commit()
+    sync_legacy_primary(barcode, db)
     return RedirectResponse(f"/items/{item_id}", status_code=303)
 
 
@@ -307,10 +334,11 @@ def delete_custom_item(item_id: str, db: Session = Depends(get_db)):
     item = db.get(Item, item_id)
     if not item or item.source != "manual":
         return RedirectResponse("/items", status_code=303)
-    db.query(BarcodeMapping).filter(
-        BarcodeMapping.target_type == "food",
-        BarcodeMapping.target_id == item_id,
-    ).delete()
+    affected = {row.barcode for row in db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item_id).all()}
+    db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item_id).delete()
+    db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food", BarcodeMapping.target_id == item_id).delete()
     db.delete(item)
     db.commit()
+    for barcode in affected:
+        sync_legacy_primary(barcode, db)
     return RedirectResponse("/items", status_code=303)

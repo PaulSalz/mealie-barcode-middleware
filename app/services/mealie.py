@@ -5,7 +5,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import Activity, BarcodeCache, BarcodeMapping, Item, RetryQueue
+from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, Item, RetryQueue
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,13 @@ def _items_from_response(data) -> list[dict]:
         if isinstance(items, list):
             return items
     return []
+
+
+def _default_shopping_list_id(db=None) -> str:
+    """Resolve the runtime-selected default list; the env ID is only a fallback."""
+    from app.services.shopping import get_default_shopping_list_id
+
+    return get_default_shopping_list_id(db)
 
 
 def check_connectivity() -> bool:
@@ -82,21 +89,29 @@ def sync_items(db: Session) -> int:
 
     stale_items = db.query(Item).filter(Item.source == "mealie", Item.synced_at < sync_started).all()
     for stale in stale_items:
-        broken = db.query(BarcodeMapping).filter(
+        mappings = db.query(BarcodeMapping).filter(
             BarcodeMapping.target_type == "food",
             BarcodeMapping.target_id == stale.id,
         ).all()
-        for mapping in broken:
+        targets = db.query(BarcodeTarget).filter(
+            BarcodeTarget.target_type == "food",
+            BarcodeTarget.target_id == stale.id,
+        ).all()
+        affected = {row.barcode for row in mappings} | {row.barcode for row in targets}
+        for barcode in affected:
             db.add(Activity(
-                barcode=mapping.barcode,
+                barcode=barcode,
                 title="Mapping broken",
                 message=f"{stale.name} was deleted in Mealie — remap needed",
                 result="broken",
             ))
+        for mapping in mappings:
             db.delete(mapping)
+        for target in targets:
+            db.delete(target)
         db.delete(stale)
-        if broken:
-            logger.warning("Stale item '%s' removed, %d mapping(s) broken", stale.name, len(broken))
+        if affected:
+            logger.warning("Stale item '%s' removed, %d barcode(s) affected", stale.name, len(affected))
 
     db.commit()
     logger.info("Synced %d items from Mealie", count)
@@ -176,7 +191,14 @@ def find_food_by_name(name: str) -> dict | None:
         return None
 
 
-def _food_update_payload(existing: dict, *, name: str, plural_name: str | None, description: str | None, label_id: str | None) -> dict:
+def _food_update_payload(
+    existing: dict,
+    *,
+    name: str,
+    plural_name: str | None,
+    description: str | None,
+    label_id: str | None,
+) -> dict:
     aliases = existing.get("aliases") or []
     substitutions = []
     for sub in existing.get("substitutions") or []:
@@ -301,8 +323,12 @@ def add_shopping_item(
     quantity: float = 1.0,
     unit_id: str | None = None,
 ) -> tuple[bool, str | None]:
+    list_id = _default_shopping_list_id()
+    if not list_id:
+        logger.error("Cannot add Food to shopping list: no Mealie shopping list is available")
+        return False, None
     payload = {
-        "shoppingListId": settings.mealie_shopping_list_id,
+        "shoppingListId": list_id,
         "foodId": item_id,
         "quantity": quantity,
     }
@@ -312,15 +338,23 @@ def add_shopping_item(
 
 
 def add_shopping_note(note: str) -> tuple[bool, str | None]:
+    list_id = _default_shopping_list_id()
+    if not list_id:
+        logger.error("Cannot add note to shopping list: no Mealie shopping list is available")
+        return False, None
     return _post_shopping_item({
-        "shoppingListId": settings.mealie_shopping_list_id,
+        "shoppingListId": list_id,
         "note": note,
     })
 
 
 def add_recipe_to_shopping_list(recipe_id: str, recipe_scale: float = 1.0) -> bool:
-    """Use Mealie's native recipe-to-shopping-list link."""
-    url = f"{settings.mealie_url}/api/households/shopping/lists/{settings.mealie_shopping_list_id}/recipe"
+    """Use Mealie's native recipe-to-shopping-list link on the runtime default list."""
+    list_id = _default_shopping_list_id()
+    if not list_id:
+        logger.error("Cannot add recipe to shopping list: no Mealie shopping list is available")
+        return False
+    url = f"{settings.mealie_url}/api/households/shopping/lists/{list_id}/recipe"
     payload = [{"recipeId": recipe_id, "recipeIncrementQuantity": recipe_scale}]
     try:
         resp = httpx.post(url, headers=_headers(), json=payload, timeout=20)
@@ -406,7 +440,7 @@ def _delete_shopping_item(item_id: str) -> bool:
 
 
 def reconcile_linked_barcode(barcode: str) -> None:
-    """Replace an earlier note/retry once a barcode gets a structured target."""
+    """Replace an earlier note/retry once a barcode gets a structured primary target."""
     from app.database import SessionLocal
 
     db = SessionLocal()
@@ -437,6 +471,8 @@ def reconcile_linked_barcode(barcode: str) -> None:
                     payload["unitId"] = mapping.unit_id
                 else:
                     payload.pop("unitId", None)
+                if not payload.get("shoppingListId"):
+                    payload["shoppingListId"] = _default_shopping_list_id(db)
                 entry.payload = json.dumps(payload)
                 rewrote = True
             if rewrote:
@@ -451,8 +487,12 @@ def reconcile_linked_barcode(barcode: str) -> None:
                 db.commit()
                 return
 
+            list_id = current.get("shoppingListId") or _default_shopping_list_id(db)
+            if not list_id:
+                logger.error("Cannot reconcile shopping item %s: no shopping list available", shopping_item_id)
+                return
             payload = {
-                "shoppingListId": current.get("shoppingListId") or settings.mealie_shopping_list_id,
+                "shoppingListId": list_id,
                 "quantity": mapping.quantity or 1,
                 "checked": current.get("checked", False),
                 "position": current.get("position", 0),

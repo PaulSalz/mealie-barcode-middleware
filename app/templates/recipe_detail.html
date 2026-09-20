@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header d-print-none mb-3"><div class="row g-2 align-items-center">
   <div class="col"><div class="page-pretitle">Recipe</div><h2 class="page-title">{{ recipe.name }}</h2></div>
-  <div class="col-auto"><div class="btn-list"><a class="btn" href="/labels"><i class="ti ti-qrcode icon"></i> Code Generator</a><a class="btn btn-primary" href="{{ mealie_url }}/shopping-lists" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open Mealie</a></div></div>
+  <div class="col-auto"><div class="btn-list"><a class="btn" href="/labels"><i class="ti ti-qrcode icon"></i> Code Generator</a>{% if recipe.slug %}<a class="btn btn-primary" href="{{ mealie_url }}/g/home/r/{{ recipe.slug|urlencode }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open recipe in Mealie</a>{% else %}<a class="btn btn-primary" href="{{ mealie_url }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open Mealie</a>{% endif %}</div></div>
 </div></div>
 <div class="row row-cards">
   <div class="col-lg-5"><div class="card"><div class="card-header"><h3 class="card-title">Details</h3></div><div class="card-body">
@@ -16,8 +16,8 @@
       {% if recipe.total_time %}<div class="datagrid-item"><div class="datagrid-title">Total time</div><div class="datagrid-content">{{ recipe.total_time }}</div></div>{% endif %}
     </div>
   </div></div></div>
-  <div class="col-lg-7"><div class="card"><div class="card-header"><h3 class="card-title">Ingredients</h3></div><div class="list-group list-group-flush">
-    {% for ingredient in recipe.ingredients %}<div class="list-group-item">{{ ingredient }}</div>{% else %}<div class="list-group-item text-secondary">No ingredient details returned by Mealie.</div>{% endfor %}
+  <div class="col-lg-7"><div class="card"><div class="card-header"><div><h3 class="card-title">Ingredients</h3><p class="card-subtitle">Structured quantity and unit from Mealie; ingredient names are emphasized.</p></div></div><div class="list-group list-group-flush">
+    {% for ingredient in recipe.ingredients %}<div class="list-group-item d-flex flex-wrap align-items-baseline gap-2"><span class="text-secondary text-nowrap">{% if ingredient.quantity %}{{ ingredient.quantity }}{% endif %}{% if ingredient.unit %} {{ ingredient.unit }}{% endif %}</span><strong>{{ ingredient.name }}</strong>{% if ingredient.note %}<span class="text-secondary">· {{ ingredient.note }}</span>{% endif %}</div>{% else %}<div class="list-group-item text-secondary">No ingredient details returned by Mealie.</div>{% endfor %}
   </div></div></div>
 </div>
 {% endblock %}
