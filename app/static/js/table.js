@@ -1,14 +1,5 @@
 /**
  * table.js — Reusable client-side sort, filter, and pagination for Tabler tables.
- *
- * Usage: call initAdvancedTable(options) with:
- *   tableId:      ID of the <table>
- *   searchId:     ID of the search <input>
- *   paginationId: ID of the pagination <ul>
- *   pageSizeId:   ID of the page-size label <span>
- *   defaultSort:  data-sort value for initial column (e.g. 'sort-name')
- *   numericCols:  array of data-sort values that should sort numerically
- *   emptyRowClass: class on the "no data" row to exclude from sorting
  */
 function initAdvancedTable(opts) {
     'use strict';
@@ -25,7 +16,9 @@ function initAdvancedTable(opts) {
 
     var allRows = Array.from(tbody.querySelectorAll('tr:not(.' + emptyRowClass + ')'));
     var filteredRows = allRows.slice();
-    var pageSize = 20;
+    var pageSize = Number(opts.initialPageSize || 20);
+    if (!Number.isFinite(pageSize) || pageSize < 1) pageSize = 20;
+    if (pageSizeLabel) pageSizeLabel.textContent = pageSize;
     var currentPage = 1;
     var sortCol = opts.defaultSort || '';
     var sortAsc = opts.defaultAsc !== undefined ? opts.defaultAsc : true;
@@ -36,8 +29,10 @@ function initAdvancedTable(opts) {
     }
 
     function getNumeric(row, col) {
-        var txt = getText(row, col);
-        var n = parseFloat(txt);
+        var td = row.querySelector('.' + col);
+        if (!td) return 0;
+        var raw = td.dataset.sortValue != null ? td.dataset.sortValue : td.textContent.trim();
+        var n = parseFloat(raw);
         return isNaN(n) ? 0 : n;
     }
 
@@ -72,11 +67,8 @@ function initAdvancedTable(opts) {
     function render() {
         var totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
         if (currentPage > totalPages) currentPage = totalPages;
-
-        // Hide all, show current page in sorted DOM order
         tbody.querySelectorAll('tr').forEach(function(r) { r.style.display = 'none'; });
 
-        // Show empty-state row when no data
         var emptyRow = tbody.querySelector('.' + emptyRowClass);
         if (filteredRows.length === 0) {
             if (emptyRow) emptyRow.style.display = '';
@@ -91,7 +83,6 @@ function initAdvancedTable(opts) {
             r.style.display = '';
         });
 
-        // Render pagination
         if (!pagination) return;
         pagination.innerHTML = '';
         if (totalPages <= 1) return;
@@ -116,16 +107,11 @@ function initAdvancedTable(opts) {
         }
     }
 
-    // Sort handlers on th buttons
     table.querySelectorAll('.table-sort').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var col = btn.dataset.sort;
-            if (sortCol === col) {
-                sortAsc = !sortAsc;
-            } else {
-                sortCol = col;
-                sortAsc = true;
-            }
+            if (sortCol === col) sortAsc = !sortAsc;
+            else { sortCol = col; sortAsc = true; }
             table.querySelectorAll('.table-sort').forEach(function(b) {
                 b.classList.remove('active', 'asc', 'desc');
             });
@@ -136,14 +122,11 @@ function initAdvancedTable(opts) {
         });
     });
 
-    // Search
     if (searchInput) {
         searchInput.addEventListener('input', function() { filterRows(); render(); });
     }
 
-    // Page size
     document.querySelectorAll('[data-page-size]').forEach(function(a) {
-        // Scope to the table's container
         if (table.closest('.card') && !table.closest('.card').contains(a)) return;
         a.addEventListener('click', function(e) {
             e.preventDefault();
@@ -154,15 +137,14 @@ function initAdvancedTable(opts) {
         });
     });
 
-    // Expose reload for external callers (e.g. live-refresh)
     function reload() {
         allRows = Array.from(tbody.querySelectorAll('tr:not(.' + emptyRowClass + ')'));
         filterRows();
         render();
     }
 
-    // Initial sort + render
     sortRows();
+    filterRows();
     render();
 
     return { reload: reload };
