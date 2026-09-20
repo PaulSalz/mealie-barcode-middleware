@@ -56,17 +56,7 @@ def find_action(db, action_id: str) -> Action | None:
     return None
 
 
-def _record(db, action: Action, barcode: str, status: str, *, http_status=None, duration_ms=None, error=None) -> dict:
-    row = ActionExecution(
-        action_id=action.id,
-        barcode=barcode,
-        status=status,
-        http_status=http_status,
-        duration_ms=duration_ms,
-        error=error,
-    )
-    db.add(row)
-    db.commit()
+def _result(action: Action, status: str, *, http_status=None, duration_ms=None, error=None) -> dict:
     return {
         "action_id": action.id,
         "action_name": action.name,
@@ -75,6 +65,28 @@ def _record(db, action: Action, barcode: str, status: str, *, http_status=None, 
         "duration_ms": duration_ms,
         "error": error,
     }
+
+
+def _create_terminal(db, action: Action, barcode: str, status: str, *, http_status=None, duration_ms=None, error=None) -> dict:
+    db.add(ActionExecution(
+        action_id=action.id,
+        barcode=barcode,
+        status=status,
+        http_status=http_status,
+        duration_ms=duration_ms,
+        error=error,
+    ))
+    db.commit()
+    return _result(action, status, http_status=http_status, duration_ms=duration_ms, error=error)
+
+
+def _finish(db, execution: ActionExecution, action: Action, status: str, *, http_status=None, duration_ms=None, error=None) -> dict:
+    execution.status = status
+    execution.http_status = http_status
+    execution.duration_ms = duration_ms
+    execution.error = error
+    db.commit()
+    return _result(action, status, http_status=http_status, duration_ms=duration_ms, error=error)
 
 
 def _retryable(policy: str, *, network_error: bool, status_code: int | None) -> bool:
@@ -94,12 +106,13 @@ def _retryable(policy: str, *, network_error: bool, status_code: int | None) -> 
 def execute_action(action_id: str, barcode: str | None = None, *, force: bool = False) -> dict:
     barcode = barcode or f"ACTION:{action_id}"
     db = SessionLocal()
+    execution = None
     try:
         action = find_action(db, action_id)
         if not action:
             return {"action_id": action_id, "status": "not_found", "error": "Action not found"}
         if not action.enabled and not force:
-            return _record(db, action, barcode, "disabled")
+            return _create_terminal(db, action, barcode, "disabled")
 
         if not force and action.cooldown_seconds > 0:
             latest = (
@@ -114,7 +127,13 @@ def execute_action(action_id: str, barcode: str | None = None, *, force: bool = 
                 if latest_at.tzinfo is None:
                     now = now.replace(tzinfo=None)
                 if now < latest_at + timedelta(seconds=action.cooldown_seconds):
-                    return _record(db, action, barcode, "ignored_cooldown")
+                    return _create_terminal(db, action, barcode, "ignored_cooldown")
+
+        # Reserve the execution before doing network I/O. This makes async duplicate
+        # scans safe: a second background job sees this 'running' row immediately.
+        execution = ActionExecution(action_id=action.id, barcode=barcode, status="running")
+        db.add(execution)
+        db.commit()
 
         params = _json(action.parameters_json, {})
         context = {
@@ -150,7 +169,7 @@ def execute_action(action_id: str, barcode: str | None = None, *, force: bool = 
                 last_status = response.status_code
                 if response.status_code < 400:
                     duration_ms = int((time.monotonic() - start) * 1000)
-                    return _record(db, action, barcode, "success", http_status=response.status_code, duration_ms=duration_ms)
+                    return _finish(db, execution, action, "success", http_status=response.status_code, duration_ms=duration_ms)
                 last_error = f"HTTP {response.status_code}: {response.text[:500]}"
             except httpx.HTTPError as exc:
                 network_error = True
@@ -165,13 +184,15 @@ def execute_action(action_id: str, barcode: str | None = None, *, force: bool = 
                 time.sleep(delay)
 
         duration_ms = int((time.monotonic() - start) * 1000)
-        return _record(db, action, barcode, "failed", http_status=last_status, duration_ms=duration_ms, error=last_error)
+        return _finish(db, execution, action, "failed", http_status=last_status, duration_ms=duration_ms, error=last_error)
     except Exception as exc:
         logger.exception("Action execution failed for %s", action_id)
         try:
             action = find_action(db, action_id)
+            if execution is not None and action:
+                return _finish(db, execution, action, "failed", error=str(exc))
             if action:
-                return _record(db, action, barcode, "failed", error=str(exc))
+                return _create_terminal(db, action, barcode, "failed", error=str(exc))
         except Exception:
             db.rollback()
         return {"action_id": action_id, "status": "failed", "error": str(exc)}
