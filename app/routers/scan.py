@@ -15,10 +15,12 @@ from app.models import Activity, BarcodeCache, BarcodeMapping, Item
 from app.pause import is_paused
 from app.services.actions import execute_action, find_action
 from app.services.barcode_lookup import enrich_barcode_background, needs_background_enrich, perform_lookup
+from app.services.barcode_routing import dispatch_barcode_targets
 from app.services.fuzzy import try_auto_map
 from app.services.homeassistant import notify_scan as ha_notify_scan, should_send_scan_webhook
 from app.services.mealie import add_shopping_note, enqueue_retry
-from app.services.shopping import add_recipe_to_list, route_item_scan
+from app.services.shopping import add_recipe_to_list, get_default_shopping_list_id, route_item_scan
+from app.services.targets import get_barcode_targets
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,7 @@ class ScanResponse(BaseModel):
     quantity: str | None = None
     item_source: str | None = None
     paused: bool = False
+    target_count: int | None = None
 
 
 def _queue_ha_notification(resp: ScanResponse, barcode: str, background_tasks: BackgroundTasks) -> None:
@@ -211,14 +214,57 @@ def _process_action_code(barcode: str, db: Session, background_tasks: Background
     return resp
 
 
+def _process_multi_targets(barcode: str, db: Session, paused: bool) -> ScanResponse | None:
+    targets = get_barcode_targets(db, barcode)
+    if not targets:
+        return None
+    cached = db.get(BarcodeCache, barcode)
+    routed = dispatch_barcode_targets(db, barcode, targets, paused=paused)
+    resp = ScanResponse(
+        result=routed["result"],
+        item=routed["item"],
+        via=routed.get("via"),
+        needs_action=bool(routed.get("needs_action")),
+        action_url=_build_action_url(barcode) if routed.get("needs_action") else None,
+        brand=cached.display_brand if cached else None,
+        quantity=cached.quantity if cached else None,
+        paused=paused,
+        target_count=routed.get("target_count") or len(targets),
+    )
+    if len(targets) == 1:
+        target = targets[0]
+        target_type = target.target_type
+        target_id = target.target_id
+        target_name = target.target_name
+    else:
+        target_type = "multi"
+        target_id = None
+        target_name = routed["item"]
+    title = "Scanned (scan & link)" if paused else {
+        "added": "Added to destinations",
+        "queued": "Queued for retry",
+        "partial": "Partially routed",
+        "error": "Routing failed",
+    }.get(resp.result, "Barcode routed")
+    _save_activity(
+        barcode, title, routed["item"], resp.result, db,
+        target_type=target_type, target_id=target_id, target_name=target_name,
+    )
+    if resp.needs_action:
+        _save_notification(barcode, title, routed["item"], resp.result, db)
+    _emit_scan_event(barcode, resp)
+    return resp
+
+
 def _process_mapped(barcode: str, mapping: BarcodeMapping, db: Session, paused: bool) -> ScanResponse:
+    """Legacy fallback for installations before BarcodeTarget backfill."""
     cached = db.get(BarcodeCache, barcode)
     if mapping.target_type == "recipe":
         recipe_name = mapping.target_name or f"Recipe {mapping.target_id}"
         if paused:
             resp = ScanResponse(result="added", item=recipe_name, paused=True, item_source="recipe")
         else:
-            list_id = mapping.shopping_list_id or settings.mealie_shopping_list_id
+            list_id = mapping.shopping_list_id or get_default_shopping_list_id()
             success = add_recipe_to_list(mapping.target_id, mapping.recipe_scale or 1.0, list_id)
             resp = ScanResponse(
                 result="added" if success else "error",
@@ -268,12 +314,17 @@ def _process_mapped(barcode: str, mapping: BarcodeMapping, db: Session, paused: 
 def _process_scan(barcode: str, db: Session, background_tasks: BackgroundTasks) -> ScanResponse:
     paused = is_paused(db)
 
+    # ACTION: is a reserved namespace and keeps its action semantics.
+    if barcode.upper().startswith("ACTION:"):
+        return _process_action_code(barcode, db, background_tasks, paused)
+
+    multi = _process_multi_targets(barcode, db, paused)
+    if multi:
+        return multi
+
     mapping = db.get(BarcodeMapping, barcode)
     if mapping:
         return _process_mapped(barcode, mapping, db, paused)
-
-    if barcode.upper().startswith("ACTION:"):
-        return _process_action_code(barcode, db, background_tasks, paused)
 
     if barcode.upper().startswith("GENERIC:"):
         term = unquote(barcode[len("GENERIC:"):].strip())
@@ -293,13 +344,23 @@ def _process_scan(barcode: str, db: Session, background_tasks: BackgroundTasks) 
         return resp
 
     cached = db.get(BarcodeCache, barcode)
-    if not barcode.isdigit() and cached is None:
-        raise HTTPException(
-            status_code=422,
-            detail="This custom code is not registered yet. Add it in Code Generator or link it first.",
-        )
 
-    needs_lookup = cached is None
+    # Product databases are numeric-barcode oriented. Arbitrary keyboard/HID codes
+    # are still valid scanner inputs; create a local unresolved cache entry instead
+    # of rejecting them with HTTP 422.
+    if not barcode.isdigit() and cached is None:
+        cached = BarcodeCache(
+            barcode=barcode,
+            source="custom",
+            title=barcode,
+            found=False,
+            lookup_attempted_at=utcnow(),
+            created_at=utcnow(),
+        )
+        db.add(cached)
+        db.commit()
+
+    needs_lookup = cached is None and barcode.isdigit()
     if cached is not None and not cached.found and cached.lookup_attempted_at:
         attempted = cached.lookup_attempted_at
         if attempted.tzinfo is None:
@@ -311,6 +372,14 @@ def _process_scan(barcode: str, db: Session, background_tasks: BackgroundTasks) 
         cached = perform_lookup(barcode, db)
     if needs_lookup and needs_background_enrich(cached):
         background_tasks.add_task(enrich_barcode_background, barcode)
+
+    if not cached:
+        cached = BarcodeCache(
+            barcode=barcode, source="custom", title=barcode, found=False,
+            lookup_attempted_at=utcnow(), created_at=utcnow(),
+        )
+        db.add(cached)
+        db.commit()
 
     if not cached.found:
         if paused or settings.unknown_barcode_action == "notify_only":
@@ -393,6 +462,7 @@ def _emit_scan_event(barcode: str, resp: ScanResponse):
         "result": resp.result,
         "item": resp.item,
         "paused": resp.paused,
+        "target_count": resp.target_count,
     })
 
 
@@ -524,7 +594,7 @@ def _add_via_item(
     routed = route_item_scan(
         item,
         barcode=barcode,
-        quantity=list_quantity or 1.0,
+        quantity=list_quantity,
         unit_id=unit_id,
     )
     if routed["ok"]:
@@ -533,15 +603,16 @@ def _add_via_item(
             brand=brand, quantity=package_quantity, item_source=item_source,
         )
 
-    # Mealie failures remain retryable. HA failures are surfaced immediately because
-    # repeating arbitrary automations later could be unsafe/non-idempotent.
+    # Mealie failures remain retryable. HA/webhook failures are surfaced immediately
+    # because repeating arbitrary automations later may not be idempotent.
     if routed.get("mealie") is False:
         if item.source == "mealie":
             payload = {
                 "shoppingListId": routed["list_id"],
                 "foodId": item.id,
-                "quantity": list_quantity or 1.0,
             }
+            if list_quantity is not None and list_quantity > 0.001:
+                payload["quantity"] = list_quantity
             if unit_id:
                 payload["unitId"] = unit_id
         else:
@@ -561,7 +632,8 @@ def _add_via_item(
 
 
 def _enqueue_note(barcode: str, note: str, db: Session) -> None:
-    enqueue_retry(barcode, {"shoppingListId": settings.mealie_shopping_list_id, "note": note}, db)
+    list_id = get_default_shopping_list_id()
+    enqueue_retry(barcode, {"shoppingListId": list_id, "note": note}, db)
 
 
 class AppScanRequest(BaseModel):
