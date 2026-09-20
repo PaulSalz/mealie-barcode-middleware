@@ -13,6 +13,7 @@ jobs:
       MEALIE_API_KEY: ci-test-key
       MEALIE_SHOPPING_LIST_ID: 00000000-0000-4000-8000-000000000001
       MIDDLEWARE_BASE_URL: http://b2m.local:9930
+      DB_PATH: /tmp/b2m-ci.db
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,9 +30,11 @@ jobs:
           import app.models
           import app.services.actions
           import app.services.mealie_extras
+          import app.services.multitarget
           import app.services.niimblue
           import app.services.recipes
           import app.services.shopping
+          import app.services.targets
           import app.routers.actions
           import app.routers.barcodes
           import app.routers.dashboard
@@ -42,6 +45,34 @@ jobs:
           import app.routers.scan
           import app.routers.scanner
           print('imports ok')
+          PY
+      - name: Smoke-test SQLite migration and legacy target backfill
+        run: |
+          rm -f /tmp/b2m-ci.db
+          python - <<'PY'
+          from app import models  # noqa: F401 - registers metadata
+          from app.database import SessionLocal, init_db
+          from app.models import BarcodeMapping, BarcodeTarget, Item
+
+          init_db()
+          db = SessionLocal()
+          db.add(Item(id='food-ci', name='CI Food', source='mealie'))
+          db.add(BarcodeMapping(
+              barcode='legacy-ci', target_type='food', target_id='food-ci',
+              target_name='CI Food', quantity=1.0, mapped_by='manual',
+          ))
+          db.commit()
+          db.close()
+
+          # Running startup migration again must copy a legacy mapping exactly once.
+          init_db()
+          db = SessionLocal()
+          rows = db.query(BarcodeTarget).filter(BarcodeTarget.barcode == 'legacy-ci').all()
+          assert len(rows) == 1, rows
+          assert rows[0].target_id == 'food-ci'
+          assert rows[0].shopping_list_ids_json == '[]'
+          db.close()
+          print('migration/backfill ok')
           PY
       - name: Parse Jinja templates
         run: |
