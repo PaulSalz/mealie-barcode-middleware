@@ -2,14 +2,16 @@
 """USB HID barcode scanner bridge for Mealie Barcode Middleware.
 
 The bridge deliberately knows nothing about FOOD:, RECIPE:, GENERIC:, ACTION:,
-etc. It only decodes the HID keyboard stream into a full string and POSTs it
-to /scan. Business logic stays in the middleware.
+etc. It only decodes the HID keyboard stream into a full string and queues it for
+POSTing to /scan. HID reading is intentionally decoupled from network requests so
+slow Mealie/API calls cannot make the scanner event stream overflow during bursts.
 """
 
 import glob
 import json
 import logging
 import os
+import queue
 import socket
 import threading
 import time
@@ -18,11 +20,12 @@ import urllib.request
 
 from evdev import InputDevice, ecodes
 
-SCANNER_VERSION = "2.2.1"
+SCANNER_VERSION = "2.3.0"
 STARTED_MONO = time.monotonic()
 _stats_lock = threading.Lock()
 _stats = {"scans": 0, "errors": 0, "last_latency_ms": 0}
 _runtime = {"device": "disconnected", "layout": "de"}
+_scan_queue: queue.Queue[str] | None = None
 
 logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
@@ -183,9 +186,30 @@ def post_barcode(barcode: str) -> None:
     _post(scan_url(), {"barcode": barcode}, count_scan=True, log_scan=barcode)
 
 
+def _enqueue_barcode(barcode: str) -> None:
+    if _scan_queue is None:
+        raise RuntimeError("scan queue is not initialized")
+    try:
+        _scan_queue.put_nowait(barcode)
+        log.info("scan=%r queued (pending=%d)", barcode, _scan_queue.qsize())
+    except queue.Full:
+        with _stats_lock:
+            _stats["errors"] += 1
+        log.error("Dropping scan because delivery queue is full: %r", barcode)
+
+
+def scan_sender_loop() -> None:
+    if _scan_queue is None:
+        raise RuntimeError("scan queue is not initialized")
+    while True:
+        barcode = _scan_queue.get()
+        try:
+            post_barcode(barcode)
+        finally:
+            _scan_queue.task_done()
+
+
 def heartbeat_loop(interval: float) -> None:
-    # Heartbeats deliberately continue while the USB scanner is unplugged so the
-    # middleware can distinguish a running bridge from a dead service.
     while True:
         _post(heartbeat_url(), {}, count_scan=False)
         time.sleep(interval)
@@ -204,7 +228,6 @@ def decode_key(key_name: str, shifted: bool, altgr: bool, layout: str) -> str | 
 
 
 def resolve_device_path(device_spec: str) -> str | None:
-    """Resolve an explicit device path or auto-discover the Jieli HID scanner."""
     spec = (device_spec or "auto").strip()
     if spec.lower() != "auto":
         return spec if os.path.exists(spec) else None
@@ -219,10 +242,11 @@ def resolve_device_path(device_spec: str) -> str | None:
     return unique[0] if unique else None
 
 
-def _read_device(device: InputDevice, layout: str, min_length: int, max_length: int) -> None:
+def _read_device(device: InputDevice, layout: str, min_length: int, max_length: int, max_key_gap: float) -> None:
     buffer: list[str] = []
     shift_down = False
     altgr_down = False
+    last_char_at = 0.0
 
     for event in device.read_loop():
         if event.type != ecodes.EV_KEY:
@@ -244,14 +268,15 @@ def _read_device(device: InputDevice, layout: str, min_length: int, max_length: 
         if key_name in ENTER_KEYS:
             value = "".join(buffer).strip()
             buffer.clear()
+            last_char_at = 0.0
             if len(value) < min_length:
                 if value:
-                    log.warning("Ignoring too-short scan: %r", value)
+                    log.warning("Ignoring too-short scan (%d < %d chars): %r", len(value), min_length, value)
                 continue
             if len(value) > max_length:
                 log.warning("Ignoring too-long scan (%d chars)", len(value))
                 continue
-            post_barcode(value)
+            _enqueue_barcode(value)
             continue
 
         if key_name == "KEY_BACKSPACE":
@@ -260,38 +285,48 @@ def _read_device(device: InputDevice, layout: str, min_length: int, max_length: 
             continue
         if key_name == "KEY_ESC":
             buffer.clear()
+            last_char_at = 0.0
             continue
 
         char = decode_key(key_name, shift_down, altgr_down, layout)
         if char is not None and len(buffer) < max_length:
+            now = time.monotonic()
+            if buffer and last_char_at and now - last_char_at > max_key_gap:
+                log.warning("Discarding stale partial scan after %.0f ms gap: %r", (now - last_char_at) * 1000, "".join(buffer))
+                buffer.clear()
             buffer.append(char)
+            last_char_at = now
         elif char is None:
             log.debug("Unhandled HID key: %s", key_name)
 
 
 def main() -> int:
+    global _scan_queue
+
     device_spec = _env("SCANNER_DEVICE", "BARCODE_DEVICE", default="auto") or "auto"
-    min_length = int(_env("MIN_BARCODE_LENGTH", default="1") or "1")
+    min_length = int(_env("MIN_BARCODE_LENGTH", default="4") or "4")
     max_length = int(_env("MAX_BARCODE_LENGTH", default="256") or "256")
     layout = (_env("SCANNER_KEYBOARD_LAYOUT", default="de") or "de").strip().lower()
     heartbeat_interval = float(_env("HEARTBEAT_INTERVAL", default="60") or "60")
     reconnect_interval = max(0.5, float(_env("SCANNER_RECONNECT_INTERVAL", default="2") or "2"))
+    queue_size = max(8, int(_env("SCAN_QUEUE_SIZE", default="128") or "128"))
+    max_key_gap = max(0.05, float(_env("SCAN_KEY_GAP_SECONDS", default="0.4") or "0.4"))
     if layout not in {"de", "us"}:
         raise RuntimeError("SCANNER_KEYBOARD_LAYOUT must be 'de' or 'us'")
 
-    # Validate the token up front. Missing scanner hardware is tolerated; missing
-    # authentication is a real configuration error and should still fail loudly.
     api_token()
     _runtime["layout"] = layout
     _runtime["device"] = "disconnected"
+    _scan_queue = queue.Queue(maxsize=queue_size)
 
     log.info(
-        "Scanner bridge v%s starting, device=%s, layout=%s, posting to %s",
-        SCANNER_VERSION, device_spec, layout, scan_url(),
+        "Scanner bridge v%s starting, device=%s, layout=%s, min_length=%d, queue=%d, posting to %s",
+        SCANNER_VERSION, device_spec, layout, min_length, queue_size, scan_url(),
     )
 
+    threading.Thread(target=scan_sender_loop, daemon=True, name="scan-sender").start()
     if heartbeat_interval > 0:
-        threading.Thread(target=heartbeat_loop, args=(max(15.0, heartbeat_interval),), daemon=True).start()
+        threading.Thread(target=heartbeat_loop, args=(max(15.0, heartbeat_interval),), daemon=True, name="heartbeat").start()
 
     waiting_logged = False
     while True:
@@ -309,11 +344,8 @@ def main() -> int:
             device = InputDevice(device_path)
             _runtime["device"] = device_path
             waiting_logged = False
-            log.info(
-                "Scanner connected on %s (%s), layout=%s",
-                device_path, device.name, layout,
-            )
-            _read_device(device, layout, min_length, max_length)
+            log.info("Scanner connected on %s (%s), layout=%s", device_path, device.name, layout)
+            _read_device(device, layout, min_length, max_length, max_key_gap)
             log.warning("Scanner device %s closed; waiting for reconnect", device_path)
         except (FileNotFoundError, OSError) as exc:
             _runtime["device"] = "disconnected"
