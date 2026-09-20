@@ -8,12 +8,23 @@ from app.auth import require_token
 from app.config import settings
 from app.database import get_db
 from app.models import Activity, ApiToken, BarcodeMapping, Item, SystemState
-from app.services.shopping import get_shopping_lists
+from app.services.mealie import check_connectivity
+from app.services.shopping import (
+    get_default_shopping_list_id,
+    get_shopping_list_stats,
+    get_shopping_lists,
+    set_default_shopping_list_id,
+)
+from app.services.targets import get_barcode_targets
 from app.templating import _localtime, _relative_time
 from app.utils import utcnow
 
 router = APIRouter()
-APP_VERSION = "2026.09.20.1"
+APP_VERSION = "2026.09.20.2"
+
+
+def _admin(request: Request) -> bool:
+    return bool(request.session.get("is_admin", False))
 
 
 @router.post("/scanner/heartbeat")
@@ -34,7 +45,6 @@ def app_version():
 
 @router.get("/api/scanners")
 def scanner_health(db: Session = Depends(get_db)):
-    """Session-protected scanner telemetry grouped by the API token that reported it."""
     now = utcnow().replace(tzinfo=None)
     rows = db.query(ApiToken).order_by(ApiToken.name).all()
     scanners = []
@@ -91,32 +101,118 @@ def scanner_recent_scans(limit: int = Query(5, ge=1, le=25), db: Session = Depen
 
 @router.get("/api/shopping-lists")
 def shopping_lists(force: bool = Query(False)):
+    default_id = get_default_shopping_list_id(force=force)
     rows = get_shopping_lists(force=force)
     return {
-        "default_id": settings.mealie_shopping_list_id,
+        "default_id": default_id,
         "items": [
-            {**row, "default": str(row.get("id")) == str(settings.mealie_shopping_list_id)}
+            {**row, "default": str(row.get("id")) == str(default_id)}
             for row in rows
         ],
     }
 
 
+@router.get("/api/shopping-list-stats")
+def shopping_list_stats(force: bool = Query(False)):
+    return {"items": get_shopping_list_stats(force=force)}
+
+
+@router.post("/api/settings/default-shopping-list")
+async def save_default_shopping_list(request: Request):
+    if not _admin(request):
+        return JSONResponse({"error": "admin required"}, status_code=403)
+    body = await request.json()
+    list_id = str((body or {}).get("list_id") or "").strip()
+    if not list_id:
+        return JSONResponse({"error": "list_id is required"}, status_code=400)
+    try:
+        selected = set_default_shopping_list_id(list_id)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"ok": True, "default": selected}
+
+
+@router.post("/api/settings/test-mealie")
+def test_mealie(request: Request):
+    if not _admin(request):
+        return JSONResponse({"error": "admin required"}, status_code=403)
+    connected = check_connectivity()
+    lists = get_shopping_lists(force=True) if connected else []
+    return JSONResponse({
+        "ok": connected,
+        "connected": connected,
+        "shopping_lists": len(lists),
+        "default_id": get_default_shopping_list_id() if connected else None,
+    }, status_code=200 if connected else 502)
+
+
+@router.get("/api/settings/notifications")
+def notification_settings(request: Request):
+    if not _admin(request):
+        return JSONResponse({"error": "admin required"}, status_code=403)
+    return {
+        "toast_seconds": settings.notification_toast_seconds,
+        "group_window_seconds": settings.notification_group_window_seconds,
+    }
+
+
+@router.post("/api/settings/notifications")
+async def save_notification_settings(request: Request, db: Session = Depends(get_db)):
+    if not _admin(request):
+        return JSONResponse({"error": "admin required"}, status_code=403)
+    body = await request.json()
+    try:
+        toast = max(3, min(120, int((body or {}).get("toast_seconds", settings.notification_toast_seconds))))
+        grouping = max(1, min(300, int((body or {}).get("group_window_seconds", settings.notification_group_window_seconds))))
+        settings.save_override("notification_toast_seconds", str(toast), db)
+        settings.save_override("notification_group_window_seconds", str(grouping), db)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"ok": True, "toast_seconds": toast, "group_window_seconds": grouping}
+
+
 @router.get("/api/barcode-destination")
 def barcode_destination(barcode: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+    targets = get_barcode_targets(db, barcode)
+    if targets:
+        lists = get_shopping_lists()
+        names = {str(row.get("id")): row.get("name") for row in lists}
+        default_id = get_default_shopping_list_id()
+        rows = []
+        for target in targets:
+            list_id = target.shopping_list_id or default_id
+            rows.append({
+                "id": target.id,
+                "primary": target.is_primary,
+                "target_type": target.target_type,
+                "target_id": target.target_id,
+                "target_name": target.target_name,
+                "route": target.destination_type,
+                "shopping_list_id": list_id,
+                "shopping_list_name": names.get(str(list_id)) if list_id else None,
+                "shopping_list_default": bool(list_id and str(list_id) == str(default_id)),
+                "quantity": target.quantity,
+                "unit_id": target.unit_id,
+                "recipe_scale": target.recipe_scale,
+                "endpoint_url": target.endpoint_url,
+            })
+        return {"mapped": True, "multi": len(rows) > 1, "targets": rows}
+
     mapping = db.get(BarcodeMapping, barcode)
     if not mapping:
         return {"mapped": False}
     lists = get_shopping_lists()
     names = {str(row.get("id")): row.get("name") for row in lists}
+    default_id = get_default_shopping_list_id()
     if mapping.target_type == "food":
         item = db.get(Item, mapping.target_id)
         route = (item.shopping_route if item else "default") or "default"
         effective_route = "mealie" if route == "default" else route
-        list_id = (item.shopping_list_id if item else None) or settings.mealie_shopping_list_id
+        list_id = (item.shopping_list_id if item else None) or default_id
     else:
         route = "mealie"
         effective_route = "mealie"
-        list_id = mapping.shopping_list_id or settings.mealie_shopping_list_id
+        list_id = mapping.shopping_list_id or default_id
     return {
         "mapped": True,
         "target_type": mapping.target_type,
@@ -125,8 +221,8 @@ def barcode_destination(barcode: str = Query(..., min_length=1), db: Session = D
         "route": route,
         "effective_route": effective_route,
         "shopping_list_id": list_id,
-        "shopping_list_name": names.get(str(list_id), "Configured default" if list_id else None),
-        "shopping_list_default": str(list_id) == str(settings.mealie_shopping_list_id),
+        "shopping_list_name": names.get(str(list_id), "Default list" if list_id else None),
+        "shopping_list_default": str(list_id) == str(default_id),
         "quantity": None if mapping.target_type == "food" and mapping.quantity <= 0.001 else mapping.quantity,
         "unit_id": mapping.unit_id,
     }
@@ -153,15 +249,8 @@ def _validated_niim_settings(body: dict) -> dict[str, str]:
     if direction and direction not in {"top", "left", "right", "bottom"}:
         raise ValueError("Print direction must be top, left, right or bottom")
 
-    integer_ranges = {
-        "density": (1, 5),
-        "label_type": (1, 20),
-        "dpi": (100, 1200),
-    }
-    float_ranges = {
-        "max_label_width_mm": (1.0, 100.0),
-        "timeout": (1.0, 120.0),
-    }
+    integer_ranges = {"density": (1, 5), "label_type": (1, 20), "dpi": (100, 1200)}
+    float_ranges = {"max_label_width_mm": (1.0, 100.0), "timeout": (1.0, 120.0)}
     for field, (minimum, maximum) in integer_ranges.items():
         if field not in values or values[field] == "":
             continue
@@ -187,17 +276,15 @@ def _validated_niim_settings(body: dict) -> dict[str, str]:
 
 @router.get("/api/settings/niim")
 def niim_settings(request: Request):
-    if not request.session.get("is_admin", False):
+    if not _admin(request):
         return JSONResponse({"error": "admin required"}, status_code=403)
     from app.services.niimblue import config, printer_status
-
-    cfg = config()
-    return {"config": cfg, "status": printer_status()}
+    return {"config": config(), "status": printer_status()}
 
 
 @router.post("/api/settings/niim")
 async def save_niim_settings(request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
+    if not _admin(request):
         return JSONResponse({"error": "admin required"}, status_code=403)
     body = await request.json()
     if not isinstance(body, dict):
@@ -215,5 +302,4 @@ async def save_niim_settings(request: Request, db: Session = Depends(get_db)):
             db.add(SystemState(key=key, value=value))
     db.commit()
     from app.services.niimblue import config, printer_status
-
     return {"ok": True, "config": config(), "status": printer_status()}
