@@ -1,8 +1,7 @@
 """Optional adapter for a local niimblue-node REST print server.
 
-The middleware deliberately does not implement the NIIMBOT wire protocol itself.
-Run `niimblue-cli server` on a machine with Bluetooth/serial access and configure
-this adapter through NIIMBLUE_* environment variables.
+Environment variables remain the defaults. Admin UI overrides are stored in the
+application database so printer settings can be changed without restarting B2M.
 """
 
 from __future__ import annotations
@@ -16,18 +15,40 @@ def _env(name: str, default: str = "") -> str:
     return (os.getenv(name, default) or default).strip()
 
 
+def _runtime_overrides() -> dict[str, str]:
+    try:
+        from app.database import SessionLocal
+        from app.models import SystemState
+
+        db = SessionLocal()
+        try:
+            rows = db.query(SystemState).filter(SystemState.key.like("niimblue.%")).all()
+            return {row.key.split(".", 1)[1]: row.value or "" for row in rows}
+        finally:
+            db.close()
+    except Exception:
+        return {}
+
+
+def _value(overrides: dict[str, str], key: str, env_name: str, default: str = "") -> str:
+    if key in overrides:
+        return (overrides[key] or "").strip()
+    return _env(env_name, default)
+
+
 def config() -> dict:
+    overrides = _runtime_overrides()
     return {
-        "url": _env("NIIMBLUE_URL").rstrip("/"),
-        "transport": _env("NIIMBLUE_TRANSPORT", "ble").lower(),
-        "address": _env("NIIMBLUE_ADDRESS"),
-        "print_task": _env("NIIMBLUE_PRINT_TASK", "D110M_V4"),
-        "print_direction": _env("NIIMBLUE_PRINT_DIRECTION", "top"),
-        "density": max(1, int(_env("NIIMBLUE_DENSITY", "3") or "3")),
-        "label_type": max(1, int(_env("NIIMBLUE_LABEL_TYPE", "1") or "1")),
-        "dpi": max(100, int(_env("NIIMBLUE_DPI", "300") or "300")),
-        "max_label_width_mm": max(1.0, float(_env("NIIMBLUE_MAX_LABEL_WIDTH_MM", "50") or "50")),
-        "timeout": max(1.0, float(_env("NIIMBLUE_TIMEOUT", "30") or "30")),
+        "url": _value(overrides, "url", "NIIMBLUE_URL").rstrip("/"),
+        "transport": _value(overrides, "transport", "NIIMBLUE_TRANSPORT", "ble").lower(),
+        "address": _value(overrides, "address", "NIIMBLUE_ADDRESS"),
+        "print_task": _value(overrides, "print_task", "NIIMBLUE_PRINT_TASK", "D110M_V4"),
+        "print_direction": _value(overrides, "print_direction", "NIIMBLUE_PRINT_DIRECTION", "top"),
+        "density": max(1, int(_value(overrides, "density", "NIIMBLUE_DENSITY", "3") or "3")),
+        "label_type": max(1, int(_value(overrides, "label_type", "NIIMBLUE_LABEL_TYPE", "1") or "1")),
+        "dpi": max(100, int(_value(overrides, "dpi", "NIIMBLUE_DPI", "300") or "300")),
+        "max_label_width_mm": max(1.0, float(_value(overrides, "max_label_width_mm", "NIIMBLUE_MAX_LABEL_WIDTH_MM", "50") or "50")),
+        "timeout": max(1.0, float(_value(overrides, "timeout", "NIIMBLUE_TIMEOUT", "30") or "30")),
     }
 
 
