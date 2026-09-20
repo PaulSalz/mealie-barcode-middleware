@@ -18,6 +18,8 @@
 
   function bindPreviews() {
     document.querySelectorAll('.barcode-preview-trigger').forEach((el) => {
+      el.classList.remove('btn-ghost-secondary');
+      el.classList.add('btn-ghost-primary', 'text-primary');
       if (el.dataset.previewBound === '1') return;
       el.dataset.previewBound = '1';
       el.addEventListener('click', () => preview(el.dataset.barcode));
@@ -33,7 +35,7 @@
     }
     root.innerHTML = rows.map((row) =>
       '<div class="list-group-item d-flex align-items-center gap-2">' +
-      '<button type="button" class="btn btn-ghost-secondary p-0 font-monospace text-start text-break barcode-preview-trigger" data-barcode="' + esc(row.barcode) + '" data-bs-toggle="modal" data-bs-target="#item-code-preview">' + esc(row.barcode) + '</button>' +
+      '<button type="button" class="btn btn-ghost-primary text-primary p-0 font-monospace text-start text-break barcode-preview-trigger" data-barcode="' + esc(row.barcode) + '" data-bs-toggle="modal" data-bs-target="#item-code-preview">' + esc(row.barcode) + '</button>' +
       '<span class="text-secondary small ms-auto" title="' + esc(row.last_scan_absolute) + '">' + esc(row.last_scan) + '</span>' +
       '<span class="badge bg-primary text-primary-fg">' + Number(row.count || 0) + '</span>' +
       '<a class="btn btn-sm btn-icon btn-ghost-secondary" href="/barcodes/' + encodeURIComponent(row.barcode) + '" title="Open barcode"><i class="ti ti-external-link"></i></a>' +
@@ -83,18 +85,38 @@
     refreshTimer = setTimeout(refreshStats, 120);
   }
 
-  bindPreviews();
+  function installRouteCheckboxes() {
+    const route = document.getElementById('shopping-route');
+    const list = document.getElementById('shopping-list-id');
+    if (!route) return;
 
-  const route = document.getElementById('shopping-route');
-  const list = document.getElementById('shopping-list-id');
-  if (route && list) {
-    const updateListState = () => {
-      const enabled = ['default', 'mealie', 'both'].includes(route.value);
-      list.disabled = !enabled;
-    };
-    route.addEventListener('change', updateListState);
-    updateListState();
+    route.classList.add('d-none');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'b2m-choice-grid b2m-item-route-choices';
+    wrapper.innerHTML =
+      '<label class="b2m-choice-card"><input class="form-check-input me-2" type="checkbox" value="mealie"><span><strong>Mealie</strong><small>Shopping list</small></span></label>' +
+      '<label class="b2m-choice-card"><input class="form-check-input me-2" type="checkbox" value="homeassistant"><span><strong>Home Assistant</strong><small>Webhook event</small></span></label>';
+    route.insertAdjacentElement('afterend', wrapper);
+
+    const checks = Array.from(wrapper.querySelectorAll('input[type="checkbox"]'));
+    if (route.value === 'both') checks.forEach((check) => { check.checked = true; });
+    else if (route.value === 'mealie' || route.value === 'default') checks.find((check) => check.value === 'mealie').checked = true;
+    else if (route.value === 'homeassistant') checks.find((check) => check.value === 'homeassistant').checked = true;
+
+    function syncRoute() {
+      const values = checks.filter((check) => check.checked).map((check) => check.value);
+      if (values.includes('mealie') && values.includes('homeassistant')) route.value = 'both';
+      else if (values.includes('mealie')) route.value = 'mealie';
+      else if (values.includes('homeassistant')) route.value = 'homeassistant';
+      else route.value = 'none';
+      if (list) list.disabled = !values.includes('mealie');
+    }
+    checks.forEach((check) => check.addEventListener('change', syncRoute));
+    syncRoute();
   }
+
+  bindPreviews();
+  installRouteCheckboxes();
 
   if (window.EventSource) {
     const events = new EventSource('/events');

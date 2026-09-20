@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header d-print-none mb-3"><div class="row g-2 align-items-center">
   <div class="col"><div class="page-pretitle">Recipe</div><h2 class="page-title">{{ recipe.name }}</h2></div>
-  <div class="col-auto"><div class="btn-list"><a class="btn" href="/labels"><i class="ti ti-qrcode icon"></i> Code Generator</a>{% if recipe.slug %}<a class="btn btn-primary" href="{{ mealie_url }}/g/home/r/{{ recipe.slug|urlencode }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open recipe in Mealie</a>{% else %}<a class="btn btn-primary" href="{{ mealie_url }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open Mealie</a>{% endif %}</div></div>
+  <div class="col-auto"><div class="btn-list"><a class="btn" href="/labels?recipe={{ recipe.id|urlencode }}&recipe_name={{ recipe.name|urlencode }}"><i class="ti ti-qrcode icon"></i> Code Generator</a>{% if recipe.slug %}<a class="btn btn-primary" href="{{ mealie_url }}/g/home/r/{{ recipe.slug|urlencode }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open recipe in Mealie</a>{% else %}<a class="btn btn-primary" href="{{ mealie_url }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open Mealie</a>{% endif %}</div></div>
 </div></div>
 <div class="row row-cards">
   <div class="col-lg-5"><div class="card"><div class="card-header"><h3 class="card-title">Details</h3></div><div class="card-body">

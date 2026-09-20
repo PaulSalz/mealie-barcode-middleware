@@ -14,7 +14,7 @@
 <div id="generator-prefill" class="d-none" data-prefill='{{ prefill|tojson if prefill else "null" }}'></div>
 <div id="generator-config" class="d-none" data-default-action-webhook="{{ default_action_webhook|e }}" data-niim-configured="{{ '1' if niim_configured else '0' }}"></div>
 
-<div class="row row-cards d-print-none">
+<div class="row row-cards d-print-none align-items-start">
 <div class="col-lg-5">
   <div class="card mb-3"><div class="card-header"><h3 class="card-title">Add code</h3></div><div class="card-body">
     <ul class="nav nav-pills mb-3" id="code-type-tabs">
@@ -44,8 +44,8 @@
 
     <div class="generator-pane d-none" data-pane="action">
       <div class="d-flex gap-2 mb-2"><input id="generator-action-search" class="form-control" placeholder="Action name or ID…" autocomplete="off"><button class="btn btn-outline-primary text-nowrap" type="button" data-bs-toggle="modal" data-bs-target="#quick-action-modal"><i class="ti ti-plus icon"></i> New Action</button></div>
-      <div id="generator-action-results" class="list-group"></div>
-      <div class="form-hint mt-2">The code stays <code>ACTION:&lt;id&gt;</code>. Webhook parameters can be changed later without reprinting.</div>
+      <div id="generator-action-results" class="list-group"><div class="list-group-item text-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Loading actions…</div></div>
+      <div class="form-hint mt-2">Actions are prefetched when this page opens. The code stays <code>ACTION:&lt;id&gt;</code>.</div>
     </div>
 
     <div class="generator-pane d-none" data-pane="custom">
@@ -53,27 +53,33 @@
       <div class="mb-2"><label class="form-label">Label text</label><input id="custom-label" class="form-control" placeholder="Optional printed title"></div><button class="btn btn-primary" type="button" id="custom-add"><i class="ti ti-plus icon"></i> Add custom code</button>
     </div>
   </div></div>
-
-  <div class="card mb-3"><div class="card-header"><div><h3 class="card-title">Print layout</h3><p class="card-subtitle">Physical label/page settings. Code type is configured in the queue.</p></div></div><div class="card-body">
-    <div class="row g-3"><div class="col-md-6"><label class="form-label">Label format</label><select class="form-select" id="label-format"><option value="1:1" selected>Square 1:1</option><option value="3:2">Landscape 3:2</option><option value="2:1">Landscape 2:1</option><option value="2:3">Portrait 2:3</option></select></div><div class="col-md-6"><label class="form-label">Page format</label><select class="form-select" id="label-page-format"><option value="auto">Auto / browser</option><option value="A4" selected>A4</option><option value="Letter">Letter</option></select></div></div>
-    <div class="mt-3"><label class="form-label">Presets</label><div class="btn-group w-100 flex-wrap"><button type="button" class="btn btn-outline-secondary label-preset active" data-format="1:1" data-size="35" data-gap="4" data-padding="1.5" data-margin="5" data-font="8">35×35</button><button type="button" class="btn btn-outline-secondary label-preset" data-format="1:1" data-size="50" data-gap="4" data-padding="2" data-margin="5" data-font="10">50×50</button><button type="button" class="btn btn-outline-secondary label-preset" data-format="2:1" data-size="50" data-gap="3" data-padding="2.5" data-margin="5" data-font="8">50×25</button><button type="button" class="btn btn-outline-secondary label-preset" data-format="3:2" data-size="50" data-gap="4" data-padding="2" data-margin="5" data-font="8">50×33</button></div></div>
-    <div class="row mt-1"><div class="col-4 mb-2"><label class="form-label">Width: <strong id="label-size-value">35</strong> mm</label><input type="range" class="form-range" id="label-size" min="15" max="100" step="1" value="35"></div><div class="col-4 mb-2"><label class="form-label">Gap: <strong id="label-gap-value">4</strong> mm</label><input type="range" class="form-range" id="label-gap" min="0" max="10" step="1" value="4"></div><div class="col-4 mb-2"><label class="form-label">Padding: <strong id="label-padding-value">1.5</strong> mm</label><input type="range" class="form-range" id="label-padding" min="0" max="5" step="0.5" value="1.5"></div></div>
-    <div class="row g-3"><div class="col-md-6"><label class="form-label">Text size</label><select class="form-select" id="label-font-size"><option value="6">6 pt</option><option value="8" selected>8 pt</option><option value="10">10 pt</option><option value="12">12 pt</option><option value="14">14 pt</option><option value="16">16 pt</option></select></div><div class="col-md-6"><label class="form-label">Page margin: <strong id="label-margin-value">5</strong> mm</label><input type="range" class="form-range" id="label-margin" min="0" max="15" step="1" value="5"></div></div>
-    <div class="row mt-3"><div class="col-6"><label class="form-check form-switch"><input class="form-check-input" type="checkbox" id="label-show-text" checked><span class="form-check-label">Show label text</span></label></div><div class="col-6"><label class="form-check form-switch"><input class="form-check-input" type="checkbox" id="label-show-border"><span class="form-check-label">Cut guides</span></label></div></div>
-  </div></div>
 </div>
 
 <div class="col-lg-7">
   <div class="card mb-3"><div class="card-header align-items-center"><div><h3 class="card-title">Queue <span class="text-secondary" id="label-count">(0)</span></h3><p class="card-subtitle">Changes are saved in this browser automatically.</p></div><div class="card-actions"><div class="btn-group" role="group" aria-label="Set all code styles"><button class="btn btn-sm btn-outline-secondary queue-kind-all" data-kind="auto" type="button">All Auto</button><button class="btn btn-sm btn-outline-secondary queue-kind-all" data-kind="qr" type="button">All QR</button><button class="btn btn-sm btn-outline-secondary queue-kind-all" data-kind="code128" type="button">All Code 128</button></div></div></div>
-    <div class="card-body"><div id="label-queue-empty" class="text-center text-secondary py-4"><i class="ti ti-barcode icon icon-lg mb-2 opacity-50"></i><p>No codes in queue.</p></div><div id="label-queue" class="row g-2"></div></div>
+    <div class="card-body"><div id="label-queue-feedback" class="alert alert-success py-2 mb-3 d-none" role="status"></div><div id="label-queue-empty" class="text-center text-secondary py-4"><i class="ti ti-barcode icon icon-lg mb-2 opacity-50"></i><p>No codes in queue.</p></div><div id="label-queue" class="row g-2"></div></div>
   </div>
-  <div class="card"><div class="card-header"><h3 class="card-title">Preview</h3></div><div class="card-body p-3"><div id="preview-page" class="label-preview-page w-100"><div id="preview-grid" class="label-preview-grid"></div></div><div class="text-center text-secondary mt-2 small" id="preview-summary"></div></div></div>
 </div>
+</div>
+
+<div class="row row-cards d-print-none mt-1 align-items-start">
+  <div class="col-lg-8">
+    <div class="card h-100"><div class="card-header"><div><h3 class="card-title">Preview</h3><p class="card-subtitle">Click a code in the queue for a large scannable preview.</p></div></div><div class="card-body p-3"><div id="preview-page" class="label-preview-page w-100"><div id="preview-grid" class="label-preview-grid"></div></div><div class="text-center text-secondary mt-2 small" id="preview-summary"></div></div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card h-100"><div class="card-header"><div><h3 class="card-title">Print layout</h3><p class="card-subtitle">Physical label/page settings. Code type is configured in the queue.</p></div></div><div class="card-body">
+      <div class="row g-3"><div class="col-md-6 col-lg-12"><label class="form-label">Label format</label><select class="form-select" id="label-format"><option value="1:1" selected>Square 1:1</option><option value="3:2">Landscape 3:2</option><option value="2:1">Landscape 2:1</option><option value="2:3">Portrait 2:3</option></select></div><div class="col-md-6 col-lg-12"><label class="form-label">Page format</label><select class="form-select" id="label-page-format"><option value="auto">Auto / browser</option><option value="A4" selected>A4</option><option value="Letter">Letter</option></select></div></div>
+      <div class="mt-3"><label class="form-label">Presets</label><div class="btn-group w-100 flex-wrap"><button type="button" class="btn btn-outline-secondary label-preset active" data-format="1:1" data-size="35" data-gap="4" data-padding="1.5" data-margin="5" data-font="8">35×35</button><button type="button" class="btn btn-outline-secondary label-preset" data-format="1:1" data-size="50" data-gap="4" data-padding="2" data-margin="5" data-font="10">50×50</button><button type="button" class="btn btn-outline-secondary label-preset" data-format="2:1" data-size="50" data-gap="3" data-padding="2.5" data-margin="5" data-font="8">50×25</button><button type="button" class="btn btn-outline-secondary label-preset" data-format="3:2" data-size="50" data-gap="4" data-padding="2" data-margin="5" data-font="8">50×33</button></div></div>
+      <div class="row mt-1"><div class="col-12 mb-2"><label class="form-label">Width: <strong id="label-size-value">35</strong> mm</label><input type="range" class="form-range" id="label-size" min="15" max="100" step="1" value="35"></div><div class="col-6 mb-2"><label class="form-label">Gap: <strong id="label-gap-value">4</strong> mm</label><input type="range" class="form-range" id="label-gap" min="0" max="10" step="1" value="4"></div><div class="col-6 mb-2"><label class="form-label">Padding: <strong id="label-padding-value">1.5</strong> mm</label><input type="range" class="form-range" id="label-padding" min="0" max="5" step="0.5" value="1.5"></div></div>
+      <div class="row g-3"><div class="col-md-6 col-lg-12"><label class="form-label">Text size</label><select class="form-select" id="label-font-size"><option value="6">6 pt</option><option value="8" selected>8 pt</option><option value="10">10 pt</option><option value="12">12 pt</option><option value="14">14 pt</option><option value="16">16 pt</option></select></div><div class="col-md-6 col-lg-12"><label class="form-label">Page margin: <strong id="label-margin-value">5</strong> mm</label><input type="range" class="form-range" id="label-margin" min="0" max="15" step="1" value="5"></div></div>
+      <div class="row mt-3"><div class="col-6"><label class="form-check form-switch"><input class="form-check-input" type="checkbox" id="label-show-text" checked><span class="form-check-label">Show label text</span></label></div><div class="col-6"><label class="form-check form-switch"><input class="form-check-input" type="checkbox" id="label-show-border"><span class="form-check-label">Cut guides</span></label></div></div>
+    </div></div>
+  </div>
 </div>
 
 <div id="print-area" class="d-none d-print-block"><div id="print-grid" class="label-print-grid"></div></div>
 
-<div class="modal modal-blur fade" id="code-preview-modal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h3 class="modal-title" id="code-preview-title">Code preview</h3><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center"><img id="code-preview-large" alt="Large scannable code" style="max-width:100%;max-height:60vh"><div class="font-monospace small text-secondary text-break mt-3" id="code-preview-value"></div></div></div></div></div>
+<div class="modal modal-blur fade" id="code-preview-modal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h3 class="modal-title" id="code-preview-title">Code preview</h3><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center p-4"><img id="code-preview-large" alt="Large scannable code" style="width:100%;height:70vh;max-height:70vh;object-fit:contain"><div class="font-monospace small text-secondary text-break mt-3" id="code-preview-value"></div></div></div></div></div>
 
 <div class="modal modal-blur fade" id="quick-action-modal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
   <div class="modal-header"><h3 class="modal-title">Create Action</h3><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -87,4 +93,4 @@
   <div class="modal-footer"><button class="btn" type="button" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="button" id="quick-action-create"><i class="ti ti-plus icon"></i> Create & add code</button></div>
 </div></div></div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/labels-page.js?v={{ v }}"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/labels-page.js?v={{ v }}"></script><script src="/static/js/labels-polish.js?v={{ v }}"></script>{% endblock %}

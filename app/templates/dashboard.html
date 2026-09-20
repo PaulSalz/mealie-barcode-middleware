@@ -4,10 +4,9 @@
 {% block content %}
 <div class="page-header d-print-none mb-3">
   <div class="row g-2 align-items-center">
-    <div class="col"><h2 class="page-title">Dashboard <span class="text-secondary small fw-normal ms-2">v2026.09.20.3</span></h2></div>
+    <div class="col"><h2 class="page-title">Dashboard <span class="text-secondary small fw-normal ms-2">v2026.09.21.1</span></h2></div>
     <div class="col-auto btn-list">
-      <a class="btn btn-outline-primary" href="{{ mealie_url }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Mealie</a>
-      <a class="btn btn-primary" href="{{ shopping_list_url }}" target="_blank" rel="noopener"><i class="ti ti-list-check icon"></i> Default shopping list</a>
+      <a class="btn btn-primary" href="{{ mealie_url }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Mealie</a>
     </div>
   </div>
 </div>
@@ -29,9 +28,9 @@
 </div>
 
 <div class="card mb-3" id="shopping-lists-card">
-  <div class="card-header"><div><h3 class="card-title">Shopping lists</h3><p class="card-subtitle">Unchecked items currently on each Mealie list.</p></div></div>
+  <div class="card-header"><div><h3 class="card-title">Shopping lists</h3><p class="card-subtitle">Unchecked items currently on each Mealie list. Click a list to open it in Mealie.</p></div></div>
   <div class="card-body"><div class="row g-3" id="shopping-lists-status">
-    {% for list in shopping_lists_status %}<div class="col-sm-6 col-lg-3" data-shopping-list-id="{{ list.id }}"><div class="border rounded p-3 h-100"><div class="d-flex align-items-center"><span class="avatar bg-blue-lt text-blue me-3"><i class="ti ti-list-check"></i></span><div class="min-w-0"><div class="fw-medium text-truncate">{{ list.name }}{% if list.default %} <span class="badge bg-blue-lt">default</span>{% endif %}</div><div class="h2 mb-0"><span class="shopping-list-count">{{ list.count }}</span> <span class="fs-5 fw-normal text-secondary">items</span></div></div></div></div></div>{% else %}<div class="col-12 text-secondary">No shopping lists returned by Mealie.</div>{% endfor %}
+    {% for list in shopping_lists_status %}<div class="col-sm-6 col-lg-3" data-shopping-list-id="{{ list.id }}"><a href="{{ mealie_url }}/shopping-lists/{{ list.id }}" target="_blank" rel="noopener" class="border rounded p-3 h-100 d-block text-reset text-decoration-none b2m-shopping-list-link"><div class="d-flex align-items-center"><span class="avatar bg-blue-lt text-blue me-3"><i class="ti ti-list-check"></i></span><div class="min-w-0 flex-fill"><div class="fw-medium text-truncate">{{ list.name }}{% if list.default %} <span class="badge bg-blue-lt">default</span>{% endif %}</div><div class="h2 mb-0"><span class="shopping-list-count">{{ list.count }}</span> <span class="fs-5 fw-normal text-secondary">items</span></div></div><i class="ti ti-external-link text-secondary ms-2"></i></div></a></div>{% else %}<div class="col-12 text-secondary">No shopping lists returned by Mealie.</div>{% endfor %}
   </div></div>
 </div>
 

@@ -20,7 +20,7 @@ from app.templating import _localtime, _relative_time
 from app.utils import utcnow
 
 router = APIRouter()
-APP_VERSION = "2026.09.20.3"
+APP_VERSION = "2026.09.21.1"
 
 
 def _scanner_state(token: ApiToken, now=None) -> tuple[bool, bool, str]:
