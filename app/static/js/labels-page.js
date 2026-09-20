@@ -1,491 +1,329 @@
-(function () {
-    "use strict";
+(function() {
+    'use strict';
 
-    const STORAGE_KEY = "label-queue";
-    const searchInput = document.getElementById("label-item-search");
-    const searchResults = document.getElementById("label-search-results");
-    const freeTextInput = document.getElementById("label-free-text");
-    const addFreeBtn = document.getElementById("label-add-free");
-    const queueContainer = document.getElementById("label-queue");
-    const queueEmpty = document.getElementById("label-queue-empty");
-    const labelCount = document.getElementById("label-count");
-    const printBtn = document.getElementById("label-print");
-    const clearBtn = document.getElementById("label-clear");
-    const formatSelect = document.getElementById("label-format");
-    const sizeRange = document.getElementById("label-size");
-    const sizeValue = document.getElementById("label-size-value");
-    const gapRange = document.getElementById("label-gap");
-    const gapValue = document.getElementById("label-gap-value");
-    const paddingRange = document.getElementById("label-padding");
-    const paddingValue = document.getElementById("label-padding-value");
-    const marginRange = document.getElementById("label-margin");
-    const marginValue = document.getElementById("label-margin-value");
-    const pageFormatSelect = document.getElementById("label-page-format");
-    const fontSizeSelect = document.getElementById("label-font-size");
-    const showTextCheck = document.getElementById("label-show-text");
-    const showBorderCheck = document.getElementById("label-show-border");
-    const printArea = document.getElementById("print-area");
-    const printGrid = document.getElementById("print-grid");
-    const previewPage = document.getElementById("preview-page");
-    const previewGrid = document.getElementById("preview-grid");
-    const previewSummary = document.getElementById("preview-summary");
+    var queue = [];
+    var nextId = 1;
+    var $ = function(id) { return document.getElementById(id); };
 
-    // Format ratio lookup: width:height → multiplier for height = width * ratio
-    const FORMAT_RATIOS = { "1:1": 1, "3:2": 2/3, "2:1": 1/2, "2:3": 3/2 };
-    function getHeightMm(widthMm) {
-        const ratio = FORMAT_RATIOS[formatSelect.value] || 1;
-        return Math.round(widthMm * ratio);
-    }
-    function isLandscape() {
-        // Only use side-by-side layout for very wide ratios (2:1 or wider)
-        const ratio = FORMAT_RATIOS[formatSelect.value] || 1;
-        return ratio <= 0.5;
+    function esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
-    // --- Range slider live value display ---
-    sizeRange.addEventListener("input", () => { sizeValue.textContent = sizeRange.value; updatePreview(); });
-    gapRange.addEventListener("input", () => { gapValue.textContent = gapRange.value; updatePreview(); });
-    paddingRange.addEventListener("input", () => { paddingValue.textContent = paddingRange.value; updatePreview(); });
-    marginRange.addEventListener("input", () => { marginValue.textContent = marginRange.value; updatePreview(); });
-    formatSelect.addEventListener("change", updatePreview);
-    pageFormatSelect.addEventListener("change", updatePreview);
-    fontSizeSelect.addEventListener("change", updatePreview);
-    showTextCheck.addEventListener("change", updatePreview);
-    showBorderCheck.addEventListener("change", updatePreview);
-
-    // --- Preset buttons ---
-    document.querySelectorAll(".label-preset").forEach(btn => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll(".label-preset").forEach(b => b.classList.remove("active"));
-            btn.classList.add("active");
-            if (btn.dataset.format) formatSelect.value = btn.dataset.format;
-            sizeRange.value = btn.dataset.size;
-            sizeValue.textContent = btn.dataset.size;
-            gapRange.value = btn.dataset.gap;
-            gapValue.textContent = btn.dataset.gap;
-            if (btn.dataset.padding) {
-                paddingRange.value = btn.dataset.padding;
-                paddingValue.textContent = btn.dataset.padding;
-            }
-            marginRange.value = btn.dataset.margin;
-            marginValue.textContent = btn.dataset.margin;
-            fontSizeSelect.value = btn.dataset.font;
-            updatePreview();
-        });
-    });
-    // Deactivate preset active state when user manually adjusts
-    [sizeRange, gapRange, paddingRange, marginRange].forEach(el => {
-        el.addEventListener("input", () => {
-            document.querySelectorAll(".label-preset").forEach(b => b.classList.remove("active"));
-        });
-    });
-    formatSelect.addEventListener("change", () => {
-        document.querySelectorAll(".label-preset").forEach(b => b.classList.remove("active"));
-    });
-
-    // --- Queue Management (localStorage) ---
-    function getQueue() {
-        try {
-            return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-        } catch { return []; }
+    function currentSymbology() {
+        return $('label-symbology').value;
     }
 
-    function saveQueue(queue) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
-        renderQueue();
-        updatePreview();
+    function validateCode(code, kind) {
+        if (!code) return 'Code cannot be empty.';
+        if (kind === 'ean13' && !/^\d{12,13}$/.test(code)) return 'EAN-13 requires exactly 12 or 13 digits.';
+        if (kind === 'upca' && !/^\d{11,12}$/.test(code)) return 'UPC-A requires exactly 11 or 12 digits.';
+        return '';
     }
 
-    function addToQueue(text, itemId, itemName) {
-        const queue = getQueue();
-        // Avoid exact duplicates
-        if (queue.some(l => l.text === text)) return;
-        queue.push({ text, itemId: itemId || null, itemName: itemName || text, qty: 1, addedAt: Date.now() });
-        saveQueue(queue);
+    function codeUrl(entry) {
+        return '/labels/code.svg?kind=' + encodeURIComponent(entry.kind) + '&value=' + encodeURIComponent(entry.code);
     }
 
-    function removeFromQueue(text) {
-        const queue = getQueue().filter(l => l.text !== text);
-        saveQueue(queue);
-    }
-
-    function updateQty(text, delta) {
-        const queue = getQueue();
-        const item = queue.find(l => l.text === text);
-        if (item) {
-            item.qty = Math.max(1, (item.qty || 1) + delta);
-            saveQueue(queue);
+    function addEntry(entry) {
+        entry.code = String(entry.code || '').trim();
+        entry.label = String(entry.label || entry.code).trim();
+        entry.kind = entry.kind || currentSymbology();
+        entry.target_type = entry.target_type || 'custom';
+        entry.target_id = entry.target_id || '';
+        entry.target_name = entry.target_name || entry.label;
+        entry.qty = Number(entry.qty || 1);
+        var error = validateCode(entry.code, entry.kind);
+        if (error) {
+            window.alert(error + ' Choose QR or Code 128 for alphanumeric IDs.');
+            return;
         }
+        entry._id = nextId++;
+        queue.push(entry);
+        render();
     }
 
-    // --- Render Queue ---
+    function removeEntry(id) {
+        queue = queue.filter(function(entry) { return entry._id !== id; });
+        render();
+    }
+
+    function updateQty(id, delta) {
+        var entry = queue.find(function(row) { return row._id === id; });
+        if (!entry) return;
+        entry.qty = Math.max(1, Math.min(99, entry.qty + delta));
+        render();
+    }
+
+    function typeBadge(type) {
+        var labels = {food: 'Food', recipe: 'Recipe', action: 'Action', generic: 'Generic', custom: 'Custom'};
+        return labels[type] || type;
+    }
+
     function renderQueue() {
-        const queue = getQueue();
-        const totalLabels = queue.reduce((sum, l) => sum + (l.qty || 1), 0);
-        labelCount.textContent = `(${totalLabels} label${totalLabels !== 1 ? "s" : ""})`;
-        printBtn.disabled = queue.length === 0;
-        clearBtn.disabled = queue.length === 0;
-
-        if (queue.length === 0) {
-            queueEmpty.classList.remove("d-none");
-            queueContainer.innerHTML = "";
-            return;
-        }
-        queueEmpty.classList.add("d-none");
-        queueContainer.innerHTML = queue.map(label => {
-            const qty = label.qty || 1;
-            const statusHtml = label.itemId
-                ? '<span class="status-dot status-dot-animated bg-green me-1"></span><span class="small text-secondary">Linked</span>'
-                : '<span class="status-dot bg-azure me-1"></span><span class="small text-secondary">Generic</span>';
-            return `
-            <div class="col-6 col-sm-4 col-md-3">
-                <div class="card card-sm label-card${label.itemId ? ' cursor-pointer' : ''}"${label.itemId ? ` data-href="/items/${encodeURIComponent(label.itemId)}"` : ''}>
-                    <button type="button" class="btn btn-icon btn-ghost-danger label-remove" data-text="${escapeAttr(label.text)}" title="Remove">
-                        <i class="ti ti-x icon"></i>
-                    </button>
-                    <div class="card-body text-center p-2">
-                        <img src="/labels/qr.svg?text=${encodeURIComponent(label.text)}" alt="QR" class="label-qr-preview mb-1">
-                        <div class="text-truncate small">${escapeHtml(label.itemName || label.text)}</div>
-                        <div class="mt-1 d-flex align-items-center justify-content-center">${statusHtml}</div>
-                        <div class="mt-1 d-flex align-items-center justify-content-center">
-                            <div class="label-qty">
-                                <button type="button" class="label-qty-minus" data-text="${escapeAttr(label.text)}">−</button>
-                                <span>${qty}</span>
-                                <button type="button" class="label-qty-plus" data-text="${escapeAttr(label.text)}">+</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        }).join("");
-
-        // Attach remove handlers
-        queueContainer.querySelectorAll(".label-remove").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                removeFromQueue(btn.dataset.text);
+        var root = $('label-queue');
+        var empty = $('label-queue-empty');
+        root.innerHTML = '';
+        empty.classList.toggle('d-none', queue.length > 0);
+        queue.forEach(function(entry) {
+            var col = document.createElement('div');
+            col.className = 'col-md-6';
+            col.innerHTML = '<div class="card label-card h-100"><button class="btn btn-sm btn-icon btn-outline-danger label-remove" type="button" title="Remove"><i class="ti ti-x"></i></button>' +
+                '<div class="card-body d-flex gap-3 align-items-center"><img class="label-qr-preview" alt="Code preview" src="' + esc(codeUrl(entry)) + '">' +
+                '<div class="min-w-0 flex-fill"><div class="fw-bold text-truncate">' + esc(entry.label) + '</div><code class="small d-block text-truncate">' + esc(entry.code) + '</code>' +
+                '<div class="mt-2"><span class="badge bg-blue-lt me-1">' + esc(typeBadge(entry.target_type)) + '</span><span class="badge bg-muted-lt">' + esc(entry.kind.toUpperCase()) + '</span></div>' +
+                '<div class="mt-2 label-qty"><button type="button" data-delta="-1">−</button><span>' + entry.qty + '</span><button type="button" data-delta="1">+</button></div></div></div></div>';
+            col.querySelector('.label-remove').addEventListener('click', function() { removeEntry(entry._id); });
+            col.querySelectorAll('[data-delta]').forEach(function(button) {
+                button.addEventListener('click', function() { updateQty(entry._id, Number(button.dataset.delta)); });
             });
+            root.appendChild(col);
         });
-        // Attach qty handlers
-        queueContainer.querySelectorAll(".label-qty-minus").forEach(btn => {
-            btn.addEventListener("click", (e) => { e.stopPropagation(); updateQty(btn.dataset.text, -1); });
-        });
-        queueContainer.querySelectorAll(".label-qty-plus").forEach(btn => {
-            btn.addEventListener("click", (e) => { e.stopPropagation(); updateQty(btn.dataset.text, 1); });
-        });
-        // Attach card click → navigate to item
-        queueContainer.querySelectorAll(".label-card[data-href]").forEach(card => {
-            card.addEventListener("click", () => {
-                window.location.href = card.dataset.href;
-            });
-        });
+        $('label-count').textContent = '(' + queue.reduce(function(sum, e) { return sum + e.qty; }, 0) + ')';
+        $('label-clear').disabled = queue.length === 0;
+        $('label-print').disabled = queue.length === 0;
     }
 
-    // --- Item Search / Autocomplete ---
-    let searchTimeout;
-    searchInput.addEventListener("input", () => {
-        clearTimeout(searchTimeout);
-        const q = searchInput.value.trim();
-        if (q.length < 2) { searchResults.classList.remove("show"); return; }
-        searchTimeout = setTimeout(() => fetchSearch(q), 250);
-    });
+    function layout() {
+        var size = Number($('label-size').value);
+        var format = $('label-format').value;
+        var ratio = format.split(':').map(Number);
+        var height = size * ratio[1] / ratio[0];
+        return {
+            width: size,
+            height: height,
+            gap: Number($('label-gap').value),
+            padding: Number($('label-padding').value),
+            margin: Number($('label-margin').value),
+            font: Number($('label-font-size').value),
+            showText: $('label-show-text').checked,
+            border: $('label-show-border').checked,
+            landscape: ratio[0] > ratio[1]
+        };
+    }
 
-    async function fetchSearch(q) {
-        const res = await fetch(`/labels/search?q=${encodeURIComponent(q)}`);
-        if (!res.ok) return;
-        const items = await res.json();
-        if (items.length === 0) {
-            searchResults.innerHTML = '<div class="dropdown-item text-secondary">No items found</div>';
-        } else {
-            searchResults.innerHTML = items.map(item => `
-                <a href="#" class="dropdown-item search-result-item" data-id="${escapeAttr(item.id)}" data-name="${escapeAttr(item.name)}">
-                    ${escapeHtml(item.name)}
-                    <small class="text-secondary ms-1">${escapeHtml(item.source || "")}</small>
-                </a>
-            `).join("");
+    function applyVars(element, values, printMode) {
+        var p = printMode ? '--label-' : '--preview-';
+        var unit = printMode ? 'mm' : 'px';
+        var scale = printMode ? 1 : 2.2;
+        element.style.setProperty(p + 'width', (values.width * scale) + unit);
+        element.style.setProperty(p + 'height', (values.height * scale) + unit);
+        element.style.setProperty(p + 'gap', (values.gap * scale) + unit);
+        element.style.setProperty(p + 'padding', (values.padding * scale) + unit);
+        element.style.setProperty(p + 'margin', (values.margin * scale) + unit);
+        element.style.setProperty(p + 'font-size', values.font + (printMode ? 'pt' : 'px'));
+        element.style.setProperty(p + 'img-max', values.landscape ? '50%' : 'none');
+    }
+
+    function createLabelCell(entry, values, printMode) {
+        var cell = document.createElement('div');
+        cell.className = (printMode ? 'label-cell' : 'label-preview-cell') + (values.landscape ? ' landscape' : '') + (values.border ? ' has-border' : '');
+        var img = document.createElement('img');
+        img.src = codeUrl(entry);
+        img.alt = entry.code;
+        cell.appendChild(img);
+        if (values.showText) {
+            var text = document.createElement('div');
+            text.className = printMode ? 'label-text' : 'label-preview-text';
+            text.textContent = entry.label;
+            cell.appendChild(text);
         }
-        searchResults.classList.add("show");
-
-        searchResults.querySelectorAll(".search-result-item").forEach(el => {
-            el.addEventListener("click", (e) => {
-                e.preventDefault();
-                selectItem(el.dataset.id, el.dataset.name);
-            });
-        });
+        return cell;
     }
 
-    function selectItem(itemId, itemName) {
-        searchResults.classList.remove("show");
-        searchInput.value = "";
-        addToQueue(itemName, itemId, itemName);
-    }
-
-    // Close dropdown on click outside
-    document.addEventListener("click", (e) => {
-        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
-            searchResults.classList.remove("show");
-        }
-    });
-
-    // --- Free Text Add ---
-    function addFreeText() {
-        const text = freeTextInput.value.trim();
-        if (!text) return;
-        freeTextInput.value = "";
-        // Check for fuzzy matches (read-only) before adding
-        fuzzyCheckAndAdd(text);
-    }
-
-    addFreeBtn.addEventListener("click", addFreeText);
-    freeTextInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); addFreeText(); }
-    });
-
-    // --- Fuzzy Check (read-only, no mutations) ---
-    async function fuzzyCheckAndAdd(text) {
-        try {
-            const res = await fetch(`/labels/fuzzy?q=${encodeURIComponent(text)}`);
-            const data = await res.json();
-
-            if (data.candidates && data.candidates.length > 0) {
-                showFuzzyModal(text, data.candidates);
-            } else {
-                addToQueue(text, null, text);
-            }
-        } catch (err) {
-            console.error("Fuzzy check failed:", err);
-            addToQueue(text, null, text);
-        }
-    }
-
-    // --- Fuzzy Match Modal ---
-    function showFuzzyModal(text, candidates) {
-        document.getElementById("fuzzy-text").textContent = text;
-        const container = document.getElementById("fuzzy-candidates");
-        container.innerHTML = candidates.map(c => `
-            <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center fuzzy-pick" data-id="${escapeAttr(c.id)}" data-name="${escapeAttr(c.name)}">
-                ${escapeHtml(c.name)}
-                <span class="text-secondary small">${c.score}%</span>
-            </a>
-        `).join("");
-
-        container.querySelectorAll(".fuzzy-pick").forEach(el => {
-            el.addEventListener("click", (e) => {
-                e.preventDefault();
-                addToQueue(text, el.dataset.id, el.dataset.name);
-                fuzzyModalEl.querySelector("[data-bs-dismiss='modal']").click();
-            });
-        });
-
-        // Show modal — also allow skip (just adds without mapping)
-        const fuzzyModalEl = document.getElementById("modal-fuzzy");
-        fuzzyModalEl.addEventListener("hidden.bs.modal", function handler() {
-            fuzzyModalEl.removeEventListener("hidden.bs.modal", handler);
-            if (!getQueue().some(l => l.text === text)) {
-                addToQueue(text, null, text);
+    function renderPreview() {
+        var values = layout();
+        var preview = $('preview-grid');
+        preview.innerHTML = '';
+        applyVars(preview, values, false);
+        var total = 0;
+        queue.forEach(function(entry) {
+            for (var n = 0; n < entry.qty; n++) {
+                preview.appendChild(createLabelCell(entry, values, false));
+                total++;
             }
         });
-        document.getElementById("fuzzy-modal-trigger").click();
+        if (!queue.length) preview.innerHTML = '<div class="label-preview-empty text-center text-secondary py-5">Add a code to preview it.</div>';
+        $('preview-summary').textContent = total ? total + ' label' + (total === 1 ? '' : 's') + ' · ' + values.width + '×' + Math.round(values.height * 10) / 10 + ' mm' : '';
     }
 
-    // --- Register & Print ---
-    printBtn.addEventListener("click", async () => {
-        const queue = getQueue();
-        if (queue.length === 0) return;
-
-        // Batch-register all labels
-        printBtn.disabled = true;
-        printBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Registering…';
-        try {
-            const payload = queue.map(l => ({ text: l.text, item_id: l.itemId || null }));
-            await fetch("/labels/register", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ labels: payload }),
-            });
-        } catch (err) {
-            console.error("Batch registration failed:", err);
+    function renderPrint() {
+        var values = layout();
+        var grid = $('print-grid');
+        grid.innerHTML = '';
+        applyVars(grid, values, true);
+        queue.forEach(function(entry) {
+            for (var n = 0; n < entry.qty; n++) grid.appendChild(createLabelCell(entry, values, true));
+        });
+        var style = $('dynamic-print-style');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'dynamic-print-style';
+            document.head.appendChild(style);
         }
-        printBtn.innerHTML = '<i class="ti ti-printer icon"></i> Register &amp; Print';
-        printBtn.disabled = false;
+        style.textContent = '@media print { @page { margin: ' + values.margin + 'mm; } }';
+    }
 
-        const sizeMm = sizeRange.value + "mm";
-        const heightMm = getHeightMm(parseInt(sizeRange.value)) + "mm";
-        const gapMm = gapRange.value + "mm";
-        const fontSize = fontSizeSelect.value + "pt";
-        const showText = showTextCheck.checked;
-        const pageFormat = pageFormatSelect.value;
-        const landscape = isLandscape();
+    function render() {
+        renderQueue();
+        renderPreview();
+    }
 
-        // Set CSS variables for print
-        printGrid.style.setProperty("--label-width", sizeMm);
-        printGrid.style.setProperty("--label-height", heightMm);
-        printGrid.style.setProperty("--label-gap", gapMm);
-        printGrid.style.setProperty("--label-padding", paddingRange.value + "mm");
-        printGrid.style.setProperty("--label-font-size", fontSize);
+    function switchPane(type) {
+        document.querySelectorAll('[data-code-type]').forEach(function(button) { button.classList.toggle('active', button.dataset.codeType === type); });
+        document.querySelectorAll('.generator-pane').forEach(function(pane) { pane.classList.toggle('d-none', pane.dataset.pane !== type); });
+    }
 
-        // Cap image size for consistent QR sizing in print
-        const paddingMmVal = parseFloat(paddingRange.value);
-        if (showText && !landscape) {
-            const sizeVal = getHeightMm(parseInt(sizeRange.value));
-            const fontPt = parseInt(fontSizeSelect.value);
-            const fontMm = fontPt * 0.353; // 1pt ≈ 0.353mm
-            const gapBetween = paddingMmVal / 2; // QR-to-text gap = half padding
-            const textReserveMm = 2.4 * fontMm + gapBetween;
-            const imgMaxMm = sizeVal - 2 * paddingMmVal - textReserveMm;
-            printGrid.style.setProperty("--label-img-max", Math.max(0, imgMaxMm.toFixed(1)) + "mm");
-        } else if (landscape && showText) {
-            const hVal = getHeightMm(parseInt(sizeRange.value));
-            const imgMaxMm = hVal - 2 * paddingMmVal;
-            printGrid.style.setProperty("--label-img-max", Math.max(0, imgMaxMm.toFixed(1)) + "mm");
-        } else {
-            printGrid.style.removeProperty("--label-img-max");
-        }
+    function debounce(fn, wait) {
+        var timer;
+        return function() {
+            var args = arguments;
+            clearTimeout(timer);
+            timer = setTimeout(function() { fn.apply(null, args); }, wait);
+        };
+    }
 
-        // Inject @page rule for page format and margin
-        let pageStyle = document.getElementById("label-page-style");
-        if (!pageStyle) {
-            pageStyle = document.createElement("style");
-            pageStyle.id = "label-page-style";
-            document.head.appendChild(pageStyle);
-        }
-        const pageMargin = marginRange.value + "mm";
-        if (pageFormat === "auto") {
-            pageStyle.textContent = `@page { margin: ${pageMargin}; }`;
-        } else {
-            pageStyle.textContent = `@page { size: ${pageFormat}; margin: ${pageMargin}; }`;
-        }
+    async function fetchJson(url) {
+        var response = await fetch(url, {headers: {'Accept': 'application/json'}});
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+    }
 
-        // Build grid cells — repeat per qty
-        const showBorder = showBorderCheck.checked;
-        const layoutClass = landscape ? " landscape" : "";
-        printGrid.innerHTML = queue.map(label => {
-            const qty = label.qty || 1;
-            const cell = `<div class="label-cell${showBorder ? ' has-border' : ''}${layoutClass}">
-                <img src="/labels/qr.svg?text=${encodeURIComponent(label.text)}" alt="${escapeAttr(label.text)}">
-                ${showText ? `<span class="label-text">${escapeHtml(label.itemName || label.text)}</span>` : ""}
-            </div>`;
-            return cell.repeat(qty);
-        }).join("");
-
-        // Small delay to let images load, then print
-        setTimeout(() => window.print(), 300);
-    });
-
-    // --- Preview ---
-    function updatePreview() {
-        const queue = getQueue();
-        const widthMm = parseInt(sizeRange.value);
-        const heightMm = getHeightMm(widthMm);
-        const gapMm = parseInt(gapRange.value);
-        const marginMm = parseInt(marginRange.value);
-        const showText = showTextCheck.checked;
-        const pageFormat = pageFormatSelect.value;
-        const landscape = isLandscape();
-
-        // Page dimensions in mm
-        let pageW = 210, pageH = 297; // A4 default
-        if (pageFormat === "Letter") { pageW = 216; pageH = 279; }
-
-        // Scale: fit the preview container width
-        const containerWidth = previewPage.clientWidth || 400;
-        const scale = containerWidth / pageW;
-
-        // Set landscape class on page
-        previewPage.classList.remove("landscape");
-
-        // Compute columns and rows that fit
-        const printableW = pageW - 2 * marginMm;
-        const printableH = pageH - 2 * marginMm;
-        const cols = Math.max(1, Math.floor((printableW + gapMm) / (widthMm + gapMm)));
-        const rows = Math.max(1, Math.floor((printableH + gapMm) / (heightMm + gapMm)));
-        const perPage = cols * rows;
-
-        // Set CSS variables for preview (in px)
-        const previewWidth = Math.round(widthMm * scale);
-        const previewHeight = Math.round(heightMm * scale);
-        const previewGap = Math.round(gapMm * scale);
-        const previewMargin = Math.round(marginMm * scale);
-        const previewFontSize = Math.round(parseInt(fontSizeSelect.value) * scale * 0.4);
-
-        previewGrid.style.setProperty("--preview-width", previewWidth + "px");
-        previewGrid.style.setProperty("--preview-height", previewHeight + "px");
-        previewGrid.style.setProperty("--preview-gap", previewGap + "px");
-        previewGrid.style.setProperty("--preview-margin", previewMargin + "px");
-        previewGrid.style.setProperty("--preview-font-size", Math.max(5, previewFontSize) + "px");
-
-        // Padding in px (from mm slider, scaled)
-        const paddingMmVal = parseFloat(paddingRange.value);
-        const previewPadding = Math.max(2, Math.round(paddingMmVal * scale));
-        previewGrid.style.setProperty("--preview-padding", previewPadding + "px");
-
-        // Cap image size for consistent QR sizing
-        if (showText && !landscape) {
-            const actualFontSize = Math.max(5, previewFontSize);
-            const gapBetween = previewPadding / 2; // QR-to-text gap = half padding
-            const textReserve = 2.4 * actualFontSize + gapBetween;
-            const imgMax = previewHeight - 2 * previewPadding - textReserve;
-            previewGrid.style.setProperty("--preview-img-max", Math.max(0, Math.round(imgMax)) + "px");
-        } else if (landscape && showText) {
-            const imgMax = previewHeight - 2 * previewPadding;
-            previewGrid.style.setProperty("--preview-img-max", Math.max(0, Math.round(imgMax)) + "px");
-        } else {
-            previewGrid.style.removeProperty("--preview-img-max");
-        }
-
-        // Total labels (with copies)
-        const totalLabels = queue.reduce((sum, l) => sum + (l.qty || 1), 0);
-        const pages = Math.max(1, Math.ceil(totalLabels / perPage));
-
-        // Build cells
-        if (totalLabels === 0) {
-            previewGrid.innerHTML = '<div class="label-preview-empty text-center text-secondary py-4">Add labels to see preview</div>';
-            previewSummary.textContent = "";
+    function renderSearchResults(root, rows, onSelect, emptyText) {
+        root.innerHTML = '';
+        if (!rows.length) {
+            root.innerHTML = '<div class="list-group-item text-secondary">' + esc(emptyText || 'No matches') + '</div>';
             return;
         }
-
-        let cells = "";
-        const borderClass = showBorderCheck.checked ? " has-border" : "";
-        const layoutClass = landscape ? " landscape" : "";
-        queue.forEach(label => {
-            const qty = label.qty || 1;
-            const cell = `<div class="label-preview-cell${borderClass}${layoutClass}">
-                <img src="/labels/qr.svg?text=${encodeURIComponent(label.text)}" alt="">
-                ${showText ? `<span class="label-preview-text">${escapeHtml(label.itemName || label.text)}</span>` : ""}
-            </div>`;
-            cells += cell.repeat(qty);
+        rows.forEach(function(row) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+            button.innerHTML = '<span>' + esc(row.name) + '</span>' + (row.id ? '<code class="small ms-2">' + esc(row.id) + '</code>' : '');
+            button.addEventListener('click', function() { onSelect(row); });
+            root.appendChild(button);
         });
-        previewGrid.innerHTML = cells;
-
-        // Summary
-        previewSummary.textContent = `${cols} × ${rows} — ${totalLabels} label${totalLabels !== 1 ? "s" : ""} (${widthMm}×${heightMm}mm)${pages > 1 ? ` — ${pages} pages` : ""}`;
     }
 
-    // Update preview when switching to preview tab
-    document.querySelector('[href="#tab-preview"]').addEventListener("shown.bs.tab", updatePreview);
+    var searchFood = debounce(async function(value) {
+        var root = $('generator-food-results');
+        if (!value.trim()) { root.innerHTML = ''; return; }
+        try {
+            var rows = await fetchJson('/labels/search?q=' + encodeURIComponent(value));
+            renderSearchResults(root, rows, function(row) {
+                addEntry({code: 'FOOD:' + row.id, label: row.name, target_type: 'food', target_id: row.id, target_name: row.name});
+            });
+        } catch (e) { root.innerHTML = '<div class="text-danger">Search failed</div>'; }
+    }, 220);
 
-    // --- Clear All ---
-    clearBtn.addEventListener("click", () => {
-        window.showConfirm("Remove all labels from the queue?", "", () => {
-            localStorage.removeItem(STORAGE_KEY);
-            renderQueue();
-            updatePreview();
-        }, "Clear");
+    var searchRecipe = debounce(async function(value) {
+        var root = $('generator-recipe-results');
+        if (!value.trim()) { root.innerHTML = ''; return; }
+        try {
+            var rows = await fetchJson('/recipes-search?q=' + encodeURIComponent(value));
+            renderSearchResults(root, rows, function(row) {
+                addEntry({code: 'RECIPE:' + row.id, label: row.name, target_type: 'recipe', target_id: row.id, target_name: row.name});
+            }, 'No matching Mealie recipes');
+        } catch (e) { root.innerHTML = '<div class="text-danger">Recipe search failed</div>'; }
+    }, 220);
+
+    var searchAction = debounce(async function(value) {
+        var root = $('generator-action-results');
+        try {
+            var rows = await fetchJson('/labels/actions-search?q=' + encodeURIComponent(value || ''));
+            renderSearchResults(root, rows, function(row) {
+                addEntry({code: row.code, label: row.name, target_type: 'action', target_id: row.id, target_name: row.name});
+            }, 'No matching actions');
+        } catch (e) { root.innerHTML = '<div class="text-danger">Action search failed</div>'; }
+    }, 180);
+
+    async function registerAndPrint() {
+        if (!queue.length) return;
+        var button = $('label-print');
+        button.disabled = true;
+        try {
+            var response = await fetch('/labels/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify({labels: queue.map(function(entry) {
+                    return {
+                        code: entry.code,
+                        label: entry.label,
+                        symbology: entry.kind,
+                        target_type: entry.target_type,
+                        target_id: entry.target_id,
+                        target_name: entry.target_name
+                    };
+                })})
+            });
+            var data = await response.json();
+            if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+            if (data.errors && data.errors.length) {
+                window.alert('Registered with warnings:\n' + data.errors.join('\n'));
+            }
+            renderPrint();
+            window.print();
+        } catch (error) {
+            window.alert('Could not register labels: ' + error.message);
+        } finally {
+            button.disabled = queue.length === 0;
+        }
+    }
+
+    document.querySelectorAll('[data-code-type]').forEach(function(button) { button.addEventListener('click', function() { switchPane(button.dataset.codeType); }); });
+    $('generic-add').addEventListener('click', function() {
+        var text = $('generic-text').value.trim();
+        if (text) addEntry({code: 'GENERIC:' + text, label: text, target_type: 'generic'});
+    });
+    document.querySelectorAll('.generic-example').forEach(function(button) { button.addEventListener('click', function() { addEntry({code: 'GENERIC:' + button.dataset.value, label: button.dataset.value, target_type: 'generic'}); }); });
+    $('custom-add').addEventListener('click', function() {
+        var code = $('custom-code').value.trim();
+        if (code) addEntry({code: code, label: $('custom-label').value.trim() || code, target_type: 'custom'});
+    });
+    $('generator-food-search').addEventListener('input', function() { searchFood(this.value); });
+    $('generator-recipe-search').addEventListener('input', function() { searchRecipe(this.value); });
+    $('generator-action-search').addEventListener('input', function() { searchAction(this.value); });
+    $('generator-action-search').addEventListener('focus', function() { searchAction(this.value); });
+    document.querySelectorAll('.recipe-example').forEach(function(button) { button.addEventListener('click', function() { $('generator-recipe-search').value = button.dataset.value; searchRecipe(button.dataset.value); switchPane('recipe'); }); });
+
+    document.querySelectorAll('.label-preset').forEach(function(button) {
+        button.addEventListener('click', function() {
+            document.querySelectorAll('.label-preset').forEach(function(b) { b.classList.remove('active'); });
+            button.classList.add('active');
+            $('label-format').value = button.dataset.format;
+            $('label-size').value = button.dataset.size;
+            $('label-gap').value = button.dataset.gap;
+            $('label-padding').value = button.dataset.padding;
+            $('label-margin').value = button.dataset.margin;
+            $('label-font-size').value = button.dataset.font;
+            updateSettingLabels();
+            renderPreview();
+        });
     });
 
-    // --- Helpers ---
-    function escapeHtml(str) {
-        const div = document.createElement("div");
-        div.textContent = str;
-        return div.innerHTML;
+    function updateSettingLabels() {
+        $('label-size-value').textContent = $('label-size').value;
+        $('label-gap-value').textContent = $('label-gap').value;
+        $('label-padding-value').textContent = $('label-padding').value;
+        $('label-margin-value').textContent = $('label-margin').value;
     }
 
-    function escapeAttr(str) {
-        return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    }
+    ['label-size','label-gap','label-padding','label-margin','label-font-size','label-format','label-show-text','label-show-border'].forEach(function(id) {
+        $(id).addEventListener('input', function() { updateSettingLabels(); renderPreview(); });
+        $(id).addEventListener('change', function() { updateSettingLabels(); renderPreview(); });
+    });
 
-    // --- Init ---
-    renderQueue();
-    updatePreview();
+    $('label-clear').addEventListener('click', function() { queue = []; render(); });
+    $('label-print').addEventListener('click', registerAndPrint);
+
+    var prefillRaw = $('generator-prefill').dataset.prefill;
+    if (prefillRaw && prefillRaw !== 'null') {
+        try {
+            var prefill = JSON.parse(prefillRaw);
+            if (prefill) addEntry(prefill);
+        } catch (e) { console.warn('Invalid generator prefill', e); }
+    }
+    updateSettingLabels();
+    render();
 })();

@@ -17,10 +17,15 @@ def should_send_scan_webhook(result: str, needs_action: bool = False) -> bool:
     if mode == "all":
         return True
     if mode == "actionable":
-        return needs_action or result in {"unknown", "needs_mapping", "added_as_note", "error", "auto_mapped"}
-    # Default: unknown/unlinked/failed only. A known product that had to be added
-    # as a plain note is still unresolved and should therefore notify.
-    return result in {"unknown", "needs_mapping", "added_as_note", "error", "retry_failed", "broken"}
+        return needs_action or result in {
+            "unknown", "unknown_action", "needs_mapping", "added_as_note", "error",
+            "action_disabled", "auto_mapped",
+        }
+    # Default: unresolved/unlinked/failed only. Successful action scans remain quiet.
+    return result in {
+        "unknown", "unknown_action", "needs_mapping", "added_as_note", "error",
+        "action_disabled", "retry_failed", "broken",
+    }
 
 
 def notify_scan(
@@ -108,10 +113,7 @@ def dismiss_notification(barcode: str, result: str | None = None) -> None:
     if result is None or not should_send_scan_webhook(result, needs_action=True):
         return
 
-    payload = {
-        "action": "clear",
-        "barcode": barcode,
-    }
+    payload = {"action": "clear", "barcode": barcode}
 
     try:
         resp = httpx.post(url, json=payload, timeout=3)

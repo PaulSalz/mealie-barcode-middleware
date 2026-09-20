@@ -8,7 +8,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.events import scan_events
 from app.models import BarcodeMapping, Item, Activity, RetryQueue
-from app.services.mealie import sync_items
+from app.services.mealie_extras import sync_items_enhanced
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ def _run_item_sync():
     logger.info("Running scheduled item sync")
     db = SessionLocal()
     try:
-        sync_items(db)
+        sync_items_enhanced(db)
     except Exception as e:
         logger.error(f"Scheduled item sync failed: {e}")
     finally:
@@ -116,7 +116,6 @@ def _create_retry_failed_activity(item: RetryQueue, db):
         result="retry_failed",
     ))
 
-    # Emit real-time SSE event so open browsers get a toast + browser notification
     scan_events.publish_threadsafe("scan", {
         "barcode": item.barcode,
         "result": "retry_failed",
@@ -125,18 +124,22 @@ def _create_retry_failed_activity(item: RetryQueue, db):
 
 
 def _purge_old_activities():
-    """Delete read activity entries older than 7 days."""
+    """Delete old read notification activities while preserving scan history used by statistics."""
     db = SessionLocal()
     try:
         cutoff = utcnow() - timedelta(days=7)
         deleted = (
             db.query(Activity)
-            .filter(Activity.is_read == True, Activity.created_at < cutoff)
+            .filter(
+                Activity.is_read == True,
+                Activity.is_scan_event == False,
+                Activity.created_at < cutoff,
+            )
             .delete()
         )
         db.commit()
         if deleted:
-            logger.info(f"Purged {deleted} old read activities")
+            logger.info(f"Purged {deleted} old read notification activities")
     except Exception as e:
         logger.error(f"Activity purge failed: {e}")
     finally:
@@ -145,13 +148,12 @@ def _purge_old_activities():
 
 def start_scheduler():
     """Start the APScheduler with item sync and retry queue jobs."""
-    # Run initial sync if no items exist yet (first run)
     db = SessionLocal()
     try:
         if db.query(Item).first() is None:
             logger.info("No items found — running initial Mealie sync")
             try:
-                sync_items(db)
+                sync_items_enhanced(db)
             except Exception as e:
                 logger.warning(f"Initial sync failed (will retry on schedule): {e}")
     finally:

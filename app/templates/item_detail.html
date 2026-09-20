@@ -4,101 +4,48 @@
 {% block content %}
 <div class="page-header d-print-none mb-3">
     <div class="row g-2 align-items-center">
-        <div class="col">
-            <div class="page-pretitle">{% if item.source == 'mealie' %}Synced from Mealie{% else %}Manual item{% endif %}</div>
-            <h2 class="page-title">{{ item.name }}</h2>
-        </div>
-        {% if item.source == 'manual' %}
-        <div class="col-auto">
-            <form method="post" action="/items/{{ item.id }}/delete" data-confirm="Delete &quot;{{ item.name }}&quot;?" data-confirm-detail="This item and all its barcode mappings will be permanently removed.">
-                <button type="submit" class="btn btn-outline-danger"><i class="ti ti-trash icon"></i> Delete Item</button>
-            </form>
-        </div>
-        {% endif %}
+        <div class="col"><div class="page-pretitle">{% if item.source == 'mealie' %}Synced from Mealie{% else %}Manual item{% endif %}</div><h2 class="page-title">{{ item.name }}</h2></div>
+        <div class="col-auto btn-list"><a class="btn btn-outline-primary" href="/labels?food={{ item.id|urlencode }}"><i class="ti ti-qrcode icon"></i> Create code / label</a>{% if item.source == 'manual' %}<form method="post" action="/items/{{ item.id }}/delete" data-confirm="Delete &quot;{{ item.name }}&quot;?"><button type="submit" class="btn btn-outline-danger"><i class="ti ti-trash icon"></i> Delete Item</button></form>{% endif %}</div>
     </div>
 </div>
 
-{% if saved %}<div class="alert alert-success"><i class="ti ti-check icon"></i> Food updated in Mealie.</div>{% endif %}
+{% if saved %}<div class="alert alert-success"><i class="ti ti-check icon"></i> Food updated in Mealie. Open shopping-list entries are refreshed in the background.</div>{% endif %}
 {% if edit_error %}<div class="alert alert-danger"><i class="ti ti-alert-triangle icon"></i> Food could not be updated. Check the Mealie permissions/logs or whether that name already exists.</div>{% endif %}
 
-{% if item.source == 'mealie' and mealie_food %}
-<div class="card mb-3">
-    <div class="card-header"><div><h3 class="card-title">Edit Food</h3><p class="card-subtitle">Changes are written directly to Mealie and then reflected in all barcode mappings.</p></div></div>
-    <form method="post" action="/items/{{ item.id }}/edit">
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label">Name</label>
-                    <input class="form-control" name="name" required value="{{ mealie_food.name or item.name }}">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Plural name</label>
-                    <input class="form-control" name="plural_name" value="{{ mealie_food.pluralName or '' }}">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Category / label</label>
-                    <select class="form-select" name="label_id">
-                        <option value="">No label</option>
-                        {% for label in labels %}
-                        <option value="{{ label.id }}" {{ 'selected' if mealie_food.labelId == label.id }}>{{ label.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-12">
-                    <label class="form-label">Description</label>
-                    <textarea class="form-control" name="description" rows="3">{{ mealie_food.description or '' }}</textarea>
-                </div>
-            </div>
-        </div>
-        <div class="card-footer text-end"><button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Save in Mealie</button></div>
-    </form>
+<div class="row row-cards mb-3">
+    <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="row align-items-center"><div class="col-auto"><span class="bg-primary text-white avatar"><i class="ti ti-scan"></i></span></div><div class="col"><div class="font-weight-medium">{{ stats.total }} scans</div><div class="text-secondary">All recorded</div></div></div></div></div></div>
+    <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="row align-items-center"><div class="col-auto"><span class="bg-green text-white avatar"><i class="ti ti-calendar-week"></i></span></div><div class="col"><div class="font-weight-medium">{{ stats.days_7 }} scans</div><div class="text-secondary">Last 7 days</div></div></div></div></div></div>
+    <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="row align-items-center"><div class="col-auto"><span class="bg-blue text-white avatar"><i class="ti ti-calendar-month"></i></span></div><div class="col"><div class="font-weight-medium">{{ stats.days_30 }} scans</div><div class="text-secondary">Last 30 days</div></div></div></div></div></div>
+    <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="row align-items-center"><div class="col-auto"><span class="bg-purple text-white avatar"><i class="ti ti-clock"></i></span></div><div class="col"><div class="font-weight-medium">{{ stats.last_scan|localtime if stats.last_scan else 'Never' }}</div><div class="text-secondary">Last scan</div></div></div></div></div></div>
 </div>
+
+{% if item.source == 'mealie' and mealie_food %}
+<div class="card mb-3"><div class="card-header"><div><h3 class="card-title">Edit Food</h3><p class="card-subtitle">Changes are written directly to Mealie and open shopping-list entries are refreshed afterward.</p></div></div>
+<form method="post" action="/items/{{ item.id }}/edit"><div class="card-body"><div class="row g-3">
+<div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="name" required value="{{ mealie_food.name or item.name }}"></div>
+<div class="col-md-6"><label class="form-label">Plural name</label><input class="form-control" name="plural_name" value="{{ mealie_food.pluralName or '' }}"></div>
+<div class="col-md-6"><label class="form-label">Category / label</label><select class="form-select" name="label_id"><option value="">No label</option>{% for label in labels %}<option value="{{ label.id }}" {{ 'selected' if current_label_id == label.id }}>{{ label.name }}</option>{% endfor %}</select></div>
+<div class="col-12"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="3">{{ mealie_food.description or '' }}</textarea></div>
+</div></div><div class="card-footer text-end"><button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Save in Mealie</button></div></form></div>
 {% endif %}
 
-<div class="card mb-3">
-    <div class="card-header"><h3 class="card-title">Details</h3></div>
-    <div class="card-body">
-        <div class="datagrid">
-            <div class="datagrid-item"><div class="datagrid-title">ID</div><div class="datagrid-content"><code>{{ item.id }}</code></div></div>
-            <div class="datagrid-item"><div class="datagrid-title">Name</div><div class="datagrid-content">{{ item.name }}</div></div>
-            <div class="datagrid-item"><div class="datagrid-title">Source</div><div class="datagrid-content">{% if item.source == 'mealie' %}<span class="badge bg-blue text-blue-fg">Mealie</span>{% else %}<span class="badge bg-purple text-purple-fg">Custom</span>{% endif %}</div></div>
-            <div class="datagrid-item">
-                <div class="datagrid-title">Aliases</div>
-                <div class="datagrid-content">
-                    {% set alias_list = item.aliases | default('[]') | fromjson %}
-                    {% if alias_list %}{% for a in alias_list %}<span class="badge bg-muted-lt me-1">{{ a }}</span>{% endfor %}{% else %}<span class="text-secondary">None</span>{% endif %}
-                </div>
-            </div>
-            {% if item.synced_at %}<div class="datagrid-item"><div class="datagrid-title">Last Synced</div><div class="datagrid-content">{{ item.synced_at|localtime }}</div></div>{% endif %}
-        </div>
-    </div>
+<div class="row row-cards mb-3">
+<div class="col-lg-7"><div class="card h-100"><div class="card-header"><h3 class="card-title">Details</h3></div><div class="card-body"><div class="datagrid">
+<div class="datagrid-item"><div class="datagrid-title">ID</div><div class="datagrid-content"><code>{{ item.id }}</code></div></div>
+<div class="datagrid-item"><div class="datagrid-title">Name</div><div class="datagrid-content">{{ item.name }}</div></div>
+<div class="datagrid-item"><div class="datagrid-title">Category</div><div class="datagrid-content">{{ item.label_name or '—' }}</div></div>
+<div class="datagrid-item"><div class="datagrid-title">Source</div><div class="datagrid-content">{% if item.source == 'mealie' %}<span class="badge bg-blue text-blue-fg">Mealie</span>{% else %}<span class="badge bg-purple text-purple-fg">Custom</span>{% endif %}</div></div>
+<div class="datagrid-item"><div class="datagrid-title">Aliases</div><div class="datagrid-content">{% set alias_list = item.aliases | default('[]') | fromjson %}{% if alias_list %}{% for a in alias_list %}<span class="badge bg-muted-lt me-1">{{ a }}</span>{% endfor %}{% else %}<span class="text-secondary">None</span>{% endif %}</div></div>
+{% if item.updated_at %}<div class="datagrid-item"><div class="datagrid-title">Last Updated</div><div class="datagrid-content">{{ item.updated_at|localtime }}</div></div>{% endif %}
+{% if item.synced_at %}<div class="datagrid-item"><div class="datagrid-title">Last Synced</div><div class="datagrid-content">{{ item.synced_at|localtime }}</div></div>{% endif %}
+</div></div></div></div>
+<div class="col-lg-5"><div class="card h-100"><div class="card-header"><h3 class="card-title">Scans by barcode</h3></div><div class="list-group list-group-flush">{% for barcode, count in stats.by_barcode %}<a class="list-group-item list-group-item-action d-flex justify-content-between" href="/barcodes/{{ barcode|urlencode }}"><code>{{ barcode }}</code><span class="badge bg-primary text-primary-fg">{{ count }}</span></a>{% else %}<div class="list-group-item text-secondary">No scan history yet.</div>{% endfor %}</div></div></div>
 </div>
 
-<div class="card">
-    <div class="card-header"><h3 class="card-title">Linked Barcodes</h3></div>
-    <div class="table-responsive">
-        <table class="table table-vcenter card-table">
-            <thead><tr><th>Barcode</th><th>Title</th><th>Source</th><th>Default</th><th>Link</th><th>Action</th></tr></thead>
-            <tbody>
-                {% for entry in mapped_items %}
-                <tr>
-                    <td><a href="/barcodes/{{ entry.mapping.barcode|urlencode }}">{{ entry.mapping.barcode }}</a></td>
-                    <td>{{ entry.barcode.title if entry.barcode else '—' }}</td>
-                    <td>{{ entry.barcode.source if entry.barcode else '—' }}</td>
-                    <td>{{ entry.mapping.quantity or 1 }}{% if entry.mapping.unit_id %} · unit {{ entry.mapping.unit_id }}{% endif %}</td>
-                    <td>
-                        {% if entry.mapping.mapped_by == 'auto' %}<span class="badge bg-yellow text-yellow-fg">Auto</span>
-                        {% elif entry.mapping.mapped_by == 'manual' %}<span class="badge bg-blue text-blue-fg">Manual</span>
-                        {% elif entry.mapping.mapped_by == 'generic' %}<span class="badge bg-purple text-purple-fg">Generic</span>
-                        {% elif entry.mapping.mapped_by == 'auto_confirmed' %}<span class="badge bg-green text-green-fg">Confirmed</span>
-                        {% else %}<span class="badge bg-secondary">{{ entry.mapping.mapped_by }}</span>{% endif %}
-                    </td>
-                    <td><form method="post" action="/items/{{ item.id }}/remove-mapping/{{ entry.mapping.barcode }}"><button type="submit" class="btn btn-sm btn-outline-danger"><i class="ti ti-unlink icon"></i> Unlink</button></form></td>
-                </tr>
-                {% endfor %}
-                {% if not mapped_items %}<tr><td colspan="6" class="text-center text-secondary">No barcodes linked to this item</td></tr>{% endif %}
-            </tbody>
-        </table>
-    </div>
-</div>
+<div class="card mb-3"><div class="card-header"><h3 class="card-title">Recent scans</h3></div><div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>Time</th><th>Barcode</th><th>Result</th><th>Quantity snapshot</th></tr></thead><tbody>{% for scan in stats.recent %}<tr><td>{{ scan.created_at|localtime }}</td><td><a href="/barcodes/{{ scan.barcode|urlencode }}"><code>{{ scan.barcode }}</code></a></td><td>{{ scan.result }}</td><td>{{ scan.quantity_snapshot if scan.quantity_snapshot is not none else '—' }}</td></tr>{% else %}<tr><td colspan="4" class="text-center text-secondary">No scan history yet. New scans after this update are tracked with target snapshots.</td></tr>{% endfor %}</tbody></table></div></div>
+
+<div class="card"><div class="card-header"><h3 class="card-title">Linked Barcodes</h3></div><div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>Barcode</th><th>Title</th><th>Source</th><th>Default</th><th>Link</th><th>Action</th></tr></thead><tbody>
+{% for entry in mapped_items %}<tr><td><a href="/barcodes/{{ entry.mapping.barcode|urlencode }}">{{ entry.mapping.barcode }}</a></td><td>{{ entry.barcode.display_title if entry.barcode else '—' }}</td><td>{{ entry.barcode.source if entry.barcode else '—' }}</td><td>{{ entry.mapping.quantity or 1 }}{% if entry.mapping.unit_id %} · unit {{ entry.mapping.unit_id }}{% endif %}</td><td>{% if entry.mapping.mapped_by == 'auto' %}<span class="badge bg-yellow text-yellow-fg">Auto</span>{% elif entry.mapping.mapped_by == 'manual' %}<span class="badge bg-blue text-blue-fg">Manual</span>{% elif entry.mapping.mapped_by == 'generic' %}<span class="badge bg-purple text-purple-fg">Generic</span>{% elif entry.mapping.mapped_by == 'auto_confirmed' %}<span class="badge bg-green text-green-fg">Confirmed</span>{% else %}<span class="badge bg-secondary">{{ entry.mapping.mapped_by }}</span>{% endif %}</td><td><form method="post" action="/items/{{ item.id }}/remove-mapping/{{ entry.mapping.barcode }}"><button type="submit" class="btn btn-sm btn-outline-danger"><i class="ti ti-unlink icon"></i> Unlink</button></form></td></tr>{% endfor %}
+{% if not mapped_items %}<tr><td colspan="6" class="text-center text-secondary">No barcodes linked to this item</td></tr>{% endif %}
+</tbody></table></div></div>
 {% endblock %}

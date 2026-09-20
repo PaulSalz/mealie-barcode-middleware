@@ -8,15 +8,23 @@
     }
 
     function formatValue(value) {
-        var rounded = Math.round(value * 1000000) / 1000000;
+        var rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
         return String(rounded);
     }
 
     function setValue(input, value) {
-        var min = Number.parseFloat(input.dataset.min || '0.000001');
-        if (!Number.isFinite(min)) min = 0.000001;
+        var min = Number.parseFloat(input.dataset.min || '0.001');
+        if (!Number.isFinite(min)) min = 0.001;
         input.value = formatValue(Math.max(value, min));
         input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function normalizeInput(input) {
+        var raw = String(input.value || '').trim();
+        if (!raw) return;
+        var value = Number.parseFloat(raw.replace(',', '.'));
+        if (!Number.isFinite(value)) return;
+        setValue(input, value);
     }
 
     function step(input, delta) {
@@ -45,9 +53,7 @@
         });
 
         input.addEventListener('blur', function() {
-            var raw = String(input.value || '').trim();
-            if (!raw) return;
-            input.value = raw.replace(',', '.');
+            normalizeInput(input);
         });
 
         input.addEventListener('paste', function(event) {
@@ -56,6 +62,7 @@
             event.preventDefault();
             var normalized = text.replace(',', '.');
             input.setRangeText(normalized, input.selectionStart || 0, input.selectionEnd || 0, 'end');
+            setTimeout(function() { normalizeInput(input); }, 0);
         });
     });
 })();

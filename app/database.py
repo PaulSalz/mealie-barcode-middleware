@@ -29,22 +29,22 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 
 
-def _migrate():
-    """Small idempotent SQLite migrations.
+def _add_column_if_missing(table: str, column: str, sql_type: str, columns: set[str]) -> None:
+    if column in columns:
+        return
+    with engine.begin() as conn:
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}"))
+    columns.add(column)
 
-    Barcode mappings changed from a Food-only foreign key to typed external
-    Mealie targets. The old mapping table is intentionally discarded because
-    there is no safe Recipe/Food inference for legacy rows. Other data remains
-    untouched; a full /data volume reset is also supported for clean installs.
-    """
+
+def _migrate():
+    """Small idempotent SQLite migrations without resetting user data."""
     insp = inspect(engine)
     tables = insp.get_table_names()
 
     if "api_tokens" in tables:
         columns = {c["name"] for c in insp.get_columns("api_tokens")}
-        if "token_prefix" not in columns:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE api_tokens ADD COLUMN token_prefix VARCHAR(8)"))
+        _add_column_if_missing("api_tokens", "token_prefix", "VARCHAR(8)", columns)
 
     if "notifications" in tables and "activities" not in tables:
         with engine.begin() as conn:
@@ -58,15 +58,33 @@ def _migrate():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE activities ADD COLUMN is_dismissed BOOLEAN DEFAULT 0"))
                 conn.execute(text("UPDATE activities SET is_dismissed = 1 WHERE is_read = 1"))
-        if "is_scan_event" not in columns:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE activities ADD COLUMN is_scan_event BOOLEAN DEFAULT 0"))
+            columns.add("is_dismissed")
+        _add_column_if_missing("activities", "is_scan_event", "BOOLEAN DEFAULT 0", columns)
+        _add_column_if_missing("activities", "target_type", "VARCHAR", columns)
+        _add_column_if_missing("activities", "target_id", "VARCHAR", columns)
+        _add_column_if_missing("activities", "target_name", "VARCHAR", columns)
+        _add_column_if_missing("activities", "quantity_snapshot", "FLOAT", columns)
+        _add_column_if_missing("activities", "unit_id_snapshot", "VARCHAR", columns)
+        _add_column_if_missing("activities", "recipe_scale_snapshot", "FLOAT", columns)
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_activities_is_scan_event ON activities (is_scan_event)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_activities_target_id ON activities (target_id)"))
 
     if "barcode_cache" in tables:
         columns = {c["name"] for c in insp.get_columns("barcode_cache")}
-        if "shopping_item_id" not in columns:
+        _add_column_if_missing("barcode_cache", "shopping_item_id", "VARCHAR", columns)
+        _add_column_if_missing("barcode_cache", "custom_title", "VARCHAR", columns)
+        _add_column_if_missing("barcode_cache", "custom_brand", "VARCHAR", columns)
+
+    if "items" in tables:
+        columns = {c["name"] for c in insp.get_columns("items")}
+        _add_column_if_missing("items", "label_id", "VARCHAR", columns)
+        _add_column_if_missing("items", "label_name", "VARCHAR", columns)
+        if "updated_at" not in columns:
             with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE barcode_cache ADD COLUMN shopping_item_id VARCHAR"))
+                conn.execute(text("ALTER TABLE items ADD COLUMN updated_at DATETIME"))
+                conn.execute(text("UPDATE items SET updated_at = COALESCE(synced_at, created_at) WHERE updated_at IS NULL"))
+            columns.add("updated_at")
 
     if "barcode_mappings" in tables:
         columns = {c["name"] for c in insp.get_columns("barcode_mappings")}

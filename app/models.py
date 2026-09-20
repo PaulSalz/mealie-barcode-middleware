@@ -15,7 +15,10 @@ class Item(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     source: Mapped[str] = mapped_column(String, nullable=False)  # mealie | manual
     aliases: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    label_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    label_name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
@@ -26,12 +29,22 @@ class BarcodeCache(Base):
     source: Mapped[str | None] = mapped_column(String, nullable=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     brand: Mapped[str | None] = mapped_column(String, nullable=True)
+    custom_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    custom_brand: Mapped[str | None] = mapped_column(String, nullable=True)
     quantity: Mapped[str | None] = mapped_column(String, nullable=True)
     product_type: Mapped[str | None] = mapped_column(String, nullable=True)
     found: Mapped[bool] = mapped_column(Boolean, default=False)
     shopping_item_id: Mapped[str | None] = mapped_column(String, nullable=True)
     lookup_attempted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    @property
+    def display_title(self) -> str | None:
+        return self.custom_title or self.title
+
+    @property
+    def display_brand(self) -> str | None:
+        return self.custom_brand or self.brand
 
 
 class BarcodeMapping(Base):
@@ -82,7 +95,55 @@ class Activity(Base):
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
     is_scan_event: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    target_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    target_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    quantity_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit_id_snapshot: Mapped[str | None] = mapped_column(String, nullable=True)
+    recipe_scale_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Action(Base):
+    __tablename__ = "actions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    aliases_json: Mapped[str] = mapped_column(Text, default="[]")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    action_type: Mapped[str] = mapped_column(String, default="webhook")
+    webhook_url: Mapped[str] = mapped_column(String, nullable=False)
+    method: Mapped[str] = mapped_column(String, default="POST")
+    headers_json: Mapped[str] = mapped_column(Text, default="{}")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    parameters_json: Mapped[str] = mapped_column(Text, default="{}")
+    connect_timeout: Mapped[float] = mapped_column(Float, default=2.0)
+    read_timeout: Mapped[float] = mapped_column(Float, default=5.0)
+    write_timeout: Mapped[float] = mapped_column(Float, default=5.0)
+    pool_timeout: Mapped[float] = mapped_column(Float, default=2.0)
+    retries: Mapped[int] = mapped_column(Integer, default=0)
+    retry_delay: Mapped[float] = mapped_column(Float, default=0.5)
+    backoff_factor: Mapped[float] = mapped_column(Float, default=2.0)
+    retry_policy: Mapped[str] = mapped_column(String, default="network")
+    cooldown_seconds: Mapped[float] = mapped_column(Float, default=2.0)
+    execution_mode: Mapped[str] = mapped_column(String, default="async")
+    respect_pause: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ActionExecution(Base):
+    __tablename__ = "action_executions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    action_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    barcode: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class SettingsOverride(Base):
