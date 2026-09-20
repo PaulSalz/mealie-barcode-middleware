@@ -8,6 +8,10 @@ on:
 jobs:
   syntax-smoke:
     runs-on: ubuntu-latest
+    env:
+      MEALIE_URL: http://127.0.0.1:9000
+      MEALIE_API_KEY: ci-test-key
+      MEALIE_SHOPPING_LIST_ID: 00000000-0000-4000-8000-000000000001
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
