@@ -33,6 +33,17 @@ jobs:
           import app.routers.scan
           print('imports ok')
           PY
+      - name: Parse Jinja templates
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from jinja2 import Environment, FileSystemLoader
+          root = Path('app/templates')
+          env = Environment(loader=FileSystemLoader(str(root)))
+          for path in sorted(root.glob('*.html')):
+              env.get_template(path.name)
+              print('parsed', path.name)
+          PY
       - name: Check JavaScript syntax
         run: |
           node --check app/static/js/action-page.js
