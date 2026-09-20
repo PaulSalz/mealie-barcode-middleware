@@ -17,6 +17,9 @@ class Item(Base):
     aliases: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
     label_id: Mapped[str | None] = mapped_column(String, nullable=True)
     label_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # default | mealie | homeassistant | both | none
+    shopping_route: Mapped[str] = mapped_column(String, nullable=False, default="default")
+    shopping_list_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -58,6 +61,8 @@ class BarcodeMapping(Base):
     quantity: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     unit_id: Mapped[str | None] = mapped_column(String, nullable=True)
     recipe_scale: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    # Mainly used for recipe mappings. Food mappings normally inherit the Item route/list.
+    shopping_list_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     mapped_by: Mapped[str] = mapped_column(String, default="manual")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -71,6 +76,17 @@ class ApiToken(Base):
     token_hash: Mapped[str] = mapped_column(String, nullable=False)
     token_prefix: Mapped[str | None] = mapped_column(String(8), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    # Optional telemetry reported by the USB scanner bridge. Phone/app tokens leave these NULL.
+    scanner_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    scanner_hostname: Mapped[str | None] = mapped_column(String, nullable=True)
+    scanner_device: Mapped[str | None] = mapped_column(String, nullable=True)
+    scanner_layout: Mapped[str | None] = mapped_column(String, nullable=True)
+    scanner_last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    scanner_uptime_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scanner_total_scans: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scanner_errors: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scanner_last_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class RetryQueue(Base):
