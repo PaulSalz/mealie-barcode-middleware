@@ -138,6 +138,53 @@ _NIIM_FIELDS = {
 }
 
 
+def _validated_niim_settings(body: dict) -> dict[str, str]:
+    values = {
+        field: str(body.get(field) if body.get(field) is not None else "").strip()
+        for field in _NIIM_FIELDS if field in body
+    }
+    url = values.get("url")
+    if url and not url.startswith(("http://", "https://")):
+        raise ValueError("niimblue-node URL must start with http:// or https://")
+    transport = values.get("transport")
+    if transport and transport not in {"ble", "serial"}:
+        raise ValueError("Transport must be ble or serial")
+    direction = values.get("print_direction")
+    if direction and direction not in {"top", "left", "right", "bottom"}:
+        raise ValueError("Print direction must be top, left, right or bottom")
+
+    integer_ranges = {
+        "density": (1, 5),
+        "label_type": (1, 20),
+        "dpi": (100, 1200),
+    }
+    float_ranges = {
+        "max_label_width_mm": (1.0, 100.0),
+        "timeout": (1.0, 120.0),
+    }
+    for field, (minimum, maximum) in integer_ranges.items():
+        if field not in values or values[field] == "":
+            continue
+        try:
+            parsed = int(values[field])
+        except ValueError as exc:
+            raise ValueError(f"{field} must be an integer") from exc
+        if not minimum <= parsed <= maximum:
+            raise ValueError(f"{field} must be between {minimum} and {maximum}")
+        values[field] = str(parsed)
+    for field, (minimum, maximum) in float_ranges.items():
+        if field not in values or values[field] == "":
+            continue
+        try:
+            parsed = float(values[field].replace(",", "."))
+        except ValueError as exc:
+            raise ValueError(f"{field} must be a number") from exc
+        if not minimum <= parsed <= maximum:
+            raise ValueError(f"{field} must be between {minimum:g} and {maximum:g}")
+        values[field] = f"{parsed:g}"
+    return values
+
+
 @router.get("/api/settings/niim")
 def niim_settings(request: Request):
     if not request.session.get("is_admin", False):
@@ -153,11 +200,14 @@ async def save_niim_settings(request: Request, db: Session = Depends(get_db)):
     if not request.session.get("is_admin", False):
         return JSONResponse({"error": "admin required"}, status_code=403)
     body = await request.json()
-    for field in _NIIM_FIELDS:
-        if field not in body:
-            continue
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
+    try:
+        values = _validated_niim_settings(body)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    for field, value in values.items():
         key = f"niimblue.{field}"
-        value = str(body.get(field) if body.get(field) is not None else "").strip()
         row = db.get(SystemState, key)
         if row:
             row.value = value
