@@ -18,7 +18,11 @@ def recipe_detail(request: Request, recipe_id: str):
             {"message": "Recipe not found in Mealie"},
             status_code=404,
         )
+    recipe = normalize_recipe(raw)
+    mealie_url = settings.mealie_url.rstrip("/")
+    recipe_url = f"{mealie_url}/g/home/r/{recipe['slug']}" if recipe.get("slug") else mealie_url
     return templates.TemplateResponse(request, "recipe_detail.html", {
-        "recipe": normalize_recipe(raw),
-        "mealie_url": settings.mealie_url.rstrip("/"),
+        "recipe": recipe,
+        "mealie_url": mealie_url,
+        "mealie_recipe_url": recipe_url,
     })
