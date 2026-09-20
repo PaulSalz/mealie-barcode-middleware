@@ -6,11 +6,12 @@ window._activitiesTable = initAdvancedTable({
     defaultSort: 'sort-time',
     defaultAsc: false,
     numericCols: ['sort-time'],
-    emptyRowClass: 'activity-empty-row'
+    emptyRowClass: 'activity-empty-row',
+    storageKey: 'b2m-activity-table-v1:' + (new URLSearchParams(window.location.search).get('result') || 'all')
 });
-// Make rows clickable
 document.querySelectorAll('#activity-table tr[data-href]').forEach(function(row) {
-    row.addEventListener('click', function() {
+    row.addEventListener('click', function(event) {
+        if (event.target.closest('input, button, a')) return;
         window.location.href = this.dataset.href;
     });
 });

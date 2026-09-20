@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """USB HID barcode scanner bridge for Mealie Barcode Middleware.
 
-The bridge deliberately knows nothing about FOOD:, RECIPE:, GENERIC:, ACTION:,
-etc. It only decodes the HID keyboard stream into a full string and POSTs it
-to /scan. Business logic stays in the middleware.
+HID reading, immediate scan acknowledgements and the potentially slow /scan request
+run independently. This keeps burst scans lossless even when Mealie responds slowly.
 """
 
 import glob
 import json
 import logging
 import os
+import queue
 import socket
 import threading
 import time
@@ -18,11 +18,13 @@ import urllib.request
 
 from evdev import InputDevice, ecodes
 
-SCANNER_VERSION = "2.2.1"
+SCANNER_VERSION = "2.3.0"
 STARTED_MONO = time.monotonic()
 _stats_lock = threading.Lock()
 _stats = {"scans": 0, "errors": 0, "last_latency_ms": 0}
 _runtime = {"device": "disconnected", "layout": "de"}
+_scan_queue: queue.Queue[str] | None = None
+_ack_queue: queue.Queue[str] | None = None
 
 logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
@@ -37,44 +39,23 @@ AUTO_DEVICE_GLOBS = (
 )
 
 US_NORMAL = {
-    "KEY_1": "1", "KEY_2": "2", "KEY_3": "3", "KEY_4": "4", "KEY_5": "5",
-    "KEY_6": "6", "KEY_7": "7", "KEY_8": "8", "KEY_9": "9", "KEY_0": "0",
-    "KEY_MINUS": "-", "KEY_EQUAL": "=", "KEY_LEFTBRACE": "[", "KEY_RIGHTBRACE": "]",
-    "KEY_BACKSLASH": "\\", "KEY_SEMICOLON": ";", "KEY_APOSTROPHE": "'", "KEY_GRAVE": "`",
-    "KEY_COMMA": ",", "KEY_DOT": ".", "KEY_SLASH": "/", "KEY_SPACE": " ",
+    "KEY_1":"1","KEY_2":"2","KEY_3":"3","KEY_4":"4","KEY_5":"5","KEY_6":"6","KEY_7":"7","KEY_8":"8","KEY_9":"9","KEY_0":"0",
+    "KEY_MINUS":"-","KEY_EQUAL":"=","KEY_LEFTBRACE":"[","KEY_RIGHTBRACE":"]","KEY_BACKSLASH":"\\","KEY_SEMICOLON":";","KEY_APOSTROPHE":"'","KEY_GRAVE":"`","KEY_COMMA":",","KEY_DOT":".","KEY_SLASH":"/","KEY_SPACE":" ",
 }
 US_SHIFT = {
-    "KEY_1": "!", "KEY_2": "@", "KEY_3": "#", "KEY_4": "$", "KEY_5": "%",
-    "KEY_6": "^", "KEY_7": "&", "KEY_8": "*", "KEY_9": "(", "KEY_0": ")",
-    "KEY_MINUS": "_", "KEY_EQUAL": "+", "KEY_LEFTBRACE": "{", "KEY_RIGHTBRACE": "}",
-    "KEY_BACKSLASH": "|", "KEY_SEMICOLON": ":", "KEY_APOSTROPHE": '"', "KEY_GRAVE": "~",
-    "KEY_COMMA": "<", "KEY_DOT": ">", "KEY_SLASH": "?", "KEY_SPACE": " ",
+    "KEY_1":"!","KEY_2":"@","KEY_3":"#","KEY_4":"$","KEY_5":"%","KEY_6":"^","KEY_7":"&","KEY_8":"*","KEY_9":"(","KEY_0":")",
+    "KEY_MINUS":"_","KEY_EQUAL":"+","KEY_LEFTBRACE":"{","KEY_RIGHTBRACE":"}","KEY_BACKSLASH":"|","KEY_SEMICOLON":":","KEY_APOSTROPHE":"\"","KEY_GRAVE":"~","KEY_COMMA":"<","KEY_DOT":">","KEY_SLASH":"?","KEY_SPACE":" ",
 }
-
 DE_NORMAL = {
-    "KEY_1": "1", "KEY_2": "2", "KEY_3": "3", "KEY_4": "4", "KEY_5": "5",
-    "KEY_6": "6", "KEY_7": "7", "KEY_8": "8", "KEY_9": "9", "KEY_0": "0",
-    "KEY_MINUS": "ß", "KEY_EQUAL": "´", "KEY_LEFTBRACE": "ü", "KEY_RIGHTBRACE": "+",
-    "KEY_BACKSLASH": "#", "KEY_SEMICOLON": "ö", "KEY_APOSTROPHE": "ä", "KEY_GRAVE": "^",
-    "KEY_COMMA": ",", "KEY_DOT": ".", "KEY_SLASH": "-", "KEY_SPACE": " ",
+    "KEY_1":"1","KEY_2":"2","KEY_3":"3","KEY_4":"4","KEY_5":"5","KEY_6":"6","KEY_7":"7","KEY_8":"8","KEY_9":"9","KEY_0":"0",
+    "KEY_MINUS":"ß","KEY_EQUAL":"´","KEY_LEFTBRACE":"ü","KEY_RIGHTBRACE":"+","KEY_BACKSLASH":"#","KEY_SEMICOLON":"ö","KEY_APOSTROPHE":"ä","KEY_GRAVE":"^","KEY_COMMA":",","KEY_DOT":".","KEY_SLASH":"-","KEY_SPACE":" ",
 }
 DE_SHIFT = {
-    "KEY_1": "!", "KEY_2": '"', "KEY_3": "§", "KEY_4": "$", "KEY_5": "%",
-    "KEY_6": "&", "KEY_7": "/", "KEY_8": "(", "KEY_9": ")", "KEY_0": "=",
-    "KEY_MINUS": "?", "KEY_EQUAL": "`", "KEY_LEFTBRACE": "Ü", "KEY_RIGHTBRACE": "*",
-    "KEY_BACKSLASH": "'", "KEY_SEMICOLON": "Ö", "KEY_APOSTROPHE": "Ä", "KEY_GRAVE": "°",
-    "KEY_COMMA": ";", "KEY_DOT": ":", "KEY_SLASH": "_", "KEY_SPACE": " ",
+    "KEY_1":"!","KEY_2":"\"","KEY_3":"§","KEY_4":"$","KEY_5":"%","KEY_6":"&","KEY_7":"/","KEY_8":"(","KEY_9":")","KEY_0":"=",
+    "KEY_MINUS":"?","KEY_EQUAL":"`","KEY_LEFTBRACE":"Ü","KEY_RIGHTBRACE":"*","KEY_BACKSLASH":"'","KEY_SEMICOLON":"Ö","KEY_APOSTROPHE":"Ä","KEY_GRAVE":"°","KEY_COMMA":";","KEY_DOT":":","KEY_SLASH":"_","KEY_SPACE":" ",
 }
-DE_ALTGR = {
-    "KEY_Q": "@", "KEY_E": "€", "KEY_7": "{", "KEY_8": "[", "KEY_9": "]",
-    "KEY_0": "}", "KEY_MINUS": "\\", "KEY_RIGHTBRACE": "~",
-}
-
-KEYPAD = {
-    "KEY_KP0": "0", "KEY_KP1": "1", "KEY_KP2": "2", "KEY_KP3": "3", "KEY_KP4": "4",
-    "KEY_KP5": "5", "KEY_KP6": "6", "KEY_KP7": "7", "KEY_KP8": "8", "KEY_KP9": "9",
-    "KEY_KPDOT": ".", "KEY_KPSLASH": "/", "KEY_KPASTERISK": "*", "KEY_KPMINUS": "-", "KEY_KPPLUS": "+",
-}
+DE_ALTGR = {"KEY_Q":"@","KEY_E":"€","KEY_7":"{","KEY_8":"[","KEY_9":"]","KEY_0":"}","KEY_MINUS":"\\","KEY_RIGHTBRACE":"~"}
+KEYPAD = {"KEY_KP0":"0","KEY_KP1":"1","KEY_KP2":"2","KEY_KP3":"3","KEY_KP4":"4","KEY_KP5":"5","KEY_KP6":"6","KEY_KP7":"7","KEY_KP8":"8","KEY_KP9":"9","KEY_KPDOT":".","KEY_KPSLASH":"/","KEY_KPASTERISK":"*","KEY_KPMINUS":"-","KEY_KPPLUS":"+"}
 
 for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
     US_NORMAL[f"KEY_{letter}"] = letter.lower()
@@ -100,17 +81,23 @@ def scan_url() -> str:
     explicit = _env("SCAN_URL", "MIDDLEWARE_SCAN_URL")
     if explicit:
         return explicit.rstrip("/")
-    base = _env("MIDDLEWARE_URL", default="http://127.0.0.1:9930") or "http://127.0.0.1:9930"
-    base = base.rstrip("/")
+    base = (_env("MIDDLEWARE_URL", default="http://127.0.0.1:9930") or "http://127.0.0.1:9930").rstrip("/")
     return base if base.endswith("/scan") else base + "/scan"
+
+
+def middleware_base_url() -> str:
+    url = scan_url()
+    return url[:-5] if url.endswith("/scan") else url.rstrip("/")
 
 
 def heartbeat_url() -> str:
     explicit = _env("SCANNER_HEARTBEAT_URL")
-    if explicit:
-        return explicit.rstrip("/")
-    url = scan_url()
-    return url[:-5] + "/scanner/heartbeat" if url.endswith("/scan") else url.rstrip("/") + "/scanner/heartbeat"
+    return explicit.rstrip("/") if explicit else middleware_base_url() + "/scanner/heartbeat"
+
+
+def received_url() -> str:
+    explicit = _env("SCANNER_RECEIVED_URL")
+    return explicit.rstrip("/") if explicit else middleware_base_url() + "/scanner/received"
 
 
 def api_token() -> str:
@@ -124,38 +111,28 @@ def telemetry_headers() -> dict[str, str]:
     with _stats_lock:
         stats = dict(_stats)
     return {
-        "Authorization": "Bearer " + api_token(),
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "X-B2M-Scanner-Version": SCANNER_VERSION,
-        "X-B2M-Scanner-Hostname": socket.gethostname(),
-        "X-B2M-Scanner-Device": _runtime["device"],
-        "X-B2M-Scanner-Layout": _runtime["layout"],
-        "X-B2M-Scanner-Uptime": str(int(time.monotonic() - STARTED_MONO)),
-        "X-B2M-Scanner-Scans": str(stats["scans"]),
-        "X-B2M-Scanner-Errors": str(stats["errors"]),
-        "X-B2M-Scanner-Last-Latency": str(stats["last_latency_ms"]),
+        "Authorization": "Bearer " + api_token(), "Content-Type": "application/json", "Accept": "application/json",
+        "X-B2M-Scanner-Version": SCANNER_VERSION, "X-B2M-Scanner-Hostname": socket.gethostname(),
+        "X-B2M-Scanner-Device": _runtime["device"], "X-B2M-Scanner-Layout": _runtime["layout"],
+        "X-B2M-Scanner-Uptime": str(int(time.monotonic() - STARTED_MONO)), "X-B2M-Scanner-Scans": str(stats["scans"]),
+        "X-B2M-Scanner-Errors": str(stats["errors"]), "X-B2M-Scanner-Last-Latency": str(stats["last_latency_ms"]),
     }
 
 
-def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | None = None) -> bool:
+def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | None = None, timeout_override: float | None = None) -> bool:
     if count_scan:
         with _stats_lock:
             _stats["scans"] += 1
-    timeout = float(_env("HTTP_TIMEOUT", default="8") or "8")
+    timeout = timeout_override if timeout_override is not None else float(_env("HTTP_TIMEOUT", default="8") or "8")
     started = time.monotonic()
     try:
-        request = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            method="POST",
-            headers=telemetry_headers(),
-        )
+        request = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST", headers=telemetry_headers())
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8", "replace")
             elapsed = int((time.monotonic() - started) * 1000)
-            with _stats_lock:
-                _stats["last_latency_ms"] = elapsed
+            if count_scan:
+                with _stats_lock:
+                    _stats["last_latency_ms"] = elapsed
             if log_scan is not None:
                 log.info("scan=%r HTTP %d in %d ms response=%s", log_scan, response.status, elapsed, body[:300])
             return True
@@ -167,7 +144,7 @@ def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | 
         if log_scan is not None:
             log.error("scan=%r HTTP %d response=%s", log_scan, exc.code, body[:500])
         else:
-            log.debug("heartbeat HTTP %d response=%s", exc.code, body[:200])
+            log.debug("auxiliary POST HTTP %d response=%s", exc.code, body[:200])
     except Exception:
         if count_scan:
             with _stats_lock:
@@ -175,7 +152,7 @@ def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | 
         if log_scan is not None:
             log.exception("scan=%r POST failed", log_scan)
         else:
-            log.debug("scanner heartbeat failed", exc_info=True)
+            log.debug("scanner auxiliary POST failed", exc_info=True)
     return False
 
 
@@ -183,9 +160,45 @@ def post_barcode(barcode: str) -> None:
     _post(scan_url(), {"barcode": barcode}, count_scan=True, log_scan=barcode)
 
 
+def _enqueue_barcode(barcode: str) -> None:
+    if _scan_queue is None or _ack_queue is None:
+        raise RuntimeError("scanner queues are not initialized")
+    try:
+        _scan_queue.put_nowait(barcode)
+        try:
+            _ack_queue.put_nowait(barcode)
+        except queue.Full:
+            log.warning("Immediate acknowledgement queue full for scan=%r", barcode)
+        log.info("scan=%r queued (pending=%d)", barcode, _scan_queue.qsize())
+    except queue.Full:
+        with _stats_lock:
+            _stats["errors"] += 1
+        log.error("Dropping scan because delivery queue is full: %r", barcode)
+
+
+def ack_sender_loop() -> None:
+    if _ack_queue is None:
+        raise RuntimeError("ack queue is not initialized")
+    while True:
+        barcode = _ack_queue.get()
+        try:
+            _post(received_url(), {"barcode": barcode}, timeout_override=1.5)
+        finally:
+            _ack_queue.task_done()
+
+
+def scan_sender_loop() -> None:
+    if _scan_queue is None:
+        raise RuntimeError("scan queue is not initialized")
+    while True:
+        barcode = _scan_queue.get()
+        try:
+            post_barcode(barcode)
+        finally:
+            _scan_queue.task_done()
+
+
 def heartbeat_loop(interval: float) -> None:
-    # Heartbeats deliberately continue while the USB scanner is unplugged so the
-    # middleware can distinguish a running bridge from a dead service.
     while True:
         _post(heartbeat_url(), {}, count_scan=False)
         time.sleep(interval)
@@ -204,26 +217,23 @@ def decode_key(key_name: str, shifted: bool, altgr: bool, layout: str) -> str | 
 
 
 def resolve_device_path(device_spec: str) -> str | None:
-    """Resolve an explicit device path or auto-discover the Jieli HID scanner."""
     spec = (device_spec or "auto").strip()
     if spec.lower() != "auto":
         return spec if os.path.exists(spec) else None
-
     candidates: list[str] = []
     if os.path.exists(DEFAULT_DEVICE):
         candidates.append(DEFAULT_DEVICE)
     for pattern in AUTO_DEVICE_GLOBS:
         candidates.extend(glob.glob(pattern))
-
     unique = sorted(dict.fromkeys(path for path in candidates if os.path.exists(path)))
     return unique[0] if unique else None
 
 
-def _read_device(device: InputDevice, layout: str, min_length: int, max_length: int) -> None:
+def _read_device(device: InputDevice, layout: str, min_length: int, max_length: int, max_key_gap: float) -> None:
     buffer: list[str] = []
     shift_down = False
     altgr_down = False
-
+    last_char_at = 0.0
     for event in device.read_loop():
         if event.type != ecodes.EV_KEY:
             continue
@@ -231,7 +241,6 @@ def _read_device(device: InputDevice, layout: str, min_length: int, max_length: 
         if isinstance(key_name, list):
             key_name = key_name[0] if key_name else ""
         key_name = str(key_name)
-
         if key_name in SHIFT_KEYS:
             shift_down = event.value != 0
             continue
@@ -240,59 +249,58 @@ def _read_device(device: InputDevice, layout: str, min_length: int, max_length: 
             continue
         if event.value != 1:
             continue
-
         if key_name in ENTER_KEYS:
             value = "".join(buffer).strip()
-            buffer.clear()
+            buffer.clear(); last_char_at = 0.0
             if len(value) < min_length:
                 if value:
-                    log.warning("Ignoring too-short scan: %r", value)
+                    log.warning("Ignoring too-short scan (%d < %d chars): %r", len(value), min_length, value)
                 continue
             if len(value) > max_length:
                 log.warning("Ignoring too-long scan (%d chars)", len(value))
                 continue
-            post_barcode(value)
+            _enqueue_barcode(value)
             continue
-
         if key_name == "KEY_BACKSPACE":
             if buffer:
                 buffer.pop()
             continue
         if key_name == "KEY_ESC":
-            buffer.clear()
+            buffer.clear(); last_char_at = 0.0
             continue
-
         char = decode_key(key_name, shift_down, altgr_down, layout)
         if char is not None and len(buffer) < max_length:
-            buffer.append(char)
+            now = time.monotonic()
+            if buffer and last_char_at and now - last_char_at > max_key_gap:
+                log.warning("Discarding stale partial scan after %.0f ms gap: %r", (now - last_char_at) * 1000, "".join(buffer))
+                buffer.clear()
+            buffer.append(char); last_char_at = now
         elif char is None:
             log.debug("Unhandled HID key: %s", key_name)
 
 
 def main() -> int:
+    global _scan_queue, _ack_queue
     device_spec = _env("SCANNER_DEVICE", "BARCODE_DEVICE", default="auto") or "auto"
-    min_length = int(_env("MIN_BARCODE_LENGTH", default="1") or "1")
+    min_length = int(_env("MIN_BARCODE_LENGTH", default="4") or "4")
     max_length = int(_env("MAX_BARCODE_LENGTH", default="256") or "256")
     layout = (_env("SCANNER_KEYBOARD_LAYOUT", default="de") or "de").strip().lower()
     heartbeat_interval = float(_env("HEARTBEAT_INTERVAL", default="60") or "60")
     reconnect_interval = max(0.5, float(_env("SCANNER_RECONNECT_INTERVAL", default="2") or "2"))
+    queue_size = max(8, int(_env("SCAN_QUEUE_SIZE", default="128") or "128"))
+    max_key_gap = max(0.05, float(_env("SCAN_KEY_GAP_SECONDS", default="0.4") or "0.4"))
     if layout not in {"de", "us"}:
         raise RuntimeError("SCANNER_KEYBOARD_LAYOUT must be 'de' or 'us'")
-
-    # Validate the token up front. Missing scanner hardware is tolerated; missing
-    # authentication is a real configuration error and should still fail loudly.
     api_token()
     _runtime["layout"] = layout
     _runtime["device"] = "disconnected"
-
-    log.info(
-        "Scanner bridge v%s starting, device=%s, layout=%s, posting to %s",
-        SCANNER_VERSION, device_spec, layout, scan_url(),
-    )
-
+    _scan_queue = queue.Queue(maxsize=queue_size)
+    _ack_queue = queue.Queue(maxsize=queue_size)
+    log.info("Scanner bridge v%s starting, device=%s, layout=%s, min_length=%d, queue=%d, posting to %s", SCANNER_VERSION, device_spec, layout, min_length, queue_size, scan_url())
+    threading.Thread(target=ack_sender_loop, daemon=True, name="scan-ack").start()
+    threading.Thread(target=scan_sender_loop, daemon=True, name="scan-sender").start()
     if heartbeat_interval > 0:
-        threading.Thread(target=heartbeat_loop, args=(max(15.0, heartbeat_interval),), daemon=True).start()
-
+        threading.Thread(target=heartbeat_loop, args=(max(15.0, heartbeat_interval),), daemon=True, name="heartbeat").start()
     waiting_logged = False
     while True:
         device_path = resolve_device_path(device_spec)
@@ -301,19 +309,14 @@ def main() -> int:
             if not waiting_logged:
                 log.warning("Scanner not connected; waiting for USB device (device=%s)", device_spec)
                 waiting_logged = True
-            time.sleep(reconnect_interval)
-            continue
-
+            time.sleep(reconnect_interval); continue
         device = None
         try:
             device = InputDevice(device_path)
             _runtime["device"] = device_path
             waiting_logged = False
-            log.info(
-                "Scanner connected on %s (%s), layout=%s",
-                device_path, device.name, layout,
-            )
-            _read_device(device, layout, min_length, max_length)
+            log.info("Scanner connected on %s (%s), layout=%s", device_path, device.name, layout)
+            _read_device(device, layout, min_length, max_length, max_key_gap)
             log.warning("Scanner device %s closed; waiting for reconnect", device_path)
         except (FileNotFoundError, OSError) as exc:
             _runtime["device"] = "disconnected"
@@ -327,7 +330,6 @@ def main() -> int:
                     device.close()
                 except Exception:
                     pass
-
         time.sleep(reconnect_interval)
 
 

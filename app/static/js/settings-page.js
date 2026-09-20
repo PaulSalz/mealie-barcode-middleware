@@ -1,11 +1,18 @@
 /** Settings page client behavior. */
 
-// Render the Mealie shopping-list card immediately. enhancements.js registers its
-// older implementation for DOMContentLoaded; creating the same card id here makes
-// that path a no-op and avoids the visible late insertion.
+(function prewarmMealieShoppingLists() {
+    'use strict';
+    if (window.location.pathname !== '/settings') return;
+    var key = 'b2m-shopping-lists-cache-v1';
+    fetch('/api/shopping-lists?force=true', {headers: {'Accept': 'application/json'}})
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) { if (data && Array.isArray(data.items)) localStorage.setItem(key, JSON.stringify(data)); })
+        .catch(function() {});
+})();
+
 (function renderMealieShoppingListsEarly() {
     'use strict';
-    if (window.location.pathname !== '/settings' || new URLSearchParams(window.location.search).get('tab') !== 'mealie') return;
+    if (window.location.pathname !== '/settings' || (new URLSearchParams(window.location.search).get('tab') || 'mealie') !== 'mealie') return;
 
     var CACHE_KEY = 'b2m-shopping-lists-cache-v1';
     var body = document.querySelector('.col-12.col-md-9 .card-body');
@@ -31,19 +38,14 @@
     var result = document.getElementById('mealie-runtime-result');
     var saveButton = document.getElementById('save-default-shopping-list');
 
-    function cachedData() {
-        try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch (e) { return null; }
-    }
-    function saveCache(data) {
-        try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (e) {}
-    }
+    function cachedData() { try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch (e) { return null; } }
+    function saveCache(data) { try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (e) {} }
     function render(data, source) {
         var rows = (data && data.items) || [];
         var defaultId = String((data && data.default_id) || '');
         if (!rows.length) {
             select.innerHTML = '<option value="">No shopping lists available</option>';
-            select.disabled = true;
-            saveButton.disabled = true;
+            select.disabled = true; saveButton.disabled = true;
             badge.innerHTML = '<span class="badge bg-yellow-lt text-yellow">No lists</span>';
             return;
         }
@@ -51,12 +53,11 @@
             var isDefault = String(row.id) === defaultId || !!row.default;
             return '<option value="' + esc(row.id) + '"' + (isDefault ? ' selected' : '') + '>' + esc(row.name) + (isDefault ? ' · default' : '') + '</option>';
         }).join('');
-        select.disabled = false;
-        saveButton.disabled = false;
+        select.disabled = false; saveButton.disabled = false;
         var current = rows.find(function(row) { return String(row.id) === String(select.value); });
         var name = current ? current.name : select.options[select.selectedIndex].text.replace(/ · default$/, '');
         badge.innerHTML = '<span class="badge bg-blue-lt text-blue"><i class="ti ti-star me-1"></i>Default: ' + esc(name) + '</span>';
-        state.textContent = source === 'cache' ? 'Showing cached lists; refreshing from Mealie in the background…' : 'Lists synchronized with Mealie.';
+        state.textContent = source === 'cache' ? 'Cached lists shown immediately; checking Mealie in the background…' : 'Lists synchronized with Mealie.';
     }
 
     var cached = cachedData();
@@ -88,9 +89,8 @@
             if (!response.ok) throw new Error(data.error || 'Save failed');
             result.className = 'form-hint text-success'; result.textContent = 'Default shopping list saved.';
             await loadLists(false);
-        } catch (error) {
-            result.className = 'form-hint text-danger'; result.textContent = error.message;
-        } finally { saveButton.disabled = false; }
+        } catch (error) { result.className = 'form-hint text-danger'; result.textContent = error.message; }
+        finally { saveButton.disabled = false; }
     });
     document.getElementById('refresh-shopping-lists').addEventListener('click', function() { loadLists(true); });
     document.getElementById('test-mealie-connection').addEventListener('click', async function() {
@@ -101,45 +101,24 @@
             result.className = 'form-hint text-success'; result.textContent = 'Connected · HTTP ' + data.status + ' · ' + data.latency_ms + ' ms';
         } catch (error) { result.className = 'form-hint text-danger'; result.textContent = error.message; }
     });
-
-    loadLists(false).then(function() { setTimeout(function() { loadLists(true); }, 250); });
+    loadLists(false);
 })();
 
-/**
- * Existing settings form reset logic and Appearance live preview.
- */
-(function () {
+(function settingsForms() {
     'use strict';
 
-    function fieldValue(el) {
-        if (el.type === 'checkbox') return el.checked ? 'True' : 'False';
-        return el.value;
-    }
+    function fieldValue(el) { if (el.type === 'checkbox') return el.checked ? 'True' : 'False'; return el.value; }
+    function syncResetButton(field, btn) { var def = field.dataset.default; if (def !== undefined) btn.disabled = (fieldValue(field) === def); }
+    function resetField(field) { var def = field.dataset.default; if (def === undefined) return; if (field.type === 'checkbox') field.checked = (def === 'True'); else field.value = def; }
 
-    function syncResetButton(field, btn) {
-        var def = field.dataset.default;
-        if (def === undefined) return;
-        btn.disabled = (fieldValue(field) === def);
-    }
-
-    function resetField(field) {
-        var def = field.dataset.default;
-        if (def === undefined) return;
-        if (field.type === 'checkbox') field.checked = (def === 'True');
-        else field.value = def;
-    }
-
-    document.querySelectorAll('.btn-reset').forEach(function (btn) {
+    document.querySelectorAll('.btn-reset').forEach(function(btn) {
         var container = btn.closest('.row, .d-flex, .card-actions');
         var field = container ? container.querySelector('input, select') : null;
         if (!field) return;
         syncResetButton(field, btn);
-        field.addEventListener('input', function () { syncResetButton(field, btn); });
-        field.addEventListener('change', function () { syncResetButton(field, btn); });
-        btn.addEventListener('click', function (e) {
-            e.preventDefault(); resetField(field); syncResetButton(field, btn);
-            field.dispatchEvent(new Event('change', { bubbles: true }));
-        });
+        field.addEventListener('input', function() { syncResetButton(field, btn); });
+        field.addEventListener('change', function() { syncResetButton(field, btn); });
+        btn.addEventListener('click', function(e) { e.preventDefault(); resetField(field); syncResetButton(field, btn); field.dispatchEvent(new Event('change', {bubbles:true})); });
     });
 
     var themeForm = document.querySelector('form[action="/settings/theme"]');
@@ -149,7 +128,8 @@
         };
         var FONT_CSS = {
             'sans-serif':'"Inter Var",Inter,-apple-system,BlinkMacSystemFont,San Francisco,Segoe UI,Roboto,Helvetica Neue,sans-serif',
-            'serif':'Georgia,Times New Roman,times,serif', 'monospace':'Monaco,Consolas,Liberation Mono,Courier New,monospace', 'comic':'Comic Sans MS,Comic Sans,Chalkboard SE,Comic Neue,sans-serif,cursive'
+            'serif':'Georgia,Times New Roman,times,serif', 'monospace':'Monaco,Consolas,Liberation Mono,Courier New,monospace', 'comic':'Comic Sans MS,Comic Sans,Chalkboard SE,Comic Neue,sans-serif,cursive',
+            'dyslexia':'OpenDyslexic,"Atkinson Hyperlegible",Verdana,Tahoma,Arial,sans-serif'
         };
         var GRAY_CSS = {
             gray:null,
@@ -161,13 +141,34 @@
         var DEFAULT_GRAYS = {50:'#f9fafb',100:'#f3f4f6',200:'#e5e7eb',300:'#d1d5db',400:'#9ca3af',500:'#6b7280',600:'#4b5563',700:'#374151',800:'#1f2937',900:'#111827',950:'#030712'};
         var root = document.documentElement;
         function applyColor(name) { var c=COLOR_CSS[name]; if(c){root.style.setProperty('--tblr-primary',c.hex);root.style.setProperty('--tblr-primary-rgb',c.rgb);} }
-        function applyFont(name) { var stack=FONT_CSS[name]; if(stack) root.style.setProperty('--tblr-body-font-family',stack); }
+        function applyFont(name) { var stack=FONT_CSS[name]; if(stack) root.style.setProperty('--tblr-body-font-family',stack); document.body.style.letterSpacing=name==='dyslexia'?'.018em':''; document.body.style.wordSpacing=name==='dyslexia'?'.045em':''; }
         function applyBase(name) { var vals=GRAY_CSS[name]||DEFAULT_GRAYS; for(var step in vals) root.style.setProperty('--tblr-gray-'+step,vals[step]); }
         function applyRadius(val) { root.style.setProperty('--tblr-border-radius-scale',val); }
         function applyMode(val) { root.setAttribute('data-bs-theme',val); }
         themeForm.addEventListener('change', function(e) {
             var el=e.target; if(!el.name||el.type!=='radio'||!el.checked) return;
             switch(el.name){case 'theme_mode':applyMode(el.value);break;case 'theme_color':applyColor(el.value);break;case 'theme_font':applyFont(el.value);break;case 'theme_base':applyBase(el.value);break;case 'theme_radius':applyRadius(el.value);break;}
+        });
+
+        var access = document.createElement('div');
+        access.id = 'theme-accessibility';
+        access.innerHTML = '<hr class="my-4"><h3 class="card-title">Display accessibility</h3><p class="card-subtitle">Optional monochrome high-contrast rendering for e-paper and low-color displays.</p><div class="row g-3 mt-1"><div class="col-md-5"><label class="form-check form-switch"><input class="form-check-input" type="checkbox" id="theme-epaper"><span class="form-check-label"><strong>E-paper / monochrome mode</strong><span class="d-block text-secondary small">Removes color dependence and most shadows.</span></span></label></div><div class="col-md-7"><label class="form-label">Contrast <strong id="theme-contrast-value">65</strong>%</label><input type="range" class="form-range" id="theme-contrast" min="0" max="100" step="1" value="65"><div class="form-hint">Controls border strength and secondary-text separation.</div></div></div>';
+        themeForm.querySelector('.card-body').appendChild(access);
+        var epaper = document.getElementById('theme-epaper');
+        var contrast = document.getElementById('theme-contrast');
+        var contrastValue = document.getElementById('theme-contrast-value');
+        fetch('/api/theme').then(function(r){return r.json();}).then(function(t){epaper.checked=t.epaper==='true';contrast.value=t.contrast||65;contrastValue.textContent=contrast.value;}).catch(function(){});
+        contrast.addEventListener('input', function(){ contrastValue.textContent=contrast.value; });
+
+        themeForm.addEventListener('submit', async function(e) {
+            if (themeForm.dataset.accessSaved === '1') return;
+            e.preventDefault();
+            try {
+                var r = await fetch('/api/theme/accessibility', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({epaper:epaper.checked, contrast:Number(contrast.value)})});
+                if (!r.ok) throw new Error('Accessibility settings could not be saved');
+                themeForm.dataset.accessSaved = '1';
+                HTMLFormElement.prototype.submit.call(themeForm);
+            } catch (error) { window.alert(error.message); }
         });
     }
 
