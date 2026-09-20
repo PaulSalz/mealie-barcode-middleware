@@ -15,14 +15,14 @@ from app.templating import _localtime, templates
 router = APIRouter()
 
 
-def _scan_status(result: str, mapping: BarcodeMapping | None) -> str:
+def _scan_status(result: str, target_type: str | None) -> str:
     if result == "queued":
         return "queued"
-    if result == "unknown":
+    if result in {"unknown", "unknown_action"}:
         return "unknown"
-    if result in {"needs_mapping", "error", "broken"}:
+    if result in {"needs_mapping", "error", "broken", "action_disabled"}:
         return "pending"
-    if mapping:
+    if target_type:
         return "mapped"
     return "pending"
 
@@ -39,33 +39,31 @@ def _recent_scans(db: Session, limit: int = 25) -> list[dict]:
         return []
 
     barcode_ids = list({a.barcode for a in activities})
-    caches = {
-        bc.barcode: bc
-        for bc in db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(barcode_ids)).all()
-    }
-    mappings = {
-        m.barcode: m
-        for m in db.query(BarcodeMapping).filter(BarcodeMapping.barcode.in_(barcode_ids)).all()
-    }
+    caches = {bc.barcode: bc for bc in db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(barcode_ids)).all()}
+    mappings = {m.barcode: m for m in db.query(BarcodeMapping).filter(BarcodeMapping.barcode.in_(barcode_ids)).all()}
 
     rows = []
     for activity in activities:
         cached = caches.get(activity.barcode)
-        mapping = mappings.get(activity.barcode)
+        fallback_mapping = mappings.get(activity.barcode)
+        target_type = activity.target_type or (fallback_mapping.target_type if fallback_mapping else None)
+        target_id = activity.target_id or (fallback_mapping.target_id if fallback_mapping else None)
+        target_name = activity.target_name or (fallback_mapping.target_name if fallback_mapping else None)
         rows.append({
             "barcode": activity.barcode,
-            "title": cached.title if cached and cached.title else activity.message,
+            "title": cached.display_title if cached and cached.display_title else activity.message,
             "source": cached.source if cached and cached.source else "—",
-            "status": _scan_status(activity.result, mapping),
-            "target_name": mapping.target_name if mapping else None,
-            "target_id": mapping.target_id if mapping else None,
-            "target_type": mapping.target_type if mapping else None,
+            "status": _scan_status(activity.result, target_type),
+            "result": activity.result,
+            "target_name": target_name,
+            "target_id": target_id,
+            "target_type": target_type,
             "created_at": activity.created_at,
         })
     return rows
 
 
-def _frequent_targets(db: Session, limit_each: int = 6) -> tuple[list[dict], list[dict]]:
+def _frequent_targets(db: Session, limit_each: int = 6) -> tuple[list[dict], list[dict], list[dict]]:
     activities = (
         db.query(Activity)
         .filter(Activity.is_scan_event == True)
@@ -74,32 +72,41 @@ def _frequent_targets(db: Session, limit_each: int = 6) -> tuple[list[dict], lis
         .all()
     )
     if not activities:
-        return [], []
+        return [], [], []
 
-    barcodes = list({a.barcode for a in activities})
+    # New scan rows contain an immutable target snapshot. For pre-migration rows,
+    # fall back to the current mapping so old history remains useful.
+    barcodes = list({a.barcode for a in activities if not a.target_type})
     mappings = {
         m.barcode: m
         for m in db.query(BarcodeMapping).filter(BarcodeMapping.barcode.in_(barcodes)).all()
-    }
+    } if barcodes else {}
 
     counts: Counter[tuple[str, str, str]] = Counter()
     for activity in activities:
-        mapping = mappings.get(activity.barcode)
-        if not mapping or mapping.target_type not in {"food", "recipe"}:
+        target_type = activity.target_type
+        target_id = activity.target_id
+        target_name = activity.target_name
+        if not target_type:
+            mapping = mappings.get(activity.barcode)
+            if mapping:
+                target_type, target_id, target_name = mapping.target_type, mapping.target_id, mapping.target_name
+        if target_type not in {"food", "recipe", "action"} or not target_id:
             continue
-        counts[(mapping.target_type, mapping.target_id, mapping.target_name or mapping.target_id)] += 1
+        counts[(target_type, target_id, target_name or target_id)] += 1
 
-    foods = []
-    recipes = []
+    foods, recipes, actions = [], [], []
     for (target_type, target_id, target_name), uses in counts.most_common():
         entry = {"id": target_id, "name": target_name, "uses": uses}
         if target_type == "food" and len(foods) < limit_each:
             foods.append(entry)
         elif target_type == "recipe" and len(recipes) < limit_each:
             recipes.append(entry)
-        if len(foods) >= limit_each and len(recipes) >= limit_each:
+        elif target_type == "action" and len(actions) < limit_each:
+            actions.append(entry)
+        if len(foods) >= limit_each and len(recipes) >= limit_each and len(actions) >= limit_each:
             break
-    return foods, recipes
+    return foods, recipes, actions
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -107,31 +114,15 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     total_barcodes = db.query(BarcodeCache).count()
     mapped_count = db.query(BarcodeMapping).count()
     mapped_sub = db.query(BarcodeMapping.barcode)
-
-    pending_count = (
-        db.query(BarcodeCache)
-        .filter(BarcodeCache.found == True)
-        .filter(~BarcodeCache.barcode.in_(mapped_sub))
-        .count()
-    )
+    pending_count = db.query(BarcodeCache).filter(BarcodeCache.found == True).filter(~BarcodeCache.barcode.in_(mapped_sub)).count()
     queue_depth = db.query(RetryQueue).count()
-    unknown_count = (
-        db.query(BarcodeCache)
-        .filter(BarcodeCache.found == False)
-        .filter(~BarcodeCache.barcode.in_(mapped_sub))
-        .count()
-    )
+    unknown_count = db.query(BarcodeCache).filter(BarcodeCache.found == False).filter(~BarcodeCache.barcode.in_(mapped_sub)).count()
 
     recent_items = _recent_scans(db, 25)
-    frequent_foods, frequent_recipes = _frequent_targets(db)
+    frequent_foods, frequent_recipes, frequent_actions = _frequent_targets(db)
     mealie_reachable = check_connectivity()
 
-    last_sync = (
-        db.query(Item.synced_at)
-        .filter(Item.source == "mealie")
-        .order_by(Item.synced_at.desc())
-        .first()
-    )
+    last_sync = db.query(Item.synced_at).filter(Item.source == "mealie").order_by(Item.synced_at.desc()).first()
     last_sync_time = last_sync[0] if last_sync else None
     has_tokens = db.query(ApiToken).first() is not None
 
@@ -144,6 +135,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         "recent_items": recent_items,
         "frequent_foods": frequent_foods,
         "frequent_recipes": frequent_recipes,
+        "frequent_actions": frequent_actions,
         "mealie_reachable": mealie_reachable,
         "last_sync_time": last_sync_time,
         "has_tokens": has_tokens,
@@ -155,20 +147,9 @@ def dashboard_api(db: Session = Depends(get_db)):
     total_barcodes = db.query(BarcodeCache).count()
     mapped_count = db.query(BarcodeMapping).count()
     mapped_sub = db.query(BarcodeMapping.barcode)
-    pending_count = (
-        db.query(BarcodeCache)
-        .filter(BarcodeCache.found == True)
-        .filter(~BarcodeCache.barcode.in_(mapped_sub))
-        .count()
-    )
+    pending_count = db.query(BarcodeCache).filter(BarcodeCache.found == True).filter(~BarcodeCache.barcode.in_(mapped_sub)).count()
     queue_depth = db.query(RetryQueue).count()
-    unknown_count = (
-        db.query(BarcodeCache)
-        .filter(BarcodeCache.found == False)
-        .filter(~BarcodeCache.barcode.in_(mapped_sub))
-        .count()
-    )
-
+    unknown_count = db.query(BarcodeCache).filter(BarcodeCache.found == False).filter(~BarcodeCache.barcode.in_(mapped_sub)).count()
     recent_items = _recent_scans(db, 25)
 
     return {
@@ -183,9 +164,12 @@ def dashboard_api(db: Session = Depends(get_db)):
                 "item_name": row["target_name"] if row["target_type"] == "food" else None,
                 "item_id": row["target_id"] if row["target_type"] == "food" else None,
                 "target_type": row["target_type"],
-                "title": row["target_name"] if row["target_type"] == "recipe" else (row["title"] or "—"),
+                "target_id": row["target_id"],
+                "target_name": row["target_name"],
+                "title": row["target_name"] if row["target_type"] in {"recipe", "action"} else (row["title"] or "—"),
                 "source": row["source"] or "—",
                 "status": row["status"],
+                "result": row["result"],
                 "created_at": _localtime(row["created_at"]),
             }
             for row in recent_items
