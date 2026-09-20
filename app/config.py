@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     mealie_url: str
     mealie_api_key: str
-    mealie_shopping_list_id: str
+    # Deprecated as a required setting. Kept as a backwards-compatible fallback;
+    # the runtime default is selected from Mealie and stored in the DB.
+    mealie_shopping_list_id: str = ""
 
     off_enabled: bool = True
     off_url_base: str = "https://world.openfoodfacts.org/api/v2/product/"
@@ -32,6 +34,8 @@ class Settings(BaseSettings):
     middleware_base_url: str = ""
     ha_webhook_url: str = ""
     ha_notification_mode: str = "unresolved"  # unresolved | actionable | all | off
+    notification_toast_seconds: int = 15
+    notification_group_window_seconds: int = 30
 
     db_path: str = "/data/barcode.db"
     timezone: str = "Europe/Berlin"
@@ -196,6 +200,26 @@ EDITABLE_SETTINGS: dict[str, dict[str, Any]] = {
         "group": "Home Assistant",
         "section": "Notifications",
     },
+    "notification_toast_seconds": {
+        "type": "int",
+        "label": "NOTIFICATION_TOAST_SECONDS",
+        "description": "Toast duration (seconds)",
+        "help": "How long scan notifications stay visible in the web UI before disappearing automatically.",
+        "min": 3,
+        "max": 120,
+        "group": "Notifications",
+        "section": "Display",
+    },
+    "notification_group_window_seconds": {
+        "type": "int",
+        "label": "NOTIFICATION_GROUP_WINDOW_SECONDS",
+        "description": "Repeat grouping window (seconds)",
+        "help": "Identical scans inside this window are combined into one notification with a counter.",
+        "min": 1,
+        "max": 300,
+        "group": "Notifications",
+        "section": "Display",
+    },
 }
 
 READONLY_SETTINGS: dict[str, dict[str, Any]] = {
@@ -211,12 +235,6 @@ READONLY_SETTINGS: dict[str, dict[str, Any]] = {
         "group": "Mealie Connection",
         "section": "",
         "secret": True,
-    },
-    "mealie_shopping_list_id": {
-        "label": "MEALIE_SHOPPING_LIST_ID",
-        "description": "Shopping list ID",
-        "group": "Mealie Connection",
-        "section": "",
     },
     "off_url_base": {
         "label": "OFF_URL_BASE",
