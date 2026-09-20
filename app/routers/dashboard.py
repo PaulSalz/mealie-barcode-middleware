@@ -102,9 +102,17 @@ def _summary_counts(db: Session) -> tuple[int, int, int, int, int]:
 
 
 def _scanner_summary(db: Session) -> tuple[int, int]:
+    """Return physically connected scanners / scanner bridges known to B2M."""
     tokens = db.query(ApiToken).filter(ApiToken.scanner_version.isnot(None)).all()
     cutoff = utcnow().replace(tzinfo=None) - timedelta(minutes=3)
-    return sum(1 for token in tokens if token.scanner_last_seen_at and token.scanner_last_seen_at >= cutoff), len(tokens)
+    disconnected_values = {"", "disconnected", "none", "offline", "unknown"}
+    connected = 0
+    for token in tokens:
+        bridge_online = bool(token.scanner_last_seen_at and token.scanner_last_seen_at >= cutoff)
+        device = (token.scanner_device or "").strip().casefold()
+        if bridge_online and device not in disconnected_values:
+            connected += 1
+    return connected, len(tokens)
 
 
 @router.get("/", response_class=HTMLResponse)

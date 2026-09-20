@@ -18,7 +18,7 @@ import urllib.request
 
 from evdev import InputDevice, ecodes
 
-SCANNER_VERSION = "2.2.0"
+SCANNER_VERSION = "2.2.1"
 STARTED_MONO = time.monotonic()
 _stats_lock = threading.Lock()
 _stats = {"scans": 0, "errors": 0, "last_latency_ms": 0}
@@ -283,7 +283,7 @@ def main() -> int:
     # authentication is a real configuration error and should still fail loudly.
     api_token()
     _runtime["layout"] = layout
-    _runtime["device"] = device_spec if device_spec.lower() != "auto" else "disconnected"
+    _runtime["device"] = "disconnected"
 
     log.info(
         "Scanner bridge v%s starting, device=%s, layout=%s, posting to %s",
@@ -297,7 +297,7 @@ def main() -> int:
     while True:
         device_path = resolve_device_path(device_spec)
         if not device_path:
-            _runtime["device"] = device_spec if device_spec.lower() != "auto" else "disconnected"
+            _runtime["device"] = "disconnected"
             if not waiting_logged:
                 log.warning("Scanner not connected; waiting for USB device (device=%s)", device_spec)
                 waiting_logged = True
@@ -316,11 +316,12 @@ def main() -> int:
             _read_device(device, layout, min_length, max_length)
             log.warning("Scanner device %s closed; waiting for reconnect", device_path)
         except (FileNotFoundError, OSError) as exc:
-            _runtime["device"] = device_path
+            _runtime["device"] = "disconnected"
             if not waiting_logged:
                 log.warning("Scanner unavailable/disconnected: %s; waiting for reconnect", exc)
                 waiting_logged = True
         finally:
+            _runtime["device"] = "disconnected"
             if device is not None:
                 try:
                     device.close()

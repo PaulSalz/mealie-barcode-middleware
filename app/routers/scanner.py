@@ -20,12 +20,40 @@ from app.templating import _localtime, _relative_time
 from app.utils import utcnow
 
 router = APIRouter()
-APP_VERSION = "2026.09.20.2"
+APP_VERSION = "2026.09.20.3"
+
+
+def _scanner_state(token: ApiToken, now=None) -> tuple[bool, bool, str]:
+    """Return bridge-online, hardware-connected and a stable device status."""
+    if now is None:
+        now = utcnow().replace(tzinfo=None)
+    last_seen = token.scanner_last_seen_at
+    bridge_online = bool(last_seen and last_seen >= now - timedelta(minutes=3))
+    device = (token.scanner_device or "").strip()
+    disconnected_values = {"", "disconnected", "none", "offline", "unknown"}
+    device_connected = bool(bridge_online and device.casefold() not in disconnected_values)
+    if not bridge_online:
+        status = "bridge_offline"
+    elif device_connected:
+        status = "connected"
+    else:
+        status = "disconnected"
+    return bridge_online, device_connected, status
 
 
 @router.post("/scanner/heartbeat")
 def scanner_heartbeat(token: ApiToken = Depends(require_token)):
-    return {"ok": True, "token": token.name, "scanner_version": token.scanner_version, "last_seen": token.scanner_last_seen_at.isoformat() if token.scanner_last_seen_at else None}
+    bridge_online, device_connected, status = _scanner_state(token)
+    return {
+        "ok": True,
+        "token": token.name,
+        "scanner_version": token.scanner_version,
+        "bridge_online": bridge_online,
+        "device_connected": device_connected,
+        "status": status,
+        "device": token.scanner_device,
+        "last_seen": token.scanner_last_seen_at.isoformat() if token.scanner_last_seen_at else None,
+    }
 
 
 @router.get("/api/version")
@@ -38,15 +66,39 @@ def scanner_health(db: Session = Depends(get_db)):
     now = utcnow().replace(tzinfo=None)
     scanners = []
     for token in db.query(ApiToken).order_by(ApiToken.name).all():
-        if not token.scanner_version: continue
+        if not token.scanner_version:
+            continue
         last_seen = token.scanner_last_seen_at
+        bridge_online, device_connected, status = _scanner_state(token, now)
+        device = (token.scanner_device or "").strip()
+        host = token.scanner_hostname or "Unknown host"
+        if status == "disconnected":
+            host_display = f"{host} · USB scanner disconnected"
+        elif status == "bridge_offline":
+            host_display = f"{host} · bridge offline"
+        else:
+            host_display = host
         scanners.append({
-            "token_id": token.id, "token_name": token.name, "token_prefix": token.token_prefix,
-            "version": token.scanner_version, "hostname": token.scanner_hostname, "device": token.scanner_device,
-            "layout": token.scanner_layout, "online": bool(last_seen and last_seen >= now - timedelta(minutes=3)),
-            "last_seen": _relative_time(last_seen), "last_seen_absolute": _localtime(last_seen),
-            "uptime_seconds": token.scanner_uptime_seconds or 0, "scans": token.scanner_total_scans or 0,
-            "errors": token.scanner_errors or 0, "latency_ms": token.scanner_last_latency_ms,
+            "token_id": token.id,
+            "token_name": token.name,
+            "token_prefix": token.token_prefix,
+            "version": token.scanner_version,
+            "hostname": host_display,
+            "hostname_raw": token.scanner_hostname,
+            "device": device or "disconnected",
+            "layout": token.scanner_layout,
+            # Backward-compatible: `online` continues to mean the bridge is reporting.
+            "online": bridge_online,
+            "bridge_online": bridge_online,
+            "device_connected": device_connected,
+            "status": status,
+            "status_label": "Scanner connected" if device_connected else ("USB scanner disconnected" if bridge_online else "Bridge offline"),
+            "last_seen": (f"Bridge heartbeat {_relative_time(last_seen)}" if last_seen else "No bridge heartbeat yet"),
+            "last_seen_absolute": _localtime(last_seen),
+            "uptime_seconds": token.scanner_uptime_seconds or 0,
+            "scans": token.scanner_total_scans or 0,
+            "errors": token.scanner_errors or 0,
+            "latency_ms": token.scanner_last_latency_ms,
         })
     return {"items": scanners}
 
