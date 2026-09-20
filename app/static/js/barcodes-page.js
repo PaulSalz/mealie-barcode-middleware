@@ -5,6 +5,6 @@ window._barcodesTable = initAdvancedTable({
     pageSizeId: 'bc-page-size-label',
     defaultSort: 'sort-scanned',
     defaultAsc: false,
-    numericCols: [],
+    numericCols: ['sort-scanned'],
     emptyRowClass: 'barcodes-empty-row'
 });
