@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header d-print-none mb-3"><div class="row g-2 align-items-center">
   <div class="col"><div class="page-pretitle">Recipe</div><h2 class="page-title">{{ recipe.name }}</h2></div>
-  <div class="col-auto"><div class="btn-list"><a class="btn" href="/labels"><i class="ti ti-qrcode icon"></i> Code Generator</a><a class="btn btn-primary" href="{{ mealie_url }}/shopping-lists" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open Mealie</a></div></div>
+  <div class="col-auto"><div class="btn-list"><a class="btn" href="/labels"><i class="ti ti-qrcode icon"></i> Code Generator</a><a class="btn btn-primary" href="{{ mealie_recipe_url }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open recipe in Mealie</a></div></div>
 </div></div>
 <div class="row row-cards">
   <div class="col-lg-5"><div class="card"><div class="card-header"><h3 class="card-title">Details</h3></div><div class="card-body">
@@ -17,7 +17,12 @@
     </div>
   </div></div></div>
   <div class="col-lg-7"><div class="card"><div class="card-header"><h3 class="card-title">Ingredients</h3></div><div class="list-group list-group-flush">
-    {% for ingredient in recipe.ingredients %}<div class="list-group-item">{{ ingredient }}</div>{% else %}<div class="list-group-item text-secondary">No ingredient details returned by Mealie.</div>{% endfor %}
+    {% for ingredient in recipe.ingredients %}
+    <div class="list-group-item d-flex gap-2 align-items-baseline">
+      {% if ingredient.quantity or ingredient.unit %}<span class="text-secondary text-nowrap">{{ ingredient.quantity }}{% if ingredient.quantity and ingredient.unit %} {% endif %}{{ ingredient.unit }}</span>{% endif %}
+      <span><strong>{{ ingredient.name }}</strong>{% if ingredient.note %}<span class="text-secondary"> · {{ ingredient.note }}</span>{% endif %}</span>
+    </div>
+    {% else %}<div class="list-group-item text-secondary">No ingredient details returned by Mealie.</div>{% endfor %}
   </div></div></div>
 </div>
 {% endblock %}
