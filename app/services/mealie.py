@@ -29,6 +29,12 @@ def _items_from_response(data) -> list[dict]:
     return []
 
 
+def _default_list_id() -> str:
+    # Imported lazily to keep the Mealie/catalog helpers independent during app startup.
+    from app.services.shopping import get_default_shopping_list_id
+    return get_default_shopping_list_id()
+
+
 def check_connectivity() -> bool:
     try:
         resp = httpx.get(
@@ -302,7 +308,7 @@ def add_shopping_item(
     unit_id: str | None = None,
 ) -> tuple[bool, str | None]:
     payload = {
-        "shoppingListId": settings.mealie_shopping_list_id,
+        "shoppingListId": _default_list_id(),
         "foodId": item_id,
         "quantity": quantity,
     }
@@ -313,14 +319,17 @@ def add_shopping_item(
 
 def add_shopping_note(note: str) -> tuple[bool, str | None]:
     return _post_shopping_item({
-        "shoppingListId": settings.mealie_shopping_list_id,
+        "shoppingListId": _default_list_id(),
         "note": note,
     })
 
 
 def add_recipe_to_shopping_list(recipe_id: str, recipe_scale: float = 1.0) -> bool:
     """Use Mealie's native recipe-to-shopping-list link."""
-    url = f"{settings.mealie_url}/api/households/shopping/lists/{settings.mealie_shopping_list_id}/recipe"
+    list_id = _default_list_id()
+    if not list_id:
+        return False
+    url = f"{settings.mealie_url}/api/households/shopping/lists/{list_id}/recipe"
     payload = [{"recipeId": recipe_id, "recipeIncrementQuantity": recipe_scale}]
     try:
         resp = httpx.post(url, headers=_headers(), json=payload, timeout=20)
@@ -346,6 +355,9 @@ def add_to_shopping_list_by_note(note: str) -> bool:
 
 
 def _post_shopping_item(payload: dict) -> tuple[bool, str | None]:
+    if not payload.get("shoppingListId"):
+        logger.error("Mealie shopping POST skipped: no shopping list available")
+        return False, None
     url = f"{settings.mealie_url}/api/households/shopping/items"
     try:
         resp = httpx.post(url, headers=_headers(), json=payload, timeout=5)
@@ -406,7 +418,7 @@ def _delete_shopping_item(item_id: str) -> bool:
 
 
 def reconcile_linked_barcode(barcode: str) -> None:
-    """Replace an earlier note/retry once a barcode gets a structured target."""
+    """Replace an earlier note/retry once a barcode gets a structured primary target."""
     from app.database import SessionLocal
 
     db = SessionLocal()
@@ -430,14 +442,21 @@ def reconcile_linked_barcode(barcode: str) -> None:
                     payload = json.loads(entry.payload)
                 except (ValueError, TypeError):
                     continue
+                # Only rewrite the unresolved-note retry. Additional multi-target
+                # retries already contain a structured foodId and must stay intact.
+                if "note" not in payload or payload.get("foodId"):
+                    continue
                 payload.pop("note", None)
                 payload["foodId"] = mapping.target_id
-                payload["quantity"] = mapping.quantity or 1
+                if mapping.quantity is not None and mapping.quantity > 0.001:
+                    payload["quantity"] = mapping.quantity
+                else:
+                    payload.pop("quantity", None)
                 if mapping.unit_id:
                     payload["unitId"] = mapping.unit_id
                 else:
                     payload.pop("unitId", None)
-                entry.payload = json.dumps(payload)
+                entry.payload = json.dumps(payload, sort_keys=True)
                 rewrote = True
             if rewrote:
                 db.commit()
@@ -452,14 +471,15 @@ def reconcile_linked_barcode(barcode: str) -> None:
                 return
 
             payload = {
-                "shoppingListId": current.get("shoppingListId") or settings.mealie_shopping_list_id,
-                "quantity": mapping.quantity or 1,
+                "shoppingListId": current.get("shoppingListId") or _default_list_id(),
                 "checked": current.get("checked", False),
                 "position": current.get("position", 0),
                 "foodId": mapping.target_id,
                 "unitId": mapping.unit_id,
                 "note": "",
             }
+            if mapping.quantity is not None and mapping.quantity > 0.001:
+                payload["quantity"] = mapping.quantity
             if _put_shopping_item(shopping_item_id, payload):
                 cached.shopping_item_id = None
                 db.commit()
@@ -467,10 +487,20 @@ def reconcile_linked_barcode(barcode: str) -> None:
             return
 
         if mapping.target_type == "recipe":
-            should_add_recipe = bool(pending)
+            # Remove only unresolved-note retries; independent multi-target retries
+            # are kept for the scheduler.
+            note_pending = []
             for entry in pending:
+                try:
+                    payload = json.loads(entry.payload)
+                except (ValueError, TypeError):
+                    continue
+                if "note" in payload and not payload.get("foodId"):
+                    note_pending.append(entry)
+            should_add_recipe = bool(note_pending)
+            for entry in note_pending:
                 db.delete(entry)
-            if pending:
+            if note_pending:
                 db.commit()
 
             if shopping_item_id:
@@ -491,13 +521,23 @@ def reconcile_linked_barcode(barcode: str) -> None:
 
 
 def enqueue_retry(barcode: str, payload: dict, db: Session) -> None:
-    existing = db.query(RetryQueue).filter(RetryQueue.barcode == barcode).first()
+    """Queue one distinct Mealie request.
+
+    Multi-target barcodes may legitimately have several pending requests. Deduping
+    by exact normalized payload prevents scan storms without dropping another list's
+    retry merely because it uses the same barcode.
+    """
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    existing = db.query(RetryQueue).filter(
+        RetryQueue.barcode == barcode,
+        RetryQueue.payload == encoded,
+    ).first()
     if existing:
-        logger.info("Retry entry already pending for barcode=%s, skipping duplicate", barcode)
+        logger.info("Retry entry already pending for barcode=%s payload=%s", barcode, encoded[:160])
         return
     db.add(RetryQueue(
         barcode=barcode,
-        payload=json.dumps(payload),
+        payload=encoded,
         attempts=0,
         next_retry_at=utcnow(),
         created_at=utcnow(),
