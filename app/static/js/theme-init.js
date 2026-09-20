@@ -8,4 +8,11 @@
     if (override) {
         document.documentElement.setAttribute('data-bs-theme', override);
     }
+
+    // Release-scoped UI additions are isolated from the stable app/enhancements
+    // bundles. The file waits for DOMContentLoaded before touching the page.
+    var releaseUi = document.createElement('script');
+    releaseUi.src = '/static/js/release-ui.js?v=20260920.2';
+    releaseUi.defer = true;
+    document.head.appendChild(releaseUi);
 })();
