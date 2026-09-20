@@ -17,6 +17,7 @@ from app.services.fuzzy import fuzzy_match
 from app.services.homeassistant import dismiss_notification as ha_dismiss
 from app.services.mealie import create_food, find_food_by_name, reconcile_linked_barcode, search_recipes
 from app.services.mealie_extras import cached_labels, cached_units
+from app.services.shopping import get_shopping_lists
 from app.templating import templates
 from app.utils import utcnow
 
@@ -25,7 +26,6 @@ router = APIRouter()
 
 
 def _parse_positive_float(value: str | float | int | None, default: float = 1.0) -> float:
-    """Accept comma or dot decimals, keep positive values and store max. 3 decimal places."""
     if value is None:
         return round(default, 3)
     try:
@@ -39,9 +39,23 @@ def _mark_notifications_read(barcode: str, db: Session):
     db.query(Activity).filter(Activity.barcode == barcode, Activity.is_read == False).update({"is_read": True})
 
 
-def _resolve_notifications_async(barcode: str, background_tasks: BackgroundTasks, db: Session):
-    """Resolve local state now; do network notification clearing outside the response path."""
+def _resolve_activity_state(barcode: str, target_name: str | None, db: Session) -> None:
+    rows = db.query(Activity).filter(
+        Activity.barcode == barcode,
+        Activity.is_scan_event == False,
+        Activity.result.in_(["needs_mapping", "unknown", "auto_mapped", "broken"]),
+    ).all()
+    for row in rows:
+        row.title = "Linked"
+        row.message = f"Now linked to {target_name or 'a target'}"
+        row.result = "resolved"
+        row.is_read = True
+        row.is_dismissed = True
+
+
+def _resolve_notifications_async(barcode: str, target_name: str | None, background_tasks: BackgroundTasks, db: Session):
     _mark_notifications_read(barcode, db)
+    _resolve_activity_state(barcode, target_name, db)
     background_tasks.add_task(ha_dismiss, barcode, None)
 
 
@@ -83,7 +97,14 @@ def _cache_food(food: dict, db: Session) -> Item:
     return item
 
 
-def _food_mapping(barcode: str, item: Item, quantity: float, unit_id: str | None, db: Session, mapped_by: str = "manual") -> BarcodeMapping:
+def _food_mapping(
+    barcode: str,
+    item: Item,
+    quantity: float,
+    unit_id: str | None,
+    db: Session,
+    mapped_by: str = "manual",
+) -> BarcodeMapping:
     mapping = db.get(BarcodeMapping, barcode)
     if not mapping:
         mapping = BarcodeMapping(barcode=barcode, target_type="food", target_id=item.id)
@@ -94,11 +115,19 @@ def _food_mapping(barcode: str, item: Item, quantity: float, unit_id: str | None
     mapping.quantity = _parse_positive_float(quantity)
     mapping.unit_id = unit_id or None
     mapping.recipe_scale = 1.0
+    mapping.shopping_list_id = None
     mapping.mapped_by = mapped_by
     return mapping
 
 
-def _recipe_mapping(barcode: str, recipe_id: str, recipe_name: str, recipe_scale: float, db: Session) -> BarcodeMapping:
+def _recipe_mapping(
+    barcode: str,
+    recipe_id: str,
+    recipe_name: str,
+    recipe_scale: float,
+    shopping_list_id: str | None,
+    db: Session,
+) -> BarcodeMapping:
     mapping = db.get(BarcodeMapping, barcode)
     if not mapping:
         mapping = BarcodeMapping(barcode=barcode, target_type="recipe", target_id=recipe_id)
@@ -109,12 +138,18 @@ def _recipe_mapping(barcode: str, recipe_id: str, recipe_name: str, recipe_scale
     mapping.quantity = 1.0
     mapping.unit_id = None
     mapping.recipe_scale = _parse_positive_float(recipe_scale)
+    mapping.shopping_list_id = shopping_list_id or None
     mapping.mapped_by = "manual"
     return mapping
 
 
 def _barcode_stats(db: Session, barcode: str) -> dict:
-    scans = db.query(Activity).filter(Activity.is_scan_event == True, Activity.barcode == barcode).order_by(Activity.created_at.desc()).all()
+    scans = (
+        db.query(Activity)
+        .filter(Activity.is_scan_event == True, Activity.barcode == barcode)
+        .order_by(Activity.created_at.desc())
+        .all()
+    )
     now = utcnow().replace(tzinfo=None)
     results = Counter(row.result for row in scans)
     return {
@@ -143,7 +178,6 @@ def barcodes_list(request: Request, status: str = Query(default="all"), db: Sess
     query = db.query(BarcodeCache).order_by(BarcodeCache.created_at.desc())
     mapped_sub = db.query(BarcodeMapping.barcode)
     query = _apply_status_filter(query, status, mapped_sub)
-
     barcodes = query.all()
     mappings = {m.barcode: m for m in db.query(BarcodeMapping).all()}
     queued_barcodes = {r.barcode for r in db.query(RetryQueue).all()}
@@ -172,12 +206,13 @@ def barcodes_list(request: Request, status: str = Query(default="all"), db: Sess
             "target_type": mapping.target_type if mapping else None,
             "status": bc_status,
         })
-
     return templates.TemplateResponse(request, "barcodes.html", {"items": items, "current_status": status})
 
 
 @router.post("/barcodes/new")
-def barcode_create_manual(code: str = Form(...), title: str = Form(""), brand: str = Form(""), db: Session = Depends(get_db)):
+def barcode_create_manual(
+    code: str = Form(...), title: str = Form(""), brand: str = Form(""), db: Session = Depends(get_db)
+):
     code = code.strip()
     if not code:
         return RedirectResponse("/barcodes", status_code=303)
@@ -210,7 +245,6 @@ def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)
     cached = db.get(BarcodeCache, barcode)
     mapping = db.get(BarcodeMapping, barcode)
     mapped_item = db.get(Item, mapping.target_id) if mapping and mapping.target_type == "food" else None
-
     _mark_notifications_read(barcode, db)
     db.commit()
 
@@ -239,6 +273,8 @@ def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)
         "threshold": settings.fuzzy_match_threshold,
         "units": cached_units(),
         "labels": cached_labels(),
+        "shopping_lists": get_shopping_lists(),
+        "default_shopping_list_id": settings.mealie_shopping_list_id,
         "stats": _barcode_stats(db, barcode),
         "duplicate_food": request.query_params.get("duplicate_food") == "1",
         "create_error": request.query_params.get("create_error") == "1",
@@ -268,8 +304,8 @@ def barcode_map(
     item = db.get(Item, item_id)
     if not item or item.source != "mealie":
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
-    _food_mapping(barcode, item, _parse_positive_float(quantity), unit_id or None, db, mapped_by="manual")
-    _resolve_notifications_async(barcode, background_tasks, db)
+    mapping = _food_mapping(barcode, item, _parse_positive_float(quantity), unit_id or None, db, mapped_by="manual")
+    _resolve_notifications_async(barcode, mapping.target_name, background_tasks, db)
     db.commit()
     background_tasks.add_task(reconcile_linked_barcode, barcode)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
@@ -309,8 +345,8 @@ def barcode_create_and_map(
             duplicate = True
 
     item = _cache_food(food, db)
-    _food_mapping(barcode, item, quantity_value, unit_id or None, db, mapped_by="manual")
-    _resolve_notifications_async(barcode, background_tasks, db)
+    mapping = _food_mapping(barcode, item, quantity_value, unit_id or None, db, mapped_by="manual")
+    _resolve_notifications_async(barcode, mapping.target_name, background_tasks, db)
     db.commit()
     background_tasks.add_task(reconcile_linked_barcode, barcode)
     suffix = "?duplicate_food=1" if duplicate else ""
@@ -324,13 +360,21 @@ def barcode_map_recipe(
     recipe_id: str = Form(...),
     recipe_name: str = Form(""),
     recipe_scale: str = Form("1"),
+    shopping_list_id: str = Form(""),
     db: Session = Depends(get_db),
 ):
     recipe_id = recipe_id.strip()
     if not recipe_id:
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
-    _recipe_mapping(barcode, recipe_id, recipe_name.strip() or recipe_id, _parse_positive_float(recipe_scale), db)
-    _resolve_notifications_async(barcode, background_tasks, db)
+    mapping = _recipe_mapping(
+        barcode,
+        recipe_id,
+        recipe_name.strip() or recipe_id,
+        _parse_positive_float(recipe_scale),
+        shopping_list_id.strip() or None,
+        db,
+    )
+    _resolve_notifications_async(barcode, mapping.target_name, background_tasks, db)
     db.commit()
     background_tasks.add_task(reconcile_linked_barcode, barcode)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
@@ -342,6 +386,7 @@ def barcode_mapping_settings(
     quantity: str = Form("1"),
     unit_id: str = Form(""),
     recipe_scale: str = Form("1"),
+    shopping_list_id: str = Form(""),
     db: Session = Depends(get_db),
 ):
     mapping = db.get(BarcodeMapping, barcode)
@@ -351,6 +396,7 @@ def barcode_mapping_settings(
             mapping.unit_id = unit_id or None
         elif mapping.target_type == "recipe":
             mapping.recipe_scale = _parse_positive_float(recipe_scale)
+            mapping.shopping_list_id = shopping_list_id.strip() or None
         db.commit()
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
@@ -360,7 +406,7 @@ def barcode_confirm(barcode: str, background_tasks: BackgroundTasks, db: Session
     existing = db.get(BarcodeMapping, barcode)
     if existing and existing.mapped_by == "auto":
         existing.mapped_by = "auto_confirmed"
-        _resolve_notifications_async(barcode, background_tasks, db)
+        _resolve_notifications_async(barcode, existing.target_name, background_tasks, db)
         db.commit()
         background_tasks.add_task(reconcile_linked_barcode, barcode)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
