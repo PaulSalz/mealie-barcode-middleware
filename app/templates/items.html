@@ -22,17 +22,17 @@
 <div class="card">
     <div class="card-header d-block">
         <div class="row g-3 align-items-end">
-            <div class="col-lg-3"><h3 class="card-title mb-0">{{ items|length }} item{{ 's' if items|length != 1 }}</h3><p class="text-secondary m-0">{% if last_synced %}Last Mealie sync {{ last_synced|localtime }}{% else %}Not synced yet{% endif %}</p></div>
+            <div class="col-lg-3"><h3 class="card-title mb-0"><span id="items-count">{{ items|length }}</span> item{{ 's' if items|length != 1 }}</h3><p class="text-secondary m-0">{% if last_synced %}<span title="{{ last_synced|localtime }}">Last Mealie sync {{ last_synced|relative_time }}</span>{% else %}Not synced yet{% endif %}</p></div>
             <div class="col-lg-7">
-                <form method="get" action="/items" class="row g-2">
-                    <div class="col-md-3"><label class="form-label">Filter</label><select class="form-select" name="filter" onchange="this.form.submit()">
+                <form method="get" action="/items" class="row g-2" id="items-filter-form">
+                    <div class="col-md-3"><label class="form-label">Filter</label><select class="form-select" name="filter" id="items-filter" onchange="this.form.submit()">
                         {% for value, text in [('all','All items'),('linked','With barcode'),('unlinked','Without barcode'),('scanned','Scanned'),('never','Never scanned'),('mealie','Mealie'),('manual','Custom')] %}<option value="{{ value }}" {{ 'selected' if current_filter == value }}>{{ text }}</option>{% endfor %}
                     </select></div>
-                    <div class="col-md-3"><label class="form-label">Category</label><select class="form-select" name="label" onchange="this.form.submit()"><option value="">All categories</option>{% for label_id, label_name in labels %}<option value="{{ label_id }}" {{ 'selected' if current_label == label_id }}>{{ label_name }}</option>{% endfor %}</select></div>
-                    <div class="col-md-3"><label class="form-label">Sort by</label><select class="form-select" name="sort" onchange="this.form.submit()">
+                    <div class="col-md-3"><label class="form-label">Category</label><select class="form-select" name="label" id="items-label" onchange="this.form.submit()"><option value="">All categories</option>{% for label_id, label_name in labels %}<option value="{{ label_id }}" {{ 'selected' if current_label == label_id }}>{{ label_name }}</option>{% endfor %}</select></div>
+                    <div class="col-md-3"><label class="form-label">Sort by</label><select class="form-select" name="sort" id="items-sort" onchange="this.form.submit()">
                         {% for value, text in [('name','Name'),('updated','Last updated'),('last_scan','Last scan'),('scans','Scan count'),('barcodes','Barcode count'),('category','Category')] %}<option value="{{ value }}" {{ 'selected' if current_sort == value }}>{{ text }}</option>{% endfor %}
                     </select></div>
-                    <div class="col-md-3"><label class="form-label">Order</label><select class="form-select" name="order" onchange="this.form.submit()"><option value="asc" {{ 'selected' if current_order == 'asc' }}>Ascending</option><option value="desc" {{ 'selected' if current_order == 'desc' }}>Descending</option></select></div>
+                    <div class="col-md-3"><label class="form-label">Order</label><select class="form-select" name="order" id="items-order" onchange="this.form.submit()"><option value="asc" {{ 'selected' if current_order == 'asc' }}>Ascending</option><option value="desc" {{ 'selected' if current_order == 'desc' }}>Descending</option></select></div>
                     <input type="hidden" name="q" value="{{ search_query }}">
                 </form>
             </div>
@@ -59,8 +59,8 @@
                     <td class="sort-source">{% if entry.item.source == 'mealie' %}<span class="badge bg-blue text-blue-fg">Mealie</span>{% else %}<span class="badge bg-purple text-purple-fg">Custom</span>{% endif %}</td>
                     <td class="sort-mappings" data-sort-value="{{ entry.mapping_count }}">{{ entry.mapping_count }}</td>
                     <td class="sort-scans" data-sort-value="{{ entry.scan_count }}">{{ entry.scan_count }}</td>
-                    <td class="sort-last-scan" data-sort-value="{{ entry.last_scan.timestamp() if entry.last_scan else 0 }}">{{ entry.last_scan|localtime if entry.last_scan else 'Never' }}</td>
-                    <td class="sort-updated" data-sort-value="{{ (entry.item.updated_at or entry.item.created_at).timestamp() }}">{{ (entry.item.updated_at or entry.item.created_at)|localtime }}</td>
+                    <td class="sort-last-scan" data-sort-value="{{ entry.last_scan.timestamp() if entry.last_scan else 0 }}" title="{{ entry.last_scan|localtime if entry.last_scan else '' }}">{{ entry.last_scan|relative_time if entry.last_scan else 'Never' }}</td>
+                    <td class="sort-updated" data-sort-value="{{ (entry.item.updated_at or entry.item.created_at).timestamp() }}" title="{{ (entry.item.updated_at or entry.item.created_at)|localtime }}">{{ (entry.item.updated_at or entry.item.created_at)|relative_time }}</td>
                 </tr>
             {% endfor %}
             {% if not items %}<tr class="items-empty-row"><td colspan="7"><div class="empty py-4"><div class="empty-icon"><i class="ti ti-apple icon icon-lg"></i></div><p class="empty-title">No matching items</p></div></td></tr>{% endif %}
