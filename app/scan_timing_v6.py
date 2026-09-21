@@ -6,22 +6,35 @@ import time
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.events import scan_events
+
 logger = logging.getLogger(__name__)
 
 
 class ScanTimingMiddleware:
-    """Measure scanner request latency without buffering the response."""
+    """Measure scanner request latency and emit an immediate scan-start signal."""
 
     def __init__(self, app: ASGIApp):
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope.get("path") not in {"/scan", "/scan/app"}:
+        if (
+            scope["type"] != "http"
+            or scope.get("method") != "POST"
+            or scope.get("path") not in {"/scan", "/scan/app"}
+        ):
             await self.app(scope, receive, send)
             return
 
         started = time.perf_counter()
         response_started = False
+
+        # This fires before auth, DB lookups, Mealie, HA, or any target routing.
+        # The browser uses it only as immediate scan-received feedback.
+        scan_events.publish_threadsafe(
+            "scan-start",
+            {"path": scope.get("path"), "received_at": time.time()},
+        )
 
         async def send_wrapper(message: Message) -> None:
             nonlocal response_started
