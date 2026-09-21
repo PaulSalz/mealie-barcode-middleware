@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
-from app.routers import actions, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scanner, settings as settings_router
+from app.routers import actions, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scanner, settings as settings_router, theme_preview_v2
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -84,6 +84,7 @@ app.include_router(docs.router, tags=["docs"])
 app.include_router(scan.router, tags=["scan"])
 app.include_router(scanner.router, tags=["scanner"])
 app.include_router(runtime_features.router, tags=["runtime"])
+app.include_router(theme_preview_v2.router, tags=["theme"])
 app.include_router(health.router, tags=["health"])
 app.include_router(login.router, tags=["auth"])
 app.include_router(barcodes.router, tags=["barcodes"])
