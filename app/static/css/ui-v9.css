@@ -1,0 +1,81 @@
+/* v2026.09.21.9: final corrective layer for settings, bell and e-paper dark mode. */
+
+/* The outline bell is always present. Unread state may keep the badge, but never swaps the icon. */
+#notif-dropdown > a > .ti-bell,
+#notif-dropdown > a.b2m-v4-unread > .ti-bell {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: inherit !important;
+  fill: none !important;
+}
+#notif-dropdown .b2m-v4-bell-filled,
+#notif-dropdown .b2m-bell-active-icon { display: none !important; }
+#notif-dropdown > a.b2m-v4-unread { color: inherit !important; }
+#notif-dropdown > a.b2m-v9-bell-pulse,
+#notif-dropdown > a.b2m-v6-bell-pulse {
+  color: var(--tblr-primary) !important;
+  background: rgba(var(--tblr-primary-rgb), .08) !important;
+  box-shadow: inset 0 0 0 2px var(--tblr-primary) !important;
+  outline: 0 !important;
+  border-radius: var(--tblr-border-radius);
+}
+#notif-dropdown > a.b2m-v9-bell-pulse > .ti-bell,
+#notif-dropdown > a.b2m-v6-bell-pulse > .ti-bell { color: var(--tblr-primary) !important; }
+
+/* Printer page is a single stable page after the older dynamic renderers finish. */
+#v9-printer-runtime .datagrid { grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); }
+#v9-printer-runtime .card-actions { flex-wrap: wrap; }
+
+/* Strong monochrome overrides for dark-mode + e-paper. */
+html.b2m-epaper-v9[data-bs-theme="dark"] { color-scheme: light; }
+html.b2m-epaper-v9[data-bs-theme="dark"] body,
+html.b2m-epaper-v9[data-bs-theme="dark"] .page,
+html.b2m-epaper-v9[data-bs-theme="dark"] .page-wrapper,
+html.b2m-epaper-v9[data-bs-theme="dark"] .navbar,
+html.b2m-epaper-v9[data-bs-theme="dark"] .card,
+html.b2m-epaper-v9[data-bs-theme="dark"] .card-header,
+html.b2m-epaper-v9[data-bs-theme="dark"] .card-body,
+html.b2m-epaper-v9[data-bs-theme="dark"] .card-footer,
+html.b2m-epaper-v9[data-bs-theme="dark"] .dropdown-menu,
+html.b2m-epaper-v9[data-bs-theme="dark"] .modal-content,
+html.b2m-epaper-v9[data-bs-theme="dark"] .list-group-item,
+html.b2m-epaper-v9[data-bs-theme="dark"] .table,
+html.b2m-epaper-v9[data-bs-theme="dark"] .form-control,
+html.b2m-epaper-v9[data-bs-theme="dark"] .form-select,
+html.b2m-epaper-v9[data-bs-theme="dark"] .input-group-text {
+  background: #fff !important;
+  color: #000 !important;
+}
+html.b2m-epaper-v9[data-bs-theme="dark"] .page-title,
+html.b2m-epaper-v9[data-bs-theme="dark"] .card-title,
+html.b2m-epaper-v9[data-bs-theme="dark"] .form-label,
+html.b2m-epaper-v9[data-bs-theme="dark"] .form-check-label,
+html.b2m-epaper-v9[data-bs-theme="dark"] .nav-link,
+html.b2m-epaper-v9[data-bs-theme="dark"] .dropdown-item,
+html.b2m-epaper-v9[data-bs-theme="dark"] .datagrid-title,
+html.b2m-epaper-v9[data-bs-theme="dark"] .datagrid-content,
+html.b2m-epaper-v9[data-bs-theme="dark"] .table th,
+html.b2m-epaper-v9[data-bs-theme="dark"] .table td,
+html.b2m-epaper-v9[data-bs-theme="dark"] code,
+html.b2m-epaper-v9[data-bs-theme="dark"] a:not(.btn) {
+  color: #000 !important;
+}
+html.b2m-epaper-v9[data-bs-theme="dark"] .text-secondary,
+html.b2m-epaper-v9[data-bs-theme="dark"] .form-hint,
+html.b2m-epaper-v9[data-bs-theme="dark"] .card-subtitle {
+  color: #444 !important;
+}
+html.b2m-epaper-v9[data-bs-theme="dark"] .form-control::placeholder { color: #666 !important; }
+html.b2m-epaper-v9[data-bs-theme="dark"] .border,
+html.b2m-epaper-v9[data-bs-theme="dark"] .card,
+html.b2m-epaper-v9[data-bs-theme="dark"] .form-control,
+html.b2m-epaper-v9[data-bs-theme="dark"] .form-select,
+html.b2m-epaper-v9[data-bs-theme="dark"] .input-group-text,
+html.b2m-epaper-v9[data-bs-theme="dark"] .list-group-item {
+  border-color: #555 !important;
+}
+
+@media (max-width: 767.98px) {
+  #v9-printer-runtime .datagrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}

@@ -12,6 +12,7 @@ from app.services.targets import list_ids
 
 logger = logging.getLogger(__name__)
 _ROUTE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="target-route")
+_SUBROUTE_POOL = ThreadPoolExecutor(max_workers=12, thread_name_prefix="target-subroute")
 
 
 def _effective_route(target: BarcodeTarget, item: Item | None) -> str:
@@ -76,20 +77,28 @@ def _route_food(plan: dict) -> dict:
 
 
 def _route_recipe(plan: dict) -> dict:
+    """Route one Recipe target.
+
+    A recipe can fan out to several Mealie shopping lists plus Home Assistant.
+    Those network operations are independent, so execute them concurrently while
+    retaining synchronous success semantics for the caller.
+    """
     started = time.monotonic()
     route = plan["route"]
     ids = plan["list_ids"]
     mealie_ok = None
     ha_ok = None
 
+    mealie_futures = []
+    ha_future = None
     if route in {"mealie", "both"}:
-        mealie_results = [
-            add_recipe_to_list(plan["target_id"], plan["scale"], list_id)
+        mealie_futures = [
+            _SUBROUTE_POOL.submit(add_recipe_to_list, plan["target_id"], plan["scale"], list_id)
             for list_id in ids
         ]
-        mealie_ok = bool(mealie_results) and all(mealie_results)
     if route in {"homeassistant", "both"}:
-        ha_ok = notify_shopping_route(
+        ha_future = _SUBROUTE_POOL.submit(
+            notify_shopping_route,
             barcode=plan["barcode"],
             item_id=plan["target_id"],
             item_name=plan["name"],
@@ -97,6 +106,12 @@ def _route_recipe(plan: dict) -> dict:
             unit_id=None,
             route=route,
         )
+
+    if route in {"mealie", "both"}:
+        mealie_results = [future.result() for future in mealie_futures]
+        mealie_ok = bool(mealie_results) and all(mealie_results)
+    if ha_future is not None:
+        ha_ok = bool(ha_future.result())
 
     if route == "none":
         ok = True
@@ -107,8 +122,8 @@ def _route_recipe(plan: dict) -> dict:
     duration_ms = int((time.monotonic() - started) * 1000)
     if duration_ms >= 1000:
         logger.warning(
-            "Slow Recipe target route: barcode=%s target=%s took %d ms via=%s",
-            plan["barcode"], plan["target_id"], duration_ms, route,
+            "Slow Recipe target route: barcode=%s target=%s took %d ms via=%s lists=%d",
+            plan["barcode"], plan["target_id"], duration_ms, route, len(ids),
         )
     return {
         "ok": ok,
@@ -124,8 +139,10 @@ def route_targets(barcode: str, targets: list[BarcodeTarget], db, *, paused: boo
     """Execute enabled targets and aggregate results.
 
     DB-backed target resolution happens on the request thread. Independent
-    network routes then run concurrently so three slow Mealie/HA targets cost
+    network routes then run concurrently so several slow Mealie/HA targets cost
     roughly the slowest target latency instead of the sum of all target latencies.
+    Recipe fan-out inside one target is parallelized separately to avoid nested
+    executor starvation.
     """
     slots: list[dict | None] = []
     jobs: list[tuple[int, BarcodeTarget, dict, object]] = []
