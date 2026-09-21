@@ -3,6 +3,8 @@
 
 HID reading, immediate scan acknowledgements and the potentially slow /scan request
 run independently. This keeps burst scans lossless even when Mealie responds slowly.
+Runtime scan thresholds are periodically pulled from the middleware so they can be
+changed from the Settings page without rebuilding the scanner container.
 """
 
 import glob
@@ -18,11 +20,13 @@ import urllib.request
 
 from evdev import InputDevice, ecodes
 
-SCANNER_VERSION = "2.3.1"
+SCANNER_VERSION = "2.4.0"
 STARTED_MONO = time.monotonic()
 _stats_lock = threading.Lock()
 _stats = {"scans": 0, "errors": 0, "last_latency_ms": 0}
 _runtime = {"device": "disconnected", "layout": "de"}
+_config_lock = threading.Lock()
+_runtime_config = {"min_barcode_length": 4, "scan_queue_size": 64, "scan_key_gap_seconds": 0.4}
 _scan_queue: queue.Queue[str] | None = None
 _ack_queue: queue.Queue[str] | None = None
 
@@ -100,6 +104,11 @@ def received_url() -> str:
     return explicit.rstrip("/") if explicit else middleware_base_url() + "/scanner/received"
 
 
+def config_url() -> str:
+    explicit = _env("SCANNER_CONFIG_URL")
+    return explicit.rstrip("/") if explicit else middleware_base_url() + "/scanner/config"
+
+
 def api_token() -> str:
     token = _env("MIDDLEWARE_TOKEN", "MIDDLEWARE_API_TOKEN", "BARCODE_API_TOKEN", "API_TOKEN", "API_KEY")
     if not token:
@@ -108,11 +117,7 @@ def api_token() -> str:
 
 
 def auth_headers() -> dict[str, str]:
-    return {
-        "Authorization": "Bearer " + api_token(),
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+    return {"Authorization": "Bearer " + api_token(), "Content-Type": "application/json", "Accept": "application/json"}
 
 
 def telemetry_headers() -> dict[str, str]:
@@ -128,27 +133,14 @@ def telemetry_headers() -> dict[str, str]:
     return headers
 
 
-def _post(
-    url: str,
-    payload: dict,
-    *,
-    count_scan: bool = False,
-    log_scan: str | None = None,
-    timeout_override: float | None = None,
-    include_telemetry: bool = True,
-) -> bool:
+def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | None = None, timeout_override: float | None = None, include_telemetry: bool = True) -> bool:
     if count_scan:
         with _stats_lock:
             _stats["scans"] += 1
     timeout = timeout_override if timeout_override is not None else float(_env("HTTP_TIMEOUT", default="8") or "8")
     started = time.monotonic()
     try:
-        request = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            method="POST",
-            headers=telemetry_headers() if include_telemetry else auth_headers(),
-        )
+        request = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST", headers=telemetry_headers() if include_telemetry else auth_headers())
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8", "replace")
             elapsed = int((time.monotonic() - started) * 1000)
@@ -176,6 +168,47 @@ def _post(
         else:
             log.debug("scanner auxiliary POST failed", exc_info=True)
     return False
+
+
+def _get_json(url: str, timeout: float = 2.0) -> dict | None:
+    try:
+        request = urllib.request.Request(url, method="GET", headers=auth_headers())
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            data = json.loads(response.read().decode("utf-8", "replace"))
+            return data if isinstance(data, dict) else None
+    except Exception:
+        log.debug("scanner config refresh failed", exc_info=True)
+        return None
+
+
+def refresh_runtime_config() -> None:
+    global _scan_queue, _ack_queue
+    data = _get_json(config_url())
+    cfg = data.get("config") if isinstance(data, dict) else None
+    if not isinstance(cfg, dict):
+        return
+    try:
+        values = {
+            "min_barcode_length": max(1, min(64, int(cfg.get("min_barcode_length", 4)))),
+            "scan_queue_size": max(8, min(2048, int(cfg.get("scan_queue_size", 64)))),
+            "scan_key_gap_seconds": max(0.05, min(5.0, float(cfg.get("scan_key_gap_seconds", 0.4)))),
+        }
+    except (TypeError, ValueError):
+        return
+    with _config_lock:
+        changed = values != _runtime_config
+        _runtime_config.update(values)
+    if _scan_queue is not None:
+        _scan_queue.maxsize = values["scan_queue_size"]
+    if _ack_queue is not None:
+        _ack_queue.maxsize = values["scan_queue_size"]
+    if changed:
+        log.info("Runtime scanner config updated: min_length=%d queue=%d key_gap=%.2fs", values["min_barcode_length"], values["scan_queue_size"], values["scan_key_gap_seconds"])
+
+
+def runtime_scan_values(fallback_min: int, fallback_gap: float) -> tuple[int, float]:
+    with _config_lock:
+        return int(_runtime_config.get("min_barcode_length", fallback_min)), float(_runtime_config.get("scan_key_gap_seconds", fallback_gap))
 
 
 def post_barcode(barcode: str) -> None:
@@ -223,6 +256,7 @@ def scan_sender_loop() -> None:
 def heartbeat_loop(interval: float) -> None:
     while True:
         _post(heartbeat_url(), {}, count_scan=False)
+        refresh_runtime_config()
         time.sleep(interval)
 
 
@@ -271,12 +305,13 @@ def _read_device(device: InputDevice, layout: str, min_length: int, max_length: 
             continue
         if event.value != 1:
             continue
+        runtime_min, runtime_gap = runtime_scan_values(min_length, max_key_gap)
         if key_name in ENTER_KEYS:
             value = "".join(buffer).strip()
             buffer.clear(); last_char_at = 0.0
-            if len(value) < min_length:
+            if len(value) < runtime_min:
                 if value:
-                    log.warning("Ignoring too-short scan (%d < %d chars): %r", len(value), min_length, value)
+                    log.warning("Ignoring too-short scan (%d < %d chars): %r", len(value), runtime_min, value)
                 continue
             if len(value) > max_length:
                 log.warning("Ignoring too-long scan (%d chars)", len(value))
@@ -293,7 +328,7 @@ def _read_device(device: InputDevice, layout: str, min_length: int, max_length: 
         char = decode_key(key_name, shift_down, altgr_down, layout)
         if char is not None and len(buffer) < max_length:
             now = time.monotonic()
-            if buffer and last_char_at and now - last_char_at > max_key_gap:
+            if buffer and last_char_at and now - last_char_at > runtime_gap:
                 log.warning("Discarding stale partial scan after %.0f ms gap: %r", (now - last_char_at) * 1000, "".join(buffer))
                 buffer.clear()
             buffer.append(char); last_char_at = now
@@ -304,21 +339,28 @@ def _read_device(device: InputDevice, layout: str, min_length: int, max_length: 
 def main() -> int:
     global _scan_queue, _ack_queue
     device_spec = _env("SCANNER_DEVICE", "BARCODE_DEVICE", default="auto") or "auto"
-    min_length = int(_env("MIN_BARCODE_LENGTH", default="1") or "1")
+    min_length = int(_env("MIN_BARCODE_LENGTH", default="4") or "4")
     max_length = int(_env("MAX_BARCODE_LENGTH", default="256") or "256")
     layout = (_env("SCANNER_KEYBOARD_LAYOUT", default="de") or "de").strip().lower()
     heartbeat_interval = float(_env("HEARTBEAT_INTERVAL", default="60") or "60")
     reconnect_interval = max(0.5, float(_env("SCANNER_RECONNECT_INTERVAL", default="2") or "2"))
-    queue_size = max(8, int(_env("SCAN_QUEUE_SIZE", default="128") or "128"))
-    max_key_gap = max(0.05, float(_env("SCAN_KEY_GAP_SECONDS", default="1.5") or "1.5"))
+    queue_size = max(8, int(_env("SCAN_QUEUE_SIZE", default="64") or "64"))
+    max_key_gap = max(0.05, float(_env("SCAN_KEY_GAP_SECONDS", default="0.4") or "0.4"))
     if layout not in {"de", "us"}:
         raise RuntimeError("SCANNER_KEYBOARD_LAYOUT must be 'de' or 'us'")
     api_token()
     _runtime["layout"] = layout
     _runtime["device"] = "disconnected"
+    with _config_lock:
+        _runtime_config.update({"min_barcode_length":min_length,"scan_queue_size":queue_size,"scan_key_gap_seconds":max_key_gap})
     _scan_queue = queue.Queue(maxsize=queue_size)
     _ack_queue = queue.Queue(maxsize=queue_size)
-    log.info("Scanner bridge v%s starting, device=%s, layout=%s, min_length=%d, queue=%d, posting to %s", SCANNER_VERSION, device_spec, layout, min_length, queue_size, scan_url())
+    refresh_runtime_config()
+    with _config_lock:
+        queue_size = int(_runtime_config["scan_queue_size"])
+        min_length = int(_runtime_config["min_barcode_length"])
+        max_key_gap = float(_runtime_config["scan_key_gap_seconds"])
+    log.info("Scanner bridge v%s starting, device=%s, layout=%s, min_length=%d, queue=%d, key_gap=%.2fs, posting to %s", SCANNER_VERSION, device_spec, layout, min_length, queue_size, max_key_gap, scan_url())
     threading.Thread(target=ack_sender_loop, daemon=True, name="scan-ack").start()
     threading.Thread(target=scan_sender_loop, daemon=True, name="scan-sender").start()
     if heartbeat_interval > 0:
