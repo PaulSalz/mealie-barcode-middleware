@@ -33,6 +33,16 @@ def _items(data) -> list[dict]:
     return []
 
 
+def _shopping_item_checked(row: dict) -> bool:
+    """Normalize Mealie shopping-item completion flags across API versions."""
+    value = row.get("checked", row.get("isChecked", False))
+    if isinstance(value, str):
+        value = value.strip().casefold() in {"1", "true", "yes", "on"}
+    if bool(value):
+        return True
+    return bool(row.get("checkedAt") or row.get("completedAt"))
+
+
 def _invalidate_counts_cache() -> None:
     global _counts_cache
     with _list_cache_lock:
@@ -135,22 +145,26 @@ def set_default_shopping_list_id(list_id: str, db) -> str:
 
 
 def get_shopping_list_counts(force: bool = False) -> list[dict]:
-    """Return unchecked item count per Mealie shopping list."""
+    """Return only currently unchecked item counts per Mealie shopping list."""
     global _counts_cache
     now = time.monotonic()
     with _list_cache_lock:
-        if not force and _counts_cache and now - _counts_cache[0] < 20:
+        # Keep this deliberately short: items may be checked directly in Mealie,
+        # outside B2M, and the dashboard should reflect that almost immediately.
+        if not force and _counts_cache and now - _counts_cache[0] < 2:
             return list(_counts_cache[1])
     lists = get_shopping_lists(force=force)
     counts = {str(row["id"]): 0 for row in lists}
     try:
         response = _http.get(
             f"{settings.mealie_url}/api/households/shopping/items",
-            headers=_headers(), params={"perPage": -1}, timeout=10,
+            headers=_headers(),
+            params={"perPage": -1, "checked": "false"},
+            timeout=10,
         )
         response.raise_for_status()
         for row in _items(response.json()):
-            if not isinstance(row, dict) or row.get("checked"):
+            if not isinstance(row, dict) or _shopping_item_checked(row):
                 continue
             list_id = row.get("shoppingListId")
             if not list_id and isinstance(row.get("shoppingList"), dict):
