@@ -1,0 +1,32 @@
+/* v2026.09.21.10: bell stays visible; only scan-start creates the 500 ms accent pulse. */
+
+#notif-dropdown > a > .ti-bell {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: var(--tblr-body-color) !important;
+}
+
+/* Neutralize the old completion-time pulses from v6/v9. */
+#notif-dropdown > a.b2m-v6-bell-pulse:not(.b2m-v10-bell-pulse),
+#notif-dropdown > a.b2m-v9-bell-pulse:not(.b2m-v10-bell-pulse) {
+  color: inherit !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+#notif-dropdown > a.b2m-v6-bell-pulse:not(.b2m-v10-bell-pulse) > .ti-bell,
+#notif-dropdown > a.b2m-v9-bell-pulse:not(.b2m-v10-bell-pulse) > .ti-bell {
+  color: var(--tblr-body-color) !important;
+}
+
+#notif-dropdown > a.b2m-v10-bell-pulse {
+  color: var(--tblr-primary) !important;
+  background: rgba(var(--tblr-primary-rgb), .08) !important;
+  box-shadow: inset 0 0 0 2px var(--tblr-primary) !important;
+  outline: 0 !important;
+  border-radius: var(--tblr-border-radius);
+}
+#notif-dropdown > a.b2m-v10-bell-pulse > .ti-bell {
+  color: var(--tblr-primary) !important;
+}
