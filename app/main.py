@@ -5,10 +5,11 @@ from pathlib import Path
 from fastapi.applications import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.admin_write_guard import AdminWriteGuardMiddleware
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
-from app.routers import actions, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, scan, scanner, settings as settings_router
+from app.routers import actions, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scanner, settings as settings_router, theme_preview_v2
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -74,6 +75,7 @@ app = FastAPI(title="Mealie Barcode Middleware", lifespan=lifespan, docs_url="/a
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CSRFOriginMiddleware)
+app.add_middleware(AdminWriteGuardMiddleware)
 app.add_middleware(LoginRequiredMiddleware)
 app.add_middleware(RememberMeSessionMiddleware, secret_key=get_session_secret(), max_age=settings.session_max_age_days * 24 * 3600)
 
@@ -83,6 +85,10 @@ app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(docs.router, tags=["docs"])
 app.include_router(scan.router, tags=["scan"])
 app.include_router(scanner.router, tags=["scanner"])
+# Existing integration routes keep priority for authenticated theme/item actions.
+app.include_router(integrations.router, tags=["integrations"])
+app.include_router(runtime_features.router, tags=["runtime"])
+app.include_router(theme_preview_v2.router, tags=["theme"])
 app.include_router(health.router, tags=["health"])
 app.include_router(login.router, tags=["auth"])
 app.include_router(barcodes.router, tags=["barcodes"])
@@ -91,6 +97,5 @@ app.include_router(recipes.router, tags=["recipes"])
 app.include_router(labels.router, tags=["labels"])
 app.include_router(label_printer.router, tags=["labels", "printer"])
 app.include_router(actions.router, tags=["actions"])
-app.include_router(integrations.router, tags=["integrations"])
 app.include_router(notifications.router, tags=["notifications"])
 app.include_router(settings_router.router, tags=["settings"])

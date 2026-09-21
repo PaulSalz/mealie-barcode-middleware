@@ -1,0 +1,82 @@
+/* Cross-page UI polish and B21 v2 editor helpers. */
+
+@font-face {
+  font-family: "OpenDyslexic";
+  src: url("/static/vendor/opendyslexic/OpenDyslexic-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "OpenDyslexic";
+  src: url("/static/vendor/opendyslexic/OpenDyslexic-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* Tables: use the barcode-page row hover everywhere, never per-cell highlighting. */
+.table.table-vcenter tbody td:hover { box-shadow: none !important; }
+.table.table-vcenter tbody tr:not(.activity-empty-row):not(.barcodes-empty-row):not(.items-empty-row):hover > td {
+  background: rgba(var(--tblr-primary-rgb), .045) !important;
+}
+
+/* Consistent action treatment across pages. */
+.page-header .btn { min-height: 2.25rem; }
+.page-header .btn .ti, .card-header .btn .ti { font-size: 1.05rem; }
+.page-header .btn-outline-primary:hover, .card-header .btn-outline-primary:hover { transform: translateY(-1px); }
+.card.card-sm, .b2m-stat-card { transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+.card.card-sm:hover, .b2m-stat-card:hover { transform: translateY(-1px); box-shadow: var(--tblr-box-shadow-card); }
+
+/* Notification bell: unread/received state is visibly filled in the accent color. */
+#notif-dropdown > a.b2m-bell-active { color: var(--tblr-primary) !important; }
+#notif-dropdown > a.b2m-bell-active .ti-bell,
+#notif-dropdown > a.b2m-bell-active .ti-bell-filled { color: var(--tblr-primary) !important; }
+
+/* Labels queue remove button: always discoverable and easy to click. */
+#label-queue .label-card { padding-right: 2.6rem; }
+#label-queue .label-card .label-remove {
+  opacity: 1 !important;
+  top: .55rem !important;
+  right: .55rem !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  border-radius: .45rem !important;
+  background: var(--tblr-danger-lt) !important;
+  color: var(--tblr-danger) !important;
+  border-color: rgba(var(--tblr-danger-rgb), .35) !important;
+}
+#label-queue .label-card .label-remove:hover { background: var(--tblr-danger) !important; color: white !important; }
+
+/* B21 v2 header / inspector. */
+.b21-v2-toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.b21-v2-printer-data { display: grid; grid-template-columns: repeat(auto-fit,minmax(120px,1fr)); gap: .45rem .8rem; margin-top: .75rem; }
+.b21-v2-printer-data > div { min-width: 0; padding: .45rem .55rem; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); }
+.b21-v2-printer-data small { display: block; color: var(--tblr-secondary); }
+.b21-v2-printer-data strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.b21-v2-inspector .form-range { cursor: pointer; }
+.b21-v2-inspector .btn-group .btn { min-width: 2.2rem; }
+.b21-v2-element-selected { outline: 2px solid var(--tblr-primary) !important; outline-offset: 2px; }
+.b21-v2-resize-handle {
+  position: absolute; width: 12px; height: 12px; right: -7px; bottom: -7px;
+  border-radius: 50%; background: var(--tblr-primary); border: 2px solid #fff;
+  cursor: nwse-resize; z-index: 6; box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.b21-v2-free-text, .b21-v2-line { position: absolute; transform: translate(-50%,-50%); cursor: move; touch-action: none; }
+.b21-v2-line { height: 0 !important; border-top-style: solid; border-top-color: #111; }
+.b21-v2-job-state { min-width: 9rem; }
+.b21-v2-calibration-note { font-variant-numeric: tabular-nums; }
+
+/* Route inherited state: informative, not disabled/greyed-out. */
+.b2m-route-choice-grid .b2m-choice-card.b2m-inherited-active { opacity: 1 !important; }
+.b2m-list-choice-grid .b2m-choice-card.b2m-inherited-active { opacity: 1 !important; border-style: solid !important; background: var(--tblr-bg-surface) !important; }
+.b2m-list-choice-grid .b2m-choice-card.b2m-inherited-active small::after { content: "" !important; }
+
+/* Settings cards use the same compact dashboard-like affordances. */
+.b2m-settings-stat { min-height: 5rem; }
+.b2m-settings-stat .avatar { flex: 0 0 auto; }
+
+@media (max-width: 767.98px) {
+  .b21-v2-toolbar > .btn, .b21-v2-toolbar > .form-select, .b21-v2-toolbar > .input-group { width: 100%; }
+  .b21-v2-printer-data { grid-template-columns: 1fr 1fr; }
+}

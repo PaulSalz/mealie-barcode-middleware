@@ -173,6 +173,7 @@ _AUTH_EXEMPT_PREFIXES = (
     "/static",
     "/scan",
     "/scanner/heartbeat",
+    "/scanner/config",
     "/health",
     "/api/docs",
     "/api/redoc",
@@ -212,7 +213,7 @@ def get_session_secret() -> str:
 class LoginRequiredMiddleware(BaseHTTPMiddleware):
     """Redirect unauthenticated users to /login for UI routes.
 
-    Exempt: scanner API (/scan), scanner heartbeat, static files, health check,
+    Exempt: scanner API (/scan), scanner heartbeat/config, static files, health check,
     login/setup pages.
 
     On every authenticated request, re-validates the user from the database

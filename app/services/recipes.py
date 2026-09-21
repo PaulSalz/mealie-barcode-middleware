@@ -1,10 +1,18 @@
 import logging
+import threading
+import time
 
 import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+_CATALOG_TTL = 180.0
+_DETAIL_TTL = 300.0
+_cache_lock = threading.Lock()
+_catalog_cache: tuple[float, list[dict]] | None = None
+_detail_cache: dict[str, tuple[float, dict]] = {}
 
 
 def _headers() -> dict:
@@ -19,23 +27,46 @@ def _items(data) -> list[dict]:
     return []
 
 
+def _recipe_catalog() -> list[dict]:
+    global _catalog_cache
+    now = time.monotonic()
+    with _cache_lock:
+        cached = _catalog_cache
+        if cached and now - cached[0] < _CATALOG_TTL:
+            return cached[1]
+    response = httpx.get(
+        f"{settings.mealie_url}/api/recipes",
+        headers=_headers(), params={"perPage": -1}, timeout=20,
+    )
+    response.raise_for_status()
+    rows = _items(response.json())
+    with _cache_lock:
+        _catalog_cache = (now, rows)
+    return rows
+
+
 def get_recipe_by_id(recipe_id: str) -> dict | None:
+    recipe_id = str(recipe_id)
+    now = time.monotonic()
+    with _cache_lock:
+        cached = _detail_cache.get(recipe_id)
+        if cached and now - cached[0] < _DETAIL_TTL:
+            return cached[1]
     try:
-        response = httpx.get(
-            f"{settings.mealie_url}/api/recipes",
-            headers=_headers(), params={"perPage": -1}, timeout=20,
-        )
-        response.raise_for_status()
-        summary = next((row for row in _items(response.json()) if str(row.get("id")) == str(recipe_id)), None)
+        summary = next((row for row in _recipe_catalog() if str(row.get("id")) == recipe_id), None)
         if not summary:
             return None
         slug = summary.get("slug")
-        if not slug:
-            return summary
-        detail = httpx.get(f"{settings.mealie_url}/api/recipes/{slug}", headers=_headers(), timeout=15)
-        if detail.status_code == 200 and isinstance(detail.json(), dict):
-            return detail.json()
-        return summary
+        result = summary
+        if slug:
+            detail = httpx.get(f"{settings.mealie_url}/api/recipes/{slug}", headers=_headers(), timeout=15)
+            if detail.status_code == 200:
+                data = detail.json()
+                if isinstance(data, dict):
+                    result = data
+        with _cache_lock:
+            _detail_cache[recipe_id] = (time.monotonic(), result)
+        return result
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("Could not load recipe %s: %s", recipe_id, exc)
         return None
