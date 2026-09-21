@@ -12,7 +12,11 @@ COPY app/ ./app/
 COPY docs/ ./docs/
 COPY entrypoint.sh /entrypoint.sh
 
-RUN adduser --system --no-create-home appuser \
+# Bundle OpenDyslexic locally so Appearance does not depend on an external font CDN
+# at runtime. The upstream project is SIL-OFL licensed.
+RUN mkdir -p /app/app/static/vendor/opendyslexic \
+    && python -c "import urllib.request; base='https://raw.githubusercontent.com/antijingoist/opendyslexic/master/compiled/'; urllib.request.urlretrieve(base+'OpenDyslexic-Regular.woff2','/app/app/static/vendor/opendyslexic/OpenDyslexic-Regular.woff2'); urllib.request.urlretrieve(base+'OpenDyslexic-Bold.woff2','/app/app/static/vendor/opendyslexic/OpenDyslexic-Bold.woff2'); urllib.request.urlretrieve('https://raw.githubusercontent.com/antijingoist/opendyslexic/master/OFL.txt','/app/app/static/vendor/opendyslexic/OFL.txt')" \
+    && adduser --system --no-create-home appuser \
     && mkdir -p /data \
     && chown appuser /data \
     && apt-get update && apt-get install -y --no-install-recommends gosu \
