@@ -19,4 +19,11 @@
     script.src = '/static/js/ui-v2.js';
     script.defer = true;
     document.head.appendChild(script);
+
+    if (window.location.pathname === '/labels') {
+        var resizePatch = document.createElement('script');
+        resizePatch.src = '/static/js/labels-b21-v2-patch.js';
+        resizePatch.defer = true;
+        document.head.appendChild(resizePatch);
+    }
 })();
