@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.applications import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.admin_write_guard import AdminWriteGuardMiddleware
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
@@ -74,6 +75,7 @@ app = FastAPI(title="Mealie Barcode Middleware", lifespan=lifespan, docs_url="/a
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CSRFOriginMiddleware)
+app.add_middleware(AdminWriteGuardMiddleware)
 app.add_middleware(LoginRequiredMiddleware)
 app.add_middleware(RememberMeSessionMiddleware, secret_key=get_session_secret(), max_age=settings.session_max_age_days * 24 * 3600)
 
