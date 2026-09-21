@@ -1,7 +1,10 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '2026.09.21.3';
+  if (window.__b2mUiV4Loaded) return;
+  window.__b2mUiV4Loaded = true;
+
+  const APP_VERSION = '2026.09.21.5';
   const $ = (id) => document.getElementById(id);
   const esc = (value) => String(value == null ? '' : value)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
@@ -17,21 +20,23 @@
     return new URLSearchParams(window.location.search).get('tab') || 'mealie';
   }
 
-  function normalizeVersion() {
+  function normalizeVersion(version) {
+    const target = 'v' + (version || APP_VERSION);
     document.querySelectorAll('span').forEach((span) => {
-      if (/^v20\d\d\./.test(span.textContent.trim())) span.textContent = 'v' + APP_VERSION;
+      const current = span.textContent.trim();
+      if (/^v20\d\d\./.test(current) && current !== target) span.textContent = target;
     });
   }
 
+  function whenDomReady(callback) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', callback, {once:true});
+    else callback();
+  }
+
   function initVersion() {
-    normalizeVersion();
-    new MutationObserver(normalizeVersion).observe(document.documentElement, {childList:true,subtree:true,characterData:true});
+    whenDomReady(() => normalizeVersion(APP_VERSION));
     fetch('/api/version', {cache:'no-store'}).then((r) => r.json()).then((data) => {
-      if (data && data.version) {
-        document.querySelectorAll('span').forEach((span) => {
-          if (/^v20\d\d\./.test(span.textContent.trim())) span.textContent = 'v' + data.version;
-        });
-      }
+      if (data && data.version) whenDomReady(() => normalizeVersion(data.version));
     }).catch(() => {});
   }
 
