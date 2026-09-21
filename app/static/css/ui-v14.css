@@ -1,0 +1,40 @@
+/* v2026.09.21.14: flash the notification button, never recolor the bell glyph. */
+
+/*
+ * The scanner receipt animation belongs to the clickable notification control.
+ * Keep the bell itself in the normal UI text color for the entire animation.
+ * Only the button surface changes for the existing 500 ms flash window.
+ */
+#notif-dropdown > a.b2m-v12-bell-flash {
+  background-color: var(--tblr-primary, #066fd1) !important;
+  background-image: none !important;
+  border: 1px solid var(--tblr-primary, #066fd1) !important;
+  box-shadow: 0 0 0 2px rgba(var(--tblr-primary-rgb, 6,111,209), .30) !important;
+  color: var(--tblr-body-color) !important;
+}
+
+#notif-dropdown > a.b2m-v12-bell-flash > i.ti-bell,
+#notif-dropdown > a.b2m-v12-bell-flash > i.ti-bell::before {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: var(--tblr-body-color) !important;
+}
+
+/* The unread dot stays independent of the temporary scan flash. */
+#notif-dropdown > a.b2m-v12-bell-flash #notif-badge {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* E-paper remains monochrome, but the glyph still keeps the normal text color. */
+html.b2m-epaper-v9 #notif-dropdown > a.b2m-v12-bell-flash {
+  background-color: #fff !important;
+  border-color: #000 !important;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.24) !important;
+  color: #000 !important;
+}
+html.b2m-epaper-v9 #notif-dropdown > a.b2m-v12-bell-flash > i.ti-bell,
+html.b2m-epaper-v9 #notif-dropdown > a.b2m-v12-bell-flash > i.ti-bell::before {
+  color: #000 !important;
+}
