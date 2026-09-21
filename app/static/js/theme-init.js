@@ -8,4 +8,15 @@
     if (override) {
         document.documentElement.setAttribute('data-bs-theme', override);
     }
+
+    /* Global UI v2 layer. Loaded from self so the strict CSP stays intact. */
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/static/css/ui-v2.css';
+    document.head.appendChild(link);
+
+    var script = document.createElement('script');
+    script.src = '/static/js/ui-v2.js';
+    script.defer = true;
+    document.head.appendChild(script);
 })();
