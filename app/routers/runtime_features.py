@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import copy
+import io
 import threading
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+import barcode as barcode_lib
+import segno
+from barcode.writer import SVGWriter
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
@@ -13,7 +17,8 @@ from app.auth import require_token
 from app.database import SessionLocal, get_db
 from app.models import ApiToken, SystemState
 from app.services.niimblue import print_image_base64, printer_status
-from app.theme import THEME_DEFAULTS, build_theme_css
+from app.templating import set_cached_theme
+from app.theme import THEME_DEFAULTS, build_theme_css, get_theme, save_theme
 
 router = APIRouter()
 
@@ -56,8 +61,7 @@ def _scanner_config(db: Session) -> dict:
             value = cast(raw)
         except (TypeError, ValueError):
             value = default
-        value = max(minimum, min(maximum, value))
-        result[field] = value
+        result[field] = max(minimum, min(maximum, value))
     return result
 
 
@@ -65,6 +69,58 @@ def _require_admin(request: Request):
     if not request.session.get("is_admin", False):
         return JSONResponse({"error": "admin required"}, status_code=403)
     return None
+
+
+# This router is registered before the legacy labels router. Keeping the endpoint
+# path identical fixes all existing previews without a JS migration. segno.make_qr
+# explicitly disables Micro-QR, which is much less reliably scanned on tiny labels.
+@router.get("/labels/code.svg")
+def stable_code_svg(
+    value: str = Query(..., min_length=1, max_length=256),
+    kind: str = Query("auto"),
+):
+    kind = kind.lower().strip()
+    if kind == "auto":
+        try:
+            value.encode("ascii")
+            kind = "code128" if len(value) <= 32 else "qr"
+        except UnicodeEncodeError:
+            kind = "qr"
+    try:
+        if kind == "qr":
+            qr = segno.make_qr(value, error="m")
+            buf = io.BytesIO()
+            qr.save(buf, kind="svg", scale=4, border=2, xmldecl=False)
+            content = buf.getvalue()
+        else:
+            raw = value.strip()
+            if kind == "code128":
+                raw.encode("ascii")
+                cls = barcode_lib.get_barcode_class("code128")
+                code_value = raw
+            elif kind == "ean13":
+                if not raw.isdigit() or len(raw) not in (12, 13):
+                    raise ValueError("EAN-13 only works with 12 or 13 digits")
+                cls = barcode_lib.get_barcode_class("ean13")
+                code_value = raw[:12]
+            elif kind == "upca":
+                if not raw.isdigit() or len(raw) not in (11, 12):
+                    raise ValueError("UPC-A only works with 11 or 12 digits")
+                cls = barcode_lib.get_barcode_class("upca")
+                code_value = raw[:11]
+            else:
+                raise ValueError("Unsupported symbology")
+            buf = io.BytesIO()
+            cls(code_value, writer=SVGWriter()).write(buf, options={
+                "write_text": False,
+                "quiet_zone": 2.0,
+                "module_height": 12.0,
+                "font_size": 0,
+            })
+            content = buf.getvalue()
+    except (UnicodeEncodeError, ValueError, barcode_lib.errors.BarcodeError) as exc:
+        return Response(content=str(exc), status_code=422, media_type="text/plain")
+    return Response(content=content, media_type="image/svg+xml", headers={"X-Code-Kind": kind})
 
 
 @router.get("/scanner/config")
@@ -115,6 +171,30 @@ async def theme_preview(request: Request):
         if key in body:
             values[key] = str(body[key]).lower() if key == "epaper" else str(body[key])
     return Response(build_theme_css(values), media_type="text/css", headers={"Cache-Control": "no-store"})
+
+
+@router.post("/api/theme/accessibility")
+async def save_theme_accessibility(request: Request, db: Session = Depends(get_db)):
+    body = await request.json()
+    values = {
+        "epaper": "true" if bool(body.get("epaper")) else "false",
+        "contrast": str(body.get("contrast", THEME_DEFAULTS["contrast"])),
+    }
+    save_theme(db, values)
+    set_cached_theme(get_theme(db))
+    return {"ok": True, **values}
+
+
+@router.post("/api/theme/preferences")
+async def save_theme_preferences(request: Request, db: Session = Depends(get_db)):
+    body = await request.json()
+    values = {}
+    if "date_style" in body:
+        values["date_style"] = str(body["date_style"])
+    if values:
+        save_theme(db, values)
+        set_cached_theme(get_theme(db))
+    return {"ok": True, "theme": get_theme(db)}
 
 
 def _job_copy(job: dict) -> dict:
