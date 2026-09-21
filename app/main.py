@@ -9,7 +9,7 @@ from app.admin_write_guard import AdminWriteGuardMiddleware
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
-from app.routers import actions, appearance_v3, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scanner, settings as settings_router, theme_preview_v2
+from app.routers import actions, appearance_v3, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scanner, settings as settings_router, theme_preview_v2, version_api
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -81,6 +81,8 @@ app.add_middleware(RememberMeSessionMiddleware, secret_key=get_session_secret(),
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
+# Keep version first so all clients use the same release source of truth.
+app.include_router(version_api.router, tags=["system"])
 app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(docs.router, tags=["docs"])
 app.include_router(scan.router, tags=["scan"])

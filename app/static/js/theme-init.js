@@ -1,53 +1,46 @@
-/* Apply theme before render to prevent FOUC.
- * Server renders the correct data-bs-theme* attributes on <html>,
- * so this script only needs to handle the navbar quick-toggle override
- * stored in localStorage (if the user toggled dark/light without saving).
- */
+/* Apply persisted theme before render, then load the single current UI layer. */
 (function() {
+    'use strict';
+
     var override = localStorage.getItem('theme-mode-override');
-    if (override) {
-        document.documentElement.setAttribute('data-bs-theme', override);
-    }
+    if (override) document.documentElement.setAttribute('data-bs-theme', override);
 
-    /* Global UI v2 layer. Loaded from self so the strict CSP stays intact. */
-    var link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = '/static/css/ui-v2.css?v=2';
-    document.head.appendChild(link);
+    var legacyCss = document.createElement('link');
+    legacyCss.rel = 'stylesheet';
+    legacyCss.href = '/static/css/ui-v2.css?v=2026.09.21.3';
+    document.head.appendChild(legacyCss);
 
-    var script = document.createElement('script');
-    script.src = '/static/js/ui-v2.js?v=2';
-    script.async = false;
-    document.head.appendChild(script);
+    var uiCss = document.createElement('link');
+    uiCss.rel = 'stylesheet';
+    uiCss.href = '/static/css/ui-v4.css?v=2026.09.21.3';
+    document.head.appendChild(uiCss);
 
-    /* Corrective UI v3 layer. Keep this after v2 so it can normalize legacy
-       dynamically-created controls without weakening the CSP. */
-    var linkV3 = document.createElement('link');
-    linkV3.rel = 'stylesheet';
-    linkV3.href = '/static/css/ui-v3.css?v=2026.09.21.2';
-    document.head.appendChild(linkV3);
-
-    var guardV3 = document.createElement('script');
-    guardV3.src = '/static/js/ui-v3-guard.js?v=2026.09.21.2';
-    guardV3.async = false;
-    document.head.appendChild(guardV3);
-
-    var scriptV3 = document.createElement('script');
-    scriptV3.src = '/static/js/ui-v3.js?v=2026.09.21.2';
-    scriptV3.async = false;
-    document.head.appendChild(scriptV3);
+    var ui = document.createElement('script');
+    ui.src = '/static/js/ui-v4.js?v=2026.09.21.3';
+    ui.async = false;
+    document.head.appendChild(ui);
 
     if (window.location.pathname === '/settings') {
         var themePreview = document.createElement('script');
-        themePreview.src = '/static/js/theme-live-v2.js?v=2';
+        themePreview.src = '/static/js/theme-live-v2.js?v=2026.09.21.3';
         themePreview.async = false;
         document.head.appendChild(themePreview);
     }
 
     if (window.location.pathname === '/labels') {
+        var designer = document.createElement('script');
+        designer.src = '/static/js/labels-b21-v2.js?v=2026.09.21.3';
+        designer.async = false;
+        document.head.appendChild(designer);
+
         var resizePatch = document.createElement('script');
-        resizePatch.src = '/static/js/labels-b21-v2-patch.js?v=2';
+        resizePatch.src = '/static/js/labels-b21-v2-patch.js?v=2026.09.21.3';
         resizePatch.async = false;
         document.head.appendChild(resizePatch);
+
+        var v4Patch = document.createElement('script');
+        v4Patch.src = '/static/js/labels-b21-v4.js?v=2026.09.21.3';
+        v4Patch.async = false;
+        document.head.appendChild(v4Patch);
     }
 })();

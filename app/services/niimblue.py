@@ -11,6 +11,7 @@ is not using it.
 from __future__ import annotations
 
 import os
+import time
 
 import httpx
 
@@ -70,6 +71,28 @@ def _request(method: str, path: str, *, json: dict | None = None, timeout: float
     return response
 
 
+def _http_error_message(exc: Exception, *, action: str = "request") -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        response = exc.response
+        detail = ""
+        try:
+            payload = response.json()
+            if isinstance(payload, dict):
+                detail = str(payload.get("error") or payload.get("message") or "").strip()
+            elif payload is not None:
+                detail = str(payload).strip()
+        except ValueError:
+            detail = (response.text or "").strip()
+        detail = " ".join(detail.split())[:350]
+        suffix = f": {detail}" if detail else ""
+        return f"niimblue-node {action} failed (HTTP {response.status_code}){suffix}"
+    if isinstance(exc, httpx.TimeoutException):
+        return f"niimblue-node {action} timed out"
+    if isinstance(exc, httpx.HTTPError):
+        return f"niimblue-node {action} failed: {exc.__class__.__name__}"
+    return str(exc)
+
+
 def _connected() -> bool:
     try:
         return bool(_request("GET", "/connected", timeout=3).json().get("connected"))
@@ -104,7 +127,7 @@ def printer_status() -> dict:
             except Exception:
                 pass
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = _http_error_message(exc, action="status request")
     return result
 
 
@@ -116,13 +139,36 @@ def connect_printer() -> dict:
         result = printer_status()
         result["message"] = "Already connected"
         return result
-    _request(
-        "POST",
-        "/connect",
-        json={"transport": cfg["transport"], "address": cfg["address"]},
-        timeout=20,
-    )
+
+    payload = {"transport": cfg["transport"], "address": cfg["address"]}
+    try:
+        _request("POST", "/connect", json=payload, timeout=20)
+    except httpx.HTTPError as first_error:
+        time.sleep(0.2)
+        if _connected():
+            result = printer_status()
+            result["message"] = "Connected"
+            return result
+
+        status_code = first_error.response.status_code if isinstance(first_error, httpx.HTTPStatusError) else None
+        if status_code is None or status_code >= 500:
+            try:
+                _request("POST", "/disconnect", json={}, timeout=6)
+            except Exception:
+                pass
+            time.sleep(0.45)
+            try:
+                _request("POST", "/connect", json=payload, timeout=20)
+            except httpx.HTTPError as retry_error:
+                time.sleep(0.2)
+                if not _connected():
+                    raise RuntimeError(_http_error_message(retry_error, action="connect")) from retry_error
+        else:
+            raise RuntimeError(_http_error_message(first_error, action="connect")) from first_error
+
     result = printer_status()
+    if not result.get("connected"):
+        raise RuntimeError("niimblue-node accepted Connect, but the printer did not become connected")
     result["message"] = "Connected"
     return result
 
@@ -132,7 +178,10 @@ def disconnect_printer() -> dict:
     if not cfg["url"]:
         raise RuntimeError("NIIMBLUE_URL is not configured")
     if _connected():
-        _request("POST", "/disconnect", json={}, timeout=10)
+        try:
+            _request("POST", "/disconnect", json={}, timeout=10)
+        except httpx.HTTPError as exc:
+            raise RuntimeError(_http_error_message(exc, action="disconnect")) from exc
     result = printer_status()
     result["message"] = "Disconnected"
     return result
@@ -199,7 +248,10 @@ def print_image_base64(
         "imagePosition": "centre",
         "threshold": resolved_threshold,
     }
-    response = _request("POST", "/print", json=payload, timeout=cfg["timeout"])
+    try:
+        response = _request("POST", "/print", json=payload, timeout=cfg["timeout"])
+    except httpx.HTTPError as exc:
+        raise RuntimeError(_http_error_message(exc, action="print")) from exc
     try:
         data = response.json()
     except ValueError:
