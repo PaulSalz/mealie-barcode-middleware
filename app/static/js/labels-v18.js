@@ -15,6 +15,7 @@
   let calibrationSaveTimer = null;
   let registerTimer = null;
   let profileRestoreToken = 0;
+  let restoringProfile = false;
 
   function loadJson(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key) || '') || fallback; }
@@ -223,8 +224,10 @@
         link.innerHTML = '<i class="ti ti-external-link"></i><span></span>';
         wrap.appendChild(link);
       }
-      link.href = href;
-      link.querySelector('span').textContent = referenceLabel(entry);
+      if (link.getAttribute('href') !== href) link.setAttribute('href', href);
+      const span = link.querySelector('span');
+      const text = referenceLabel(entry);
+      if (span && span.textContent !== text) span.textContent = text;
     });
   }
 
@@ -261,22 +264,34 @@
     const select = $('b21-profile-select');
     if (!select || !profileId || !Array.from(select.options).some((option) => option.value === profileId)) return;
     if (select.value === profileId) return;
-    select.value = profileId;
-    localStorage.setItem(PROFILE_KEY, profileId);
-    select.dispatchEvent(new Event('change', {bubbles: true}));
+    restoringProfile = true;
+    try {
+      select.value = profileId;
+      localStorage.setItem(PROFILE_KEY, profileId);
+      select.dispatchEvent(new Event('change', {bubbles: true}));
+    } finally {
+      restoringProfile = false;
+    }
   }
 
   function installProfileLock() {
+    const select = $('b21-profile-select');
+    if (select && select.dataset.b2mV18ProfileLock !== '1') {
+      select.dataset.b2mV18ProfileLock = '1';
+      select.addEventListener('change', function () {
+        if (!restoringProfile) ++profileRestoreToken;
+      });
+    }
     document.addEventListener('click', function (event) {
       const button = event.target && event.target.closest && event.target.closest('#b21-connect-button');
       if (!button) return;
       const isDisconnect = /disconnect/i.test(button.textContent || '');
       if (isDisconnect) return;
-      const select = $('b21-profile-select');
-      const profileId = select && select.value;
+      const profile = $('b21-profile-select');
+      const profileId = profile && profile.value;
       if (!profileId) return;
       const token = ++profileRestoreToken;
-      [250, 600, 1100, 1800].forEach(function (delay) {
+      [250, 700, 1500, 3000, 5000].forEach(function (delay) {
         setTimeout(function () { restoreProfile(profileId, token); }, delay);
       });
     }, true);
