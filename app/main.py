@@ -9,7 +9,7 @@ from app.admin_write_guard import AdminWriteGuardMiddleware
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
-from app.routers import actions, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scanner, settings as settings_router, theme_preview_v2
+from app.routers import actions, appearance_v3, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scanner, settings as settings_router, theme_preview_v2
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -87,6 +87,7 @@ app.include_router(scan.router, tags=["scan"])
 app.include_router(scanner.router, tags=["scanner"])
 # Existing integration routes keep priority for authenticated theme/item actions.
 app.include_router(integrations.router, tags=["integrations"])
+app.include_router(appearance_v3.router, tags=["ui"])
 app.include_router(runtime_features.router, tags=["runtime"])
 app.include_router(theme_preview_v2.router, tags=["theme"])
 app.include_router(health.router, tags=["health"])
