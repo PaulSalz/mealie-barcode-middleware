@@ -1,13 +1,26 @@
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import settings
 
 engine = create_engine(
     f"sqlite:///{settings.db_path}",
-    connect_args={"check_same_thread": False},
+    connect_args={"check_same_thread": False, "timeout": 30},
     echo=False,
 )
+
+
+@event.listens_for(engine, "connect")
+def _configure_sqlite_connection(dbapi_connection, _connection_record) -> None:
+    """Allow short concurrent scanner/UI writes without surfacing lock errors."""
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
+
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 

@@ -16,6 +16,7 @@ THEME_DEFAULTS = {
     "radius": "1",
     "epaper": "false",
     "contrast": "65",
+    "date_style": "medium",
 }
 
 THEME_CHOICES = {
@@ -25,6 +26,7 @@ THEME_CHOICES = {
     "base": ["slate", "gray", "zinc", "neutral", "stone"],
     "radius": ["0", "0.5", "1", "1.5", "2"],
     "epaper": ["false", "true"],
+    "date_style": ["short", "medium", "long"],
 }
 
 COLOR_CSS = {

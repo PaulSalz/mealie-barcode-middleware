@@ -3,8 +3,16 @@
 {% block content %}
 <div class="page-header d-print-none mb-3"><div class="row g-2 align-items-center">
   <div class="col"><div class="page-pretitle">Recipe</div><h2 class="page-title">{{ recipe.name }}</h2></div>
-  <div class="col-auto"><div class="btn-list"><a class="btn" href="/labels?recipe={{ recipe.id|urlencode }}&recipe_name={{ recipe.name|urlencode }}"><i class="ti ti-qrcode icon"></i> Code Generator</a>{% if recipe.slug %}<a class="btn btn-primary" href="{{ mealie_url }}/g/home/r/{{ recipe.slug|urlencode }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open recipe in Mealie</a>{% else %}<a class="btn btn-primary" href="{{ mealie_url }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open Mealie</a>{% endif %}</div></div>
+  <div class="col-auto"><div class="btn-list"><a class="btn btn-outline-primary" href="/labels?recipe={{ recipe.id|urlencode }}&recipe_name={{ recipe.name|urlencode }}"><i class="ti ti-qrcode icon"></i> Code Generator</a>{% if recipe.slug %}<a class="btn btn-primary" href="{{ mealie_url }}/g/home/r/{{ recipe.slug|urlencode }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open recipe in Mealie</a>{% else %}<a class="btn btn-primary" href="{{ mealie_url }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Open Mealie</a>{% endif %}</div></div>
 </div></div>
+
+<div class="row row-cards mb-3">
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm b2m-stat-card"><div class="card-body"><div class="row align-items-center"><div class="col-auto"><span class="bg-primary text-white avatar"><i class="ti ti-scan"></i></span></div><div class="col"><div class="font-weight-medium">{{ stats.total }} scans</div><div class="text-secondary">All recorded</div></div></div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm b2m-stat-card"><div class="card-body"><div class="row align-items-center"><div class="col-auto"><span class="bg-green text-white avatar"><i class="ti ti-calendar-week"></i></span></div><div class="col"><div class="font-weight-medium">{{ stats.days_7 }} scans</div><div class="text-secondary">Last 7 days</div></div></div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm b2m-stat-card"><div class="card-body"><div class="row align-items-center"><div class="col-auto"><span class="bg-blue text-white avatar"><i class="ti ti-calendar-month"></i></span></div><div class="col"><div class="font-weight-medium">{{ stats.days_30 }} scans</div><div class="text-secondary">Last 30 days</div></div></div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm b2m-stat-card"><div class="card-body"><div class="row align-items-center"><div class="col-auto"><span class="bg-purple text-white avatar"><i class="ti ti-clock"></i></span></div><div class="col"><div class="font-weight-medium" title="{{ stats.last_scan|localtime if stats.last_scan else '' }}">{{ stats.last_scan|relative_time }}</div><div class="text-secondary">Last scan</div></div></div></div></div></div>
+</div>
+
 <div class="row row-cards">
   <div class="col-lg-5"><div class="card"><div class="card-header"><h3 class="card-title">Details</h3></div><div class="card-body">
     {% if recipe.description %}<p>{{ recipe.description }}</p>{% endif %}

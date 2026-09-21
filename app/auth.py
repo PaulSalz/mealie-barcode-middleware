@@ -47,17 +47,32 @@ def _update_scanner_telemetry(request: Request, token: ApiToken, db: Session) ->
     db.commit()
 
 
-def require_token(request: Request, db: Session = Depends(get_db)) -> ApiToken:
+def _raw_bearer_token(request: Request) -> str:
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Authorization header",
         )
-    raw_token = auth_header.removeprefix("Bearer ").strip()
+    return auth_header.removeprefix("Bearer ").strip()
+
+
+def require_token(request: Request, db: Session = Depends(get_db)) -> ApiToken:
+    raw_token = _raw_bearer_token(request)
     token = _authenticate_raw_token(raw_token, db)
     _update_scanner_telemetry(request, token, db)
     return token
+
+
+def require_token_no_telemetry(request: Request, db: Session = Depends(get_db)) -> ApiToken:
+    """Authenticate a scanner request without another telemetry write.
+
+    The immediate /scanner/received acknowledgement runs concurrently with the
+    real /scan request. Writing the same ApiToken row from both requests adds
+    avoidable SQLite write contention; the real scan and heartbeat already keep
+    scanner telemetry current.
+    """
+    return _authenticate_raw_token(_raw_bearer_token(request), db)
 
 
 def verify_psk(device_id: str, db: Session) -> ApiToken:

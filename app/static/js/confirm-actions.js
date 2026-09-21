@@ -2,6 +2,15 @@
 (function() {
     var modalEl = document.getElementById('modal-confirm');
     if (!modalEl) return;
+
+    // Keep the post-B21 visual fixes isolated from the B21 designer release.
+    if (!document.querySelector('link[href^="/static/css/post-b21.css"]')) {
+        var polishCss = document.createElement('link');
+        polishCss.rel = 'stylesheet';
+        polishCss.href = '/static/css/post-b21.css?v=20260921.2';
+        document.head.appendChild(polishCss);
+    }
+
     var titleEl = document.getElementById('modal-confirm-title');
     var msgEl = document.getElementById('modal-confirm-msg');
     var okBtn = document.getElementById('modal-confirm-ok');
@@ -33,14 +42,38 @@
     }
     installScannerMenuStatus();
 
-    // Immediate acknowledgement from scanner bridge, before Mealie routing completes.
-    if(window.EventSource&&document.getElementById('scan-toasts')){
+    // Immediate scanner acknowledgement is deliberately not a notification.
+    // On the dashboard it appears as a tiny transient status in the Mealie card;
+    // elsewhere the bell briefly fills and turns blue.
+    if(window.EventSource){
         var receivedEvents=new EventSource('/events');
         receivedEvents.addEventListener('received',function(event){
             var data;try{data=JSON.parse(event.data);}catch(e){return;}
-            var container=document.getElementById('scan-toasts');var toast=document.createElement('div');toast.className='toast show';
-            toast.innerHTML='<div class="toast-header"><span class="avatar avatar-xs me-2 bg-azure"><i class="ti ti-scan icon-sm text-white"></i></span><strong class="me-auto">Scan received</strong></div><div class="toast-body py-2"><code>'+String(data.barcode||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</code> <span class="text-secondary">· processing…</span></div>';
-            container.prepend(toast);setTimeout(function(){if(toast.isConnected)toast.remove();},1800);
+            var barcode=String(data.barcode||'');
+            var bell=document.querySelector('#notif-dropdown .ti-bell, #notif-dropdown .ti-bell-filled');
+            if(bell){
+                clearTimeout(window._b2mReceivedBellTimer);
+                bell.classList.remove('ti-bell');
+                bell.classList.add('ti-bell-filled','b2m-scan-received-bell');
+                window._b2mReceivedBellTimer=setTimeout(function(){
+                    bell.classList.remove('ti-bell-filled','b2m-scan-received-bell');
+                    bell.classList.add('ti-bell');
+                },1100);
+            }
+            if(window.location.pathname==='/'){
+                var status=document.getElementById('scan-received-status');
+                if(!status){
+                    var health=document.getElementById('health-status');
+                    var host=health&&health.closest('.col');
+                    if(host){status=document.createElement('div');status.id='scan-received-status';status.className='small text-primary mt-1';host.appendChild(status);}
+                }
+                if(status){
+                    clearTimeout(window._b2mReceivedStatusTimer);
+                    status.textContent='Scan received'+(barcode?': '+barcode:'')+' · processing…';
+                    status.style.opacity='1';
+                    window._b2mReceivedStatusTimer=setTimeout(function(){status.style.opacity='0';setTimeout(function(){status.textContent='';},180);},1800);
+                }
+            }
         });
         window.addEventListener('beforeunload',function(){receivedEvents.close();});
     }
@@ -63,8 +96,7 @@
         var headRow=table.querySelector('thead tr');var th=document.createElement('th');th.className='b2m-bulk-col';th.innerHTML='<input type="checkbox" class="form-check-input" id="b2m-bulk-all" aria-label="Select all">';headRow.insertBefore(th,headRow.firstChild);
         rows.forEach(function(row){
             var enabled=!!row.dataset.bulkId;
-            if(kind==='items')enabled=enabled&&/custom/i.test((row.querySelector('.sort-source')||{}).textContent||'');
-            var td=document.createElement('td');td.className='b2m-bulk-col';var cb=document.createElement('input');cb.type='checkbox';cb.className='form-check-input b2m-bulk-row';cb.dataset.id=row.dataset.bulkId||'';cb.disabled=!enabled;cb.title=enabled?'Select':'Synced Mealie items are not batch-deleted';td.appendChild(cb);row.insertBefore(td,row.firstChild);if(!enabled)td.classList.add('b2m-bulk-disabled');
+            var td=document.createElement('td');td.className='b2m-bulk-col';var cb=document.createElement('input');cb.type='checkbox';cb.className='form-check-input b2m-bulk-row';cb.dataset.id=row.dataset.bulkId||'';cb.disabled=!enabled;cb.title=enabled?'Select':'Not selectable';td.appendChild(cb);row.insertBefore(td,row.firstChild);if(!enabled)td.classList.add('b2m-bulk-disabled');
             cb.addEventListener('click',function(e){e.stopPropagation();});cb.addEventListener('change',function(){row.classList.toggle('b2m-selected',cb.checked);update();});
         });
         var all=document.getElementById('b2m-bulk-all');all.addEventListener('change',function(){table.querySelectorAll('.b2m-bulk-row:not(:disabled)').forEach(function(cb){cb.checked=all.checked;cb.closest('tr').classList.toggle('b2m-selected',cb.checked);});update();});all.addEventListener('click',function(e){e.stopPropagation();});
@@ -74,8 +106,104 @@
         var count=document.getElementById('b2m-bulk-count'),del=document.getElementById('b2m-bulk-delete');
         function selected(){return Array.from(table.querySelectorAll('.b2m-bulk-row:checked')).map(function(cb){return cb.dataset.id;});}
         function update(){var ids=selected();count.textContent=ids.length;del.disabled=!ids.length;var enabled=table.querySelectorAll('.b2m-bulk-row:not(:disabled)');all.checked=!!enabled.length&&Array.from(enabled).every(function(cb){return cb.checked;});}
-        del.addEventListener('click',function(){var ids=selected();if(!ids.length)return;showConfirm('Delete '+ids.length+' selected '+kind+'?',kind==='items'?'Only custom/local items are deleted; synced Mealie Foods are protected.':'Related local B2M records for the selection will be removed.',async function(){del.disabled=true;try{var r=await fetch('/api/bulk-delete',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({kind:kind,ids:ids})});var data=await r.json();if(!r.ok)throw new Error(data.error||'Delete failed');window.location.reload();}catch(error){window.alert(error.message);del.disabled=false;}},'Delete selected');});
+        del.addEventListener('click',function(){var ids=selected();if(!ids.length)return;showConfirm('Delete '+ids.length+' selected '+kind+'?',kind==='items'?'Synced Mealie Foods are deleted in Mealie first; their local B2M targets and mappings are removed only after the upstream delete succeeds.':'Related local B2M records for the selection will be removed.',async function(){del.disabled=true;try{var r=await fetch('/api/bulk-delete',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({kind:kind,ids:ids})});var data=await r.json();if(!r.ok)throw new Error(data.error||'Delete failed');if(data.errors&&data.errors.length)window.alert(data.errors.join('\n'));window.location.reload();}catch(error){window.alert(error.message);del.disabled=false;}},'Delete selected');});
         update();
     }
     installBulkSelection();
+
+    function installBarcodeTargetUxFixes(){
+        if(!window.location.pathname.startsWith('/barcodes/')||window.location.pathname==='/barcodes/')return;
+        var targetForms=Array.from(document.querySelectorAll('form[action*="/targets/"]:not([action$="/delete"])'));
+        if(!targetForms.length)return;
+
+        function relaxInheritedChoices(){
+            targetForms.forEach(function(form){
+                var grid=form.querySelector('.b2m-route-choice-grid');
+                if(!grid)return;
+                grid.querySelectorAll('input[type="checkbox"]:not([value="inherit"])').forEach(function(input){if(input.disabled)input.disabled=false;});
+            });
+        }
+        relaxInheritedChoices();
+        targetForms.forEach(function(form){
+            var grid=form.querySelector('.b2m-route-choice-grid');
+            if(!grid)return;
+            new MutationObserver(relaxInheritedChoices).observe(grid,{subtree:true,attributes:true,attributeFilter:['disabled']});
+        });
+
+        function formSnapshot(form){
+            var rows=[];
+            new FormData(form).forEach(function(value,key){rows.push(key+'='+String(value));});
+            return rows.sort().join('&');
+        }
+        var initial=targetForms.map(formSnapshot);
+        function anyTargetDirty(){return targetForms.some(function(form,index){return formSnapshot(form)!==initial[index];});}
+        function repairSaveAllState(){
+            if(anyTargetDirty())return;
+            var button=document.getElementById('save-all-targets');
+            var status=document.querySelector('.b2m-target-save-status');
+            if(button){button.classList.remove('btn-primary');button.classList.add('btn-outline-primary');}
+            if(status){status.textContent='';status.className='b2m-target-save-status text-secondary me-2';}
+        }
+        var recipeForm=document.getElementById('recipe-map-form');
+        if(recipeForm){
+            ['input','change'].forEach(function(name){recipeForm.addEventListener(name,function(){setTimeout(repairSaveAllState,0);});});
+        }
+    }
+
+    function installAppearancePreview(){
+        if(window.location.pathname!=='/settings')return;
+        var params=new URLSearchParams(window.location.search);
+        if((params.get('tab')||'mealie')!=='appearance')return;
+        var form=document.querySelector('form[action="/settings/theme"]');
+        var epaper=document.getElementById('theme-epaper');
+        var contrast=document.getElementById('theme-contrast');
+        if(!form||!epaper||!contrast)return;
+
+        var access=document.getElementById('theme-accessibility');
+        if(access&&!document.getElementById('theme-date-style')){
+            var dateBox=document.createElement('div');
+            dateBox.className='mt-4';
+            dateBox.innerHTML='<label class="form-label" for="theme-date-style">Date & time format</label><select class="form-select" id="theme-date-style" name="theme_date_style"><option value="short">Short · 21.09.26 14:32</option><option value="medium">Medium · 21.09.2026 14:32</option><option value="long">Long · 21. September 2026, 14:32</option></select><div class="form-hint">Used wherever B2M shows the complete local date/time. Relative timestamps stay unchanged.</div>';
+            access.appendChild(dateBox);
+        }
+        var dateStyle=document.getElementById('theme-date-style');
+        fetch('/api/theme',{headers:{'Accept':'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(theme){if(theme&&dateStyle)dateStyle.value=theme.date_style||'medium';}).catch(function(){});
+
+        // Persist the date style only when the user presses the normal Save button.
+        // The existing appearance handler saves e-paper/contrast in the same submit.
+        form.addEventListener('submit',function(){
+            if(!dateStyle)return;
+            fetch('/api/theme/accessibility',{
+                method:'POST',
+                keepalive:true,
+                headers:{'Content-Type':'application/json','Accept':'application/json'},
+                body:JSON.stringify({epaper:epaper.checked,contrast:Number(contrast.value),date_style:dateStyle.value})
+            }).catch(function(){});
+        },{capture:true});
+
+        var themeLink=document.querySelector('link[href="/theme.css"], link[href^="/theme.css?"]');
+        var previewStyle=document.getElementById('b2m-theme-preview-style');
+        if(!previewStyle){previewStyle=document.createElement('style');previewStyle.id='b2m-theme-preview-style';document.head.appendChild(previewStyle);}
+        var previewTimer=null,previewSeq=0;
+        function preview(){
+            clearTimeout(previewTimer);
+            previewTimer=setTimeout(async function(){
+                var seq=++previewSeq;
+                try{
+                    var response=await fetch('/api/theme/preview',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({epaper:epaper.checked,contrast:Number(contrast.value)})});
+                    var data=await response.json();
+                    if(!response.ok||seq!==previewSeq)return;
+                    if(themeLink)themeLink.disabled=true;
+                    previewStyle.textContent=data.css||'';
+                }catch(e){}
+            },45);
+        }
+        epaper.addEventListener('change',preview);
+        contrast.addEventListener('input',preview);
+    }
+
+    window.addEventListener('load',function(){
+        installBarcodeTargetUxFixes();
+        installAppearancePreview();
+    });
 })();
