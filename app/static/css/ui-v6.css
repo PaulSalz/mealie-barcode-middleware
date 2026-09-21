@@ -1,4 +1,4 @@
-/* v2026.09.21.7 focused UI fixes. */
+/* v2026.09.21.8 focused UI fixes. */
 #notif-dropdown .b2m-v4-bell-filled { display:none!important; }
 #notif-dropdown > a.b2m-v4-unread .ti-bell { color:inherit!important; fill:none!important; opacity:1!important; visibility:visible!important; }
 #notif-dropdown > a.b2m-v6-bell-pulse { color:var(--tblr-primary)!important;background:rgba(var(--tblr-primary-rgb),.12)!important;outline:2px solid var(--tblr-primary);outline-offset:-2px;border-radius:var(--tblr-border-radius); }
@@ -21,6 +21,9 @@
 .b2m-v6-create-quantity { min-width:10rem;max-width:15rem; }
 #target-food-edit-v6 .modal-dialog { max-width:720px; }
 #target-food-edit-v6 .b2m-v6-modal-loading { min-height:180px;display:grid;place-items:center; }
+#target-food-edit-v6 .btn-close { width:2.25rem;height:2.25rem;padding:0;display:grid;place-items:center;background-image:none!important;background-color:transparent!important;border:1px solid var(--tblr-danger)!important;border-radius:var(--tblr-border-radius)!important;color:var(--tblr-danger)!important;opacity:1!important; }
+#target-food-edit-v6 .btn-close::before { content:"×";display:block;color:var(--tblr-danger);font-size:1.55rem;font-weight:500;line-height:1;transform:translateY(-1px); }
+#target-food-edit-v6 .btn-close:hover,#target-food-edit-v6 .btn-close:focus-visible { background-color:rgba(var(--tblr-danger-rgb),.1)!important;box-shadow:0 0 0 .2rem rgba(var(--tblr-danger-rgb),.12); }
 #b2m-printer-runtime-v6 .datagrid { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
 #b2m-printer-runtime-v6 .b2m-printer-stat .h2 { line-height:1.1; }
 #b2m-v7-date-style .form-selectgroup { gap:.5rem;flex-wrap:wrap; }
