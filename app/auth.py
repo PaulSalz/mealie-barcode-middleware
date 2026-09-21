@@ -43,7 +43,9 @@ def _update_scanner_telemetry(request: Request, token: ApiToken, db: Session) ->
     token.scanner_total_scans = _header_int(request, "X-B2M-Scanner-Scans")
     token.scanner_errors = _header_int(request, "X-B2M-Scanner-Errors")
     token.scanner_last_latency_ms = _header_int(request, "X-B2M-Scanner-Last-Latency")
-    token.scanner_last_seen_at = utcnow()
+    # SQLite DateTime columns are timezone-naive. Keep the in-session value naive
+    # as well; scanner_heartbeat uses the same ORM object immediately after auth.
+    token.scanner_last_seen_at = utcnow().replace(tzinfo=None)
     db.commit()
 
 

@@ -1,11 +1,12 @@
 import json
 import logging
 from collections import Counter
-from datetime import timedelta
+from datetime import timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -48,8 +49,22 @@ def _parse_optional_quantity(value: str | float | int | None) -> float | None:
     return round(parsed, 3)
 
 
+def _is_database_locked(exc: OperationalError) -> bool:
+    return "database is locked" in str(exc).casefold()
+
+
+def _naive_utc(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _mark_notifications_read(barcode: str, db: Session):
-    db.query(Activity).filter(Activity.barcode == barcode, Activity.is_read == False).update({"is_read": True})
+    db.query(Activity).filter(Activity.barcode == barcode, Activity.is_read == False).update(
+        {"is_read": True}, synchronize_session=False
+    )
 
 
 def _resolve_activity_state(barcode: str, target_name: str | None, db: Session) -> None:
@@ -67,8 +82,18 @@ def _resolve_activity_state(barcode: str, target_name: str | None, db: Session) 
 
 
 def _resolve_notifications_async(barcode: str, target_name: str | None, background_tasks: BackgroundTasks, db: Session):
-    _mark_notifications_read(barcode, db)
-    _resolve_activity_state(barcode, target_name, db)
+    # These activity changes are housekeeping around an already-committed target.
+    # Commit them before background HTTP/Mealie work starts so this request never
+    # carries an SQLite writer lock into Starlette background tasks.
+    try:
+        _mark_notifications_read(barcode, db)
+        _resolve_activity_state(barcode, target_name, db)
+        db.commit()
+    except OperationalError as exc:
+        db.rollback()
+        if not _is_database_locked(exc):
+            raise
+        logger.warning("Skipping activity resolution for barcode %s because SQLite is busy", barcode)
     background_tasks.add_task(ha_dismiss, barcode, None)
 
 
@@ -118,12 +143,12 @@ def _cache_food(food: dict, db: Session) -> Item:
 
 def _barcode_stats(db: Session, barcode: str) -> dict:
     scans = db.query(Activity).filter(Activity.is_scan_event == True, Activity.barcode == barcode).order_by(Activity.created_at.desc()).all()
-    now = utcnow().replace(tzinfo=None)
+    now = _naive_utc(utcnow())
     results = Counter(row.result for row in scans)
     return {
         "total": len(scans),
-        "days_7": sum(1 for row in scans if row.created_at and row.created_at >= now - timedelta(days=7)),
-        "days_30": sum(1 for row in scans if row.created_at and row.created_at >= now - timedelta(days=30)),
+        "days_7": sum(1 for row in scans if row.created_at and _naive_utc(row.created_at) >= now - timedelta(days=7)),
+        "days_30": sum(1 for row in scans if row.created_at and _naive_utc(row.created_at) >= now - timedelta(days=30)),
         "last_scan": scans[0].created_at if scans else None,
         "first_scan": scans[-1].created_at if scans else None,
         "results": results,
@@ -202,8 +227,16 @@ def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)
     targets = ensure_targets(barcode, db)
     mapping = db.get(BarcodeMapping, barcode)
     mapped_item = db.get(Item, mapping.target_id) if mapping and mapping.target_type == "food" else None
-    _mark_notifications_read(barcode, db)
-    db.commit()
+    # Reading a barcode page must never fail because notification housekeeping
+    # briefly collides with scanner/background writes.
+    try:
+        _mark_notifications_read(barcode, db)
+        db.commit()
+    except OperationalError as exc:
+        db.rollback()
+        if not _is_database_locked(exc):
+            raise
+        logger.warning("Barcode %s rendered while SQLite was busy; notification read mark deferred", barcode)
 
     candidates = fuzzy_match(cached.display_title, cached.display_brand, db)[:6] if cached and cached.display_title else []
     mapped_barcodes = [m.barcode for m in db.query(BarcodeMapping).all()]
