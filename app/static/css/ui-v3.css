@@ -1,0 +1,40 @@
+/* UI v3 corrective layer: notification bell, barcode table hover, appearance and printer settings. */
+
+/* Barcodes: never highlight one cell independently. Hover is row-only. */
+#barcodes-table tbody td:hover {
+  box-shadow: none !important;
+  background-image: none !important;
+}
+#barcodes-table tbody tr:not(.b2m-selected):not(:hover) > td {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+#barcodes-table tbody tr:not(.barcodes-empty-row):hover > td {
+  background-color: rgba(var(--tblr-primary-rgb), .045) !important;
+  box-shadow: none !important;
+}
+
+/* Use our own filled SVG for unread notifications. The bundled Tabler webfont
+   does not reliably contain the filled-bell glyph. */
+#notif-dropdown > a .b2m-bell-active-icon {
+  display: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  color: var(--tblr-primary);
+  align-items: center;
+  justify-content: center;
+}
+#notif-dropdown > a .b2m-bell-active-icon svg { width: 100%; height: 100%; display: block; }
+#notif-dropdown > a.b2m-bell-unread { color: var(--tblr-primary) !important; }
+#notif-dropdown > a.b2m-bell-unread > .ti { display: none !important; }
+#notif-dropdown > a.b2m-bell-unread .b2m-bell-active-icon { display: inline-flex; }
+
+#b2m-appearance-v3-top { margin-top: 1rem; }
+#b2m-appearance-v3-top .b2m-font-size-value { min-width: 3.5rem; display: inline-block; }
+#b2m-ui-pref-status { min-height: 1.25rem; }
+
+/* Keep the dedicated printer page visually aligned with Dashboard/Barcodes. */
+#b2m-printer-settings-card .datagrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+/* B21 label output settings and mechanical calibration are separate concepts. */
+#b21-v3-label-output { margin-top: 1rem; }
