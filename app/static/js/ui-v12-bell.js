@@ -1,4 +1,4 @@
-/* v2026.09.21.16: bell feedback is driven by the physical scanner receipt event. */
+/* v2026.09.21.17: scanner feedback on the native-style notification nav-link. */
 (function () {
   'use strict';
   if (window.__b2mBellV12Loaded) return;
@@ -14,12 +14,19 @@
   function ensureBell() {
     const link = document.querySelector('#notif-dropdown > a');
     if (!link) return null;
+
+    // Match the neighbouring three-dots control: plain Tabler nav-link with
+    // the standard icon/icon-1 classes. No replacement/fill icon is used.
+    link.classList.add('nav-link');
+    link.classList.remove('px-0');
+
     let bell = link.querySelector('i.ti-bell');
     if (!bell) {
       bell = document.createElement('i');
-      bell.className = 'ti ti-bell icon icon-1';
       link.insertBefore(bell, link.firstChild);
     }
+    bell.className = 'ti ti-bell icon icon-1';
+
     link.querySelectorAll('.b2m-v4-bell-filled,.b2m-bell-active-icon').forEach(function (node) {
       node.remove();
     });
@@ -29,23 +36,20 @@
   function flashBell() {
     const link = ensureBell();
     if (!link) return;
-    window.clearTimeout(flashTimer);
 
-    /* Remove every legacy flash state first, then snapshot the bell's normal
-       computed text colour. The v16 CSS keeps exactly this colour throughout
-       the 500 ms feedback instead of recolouring/fading the glyph. */
-    link.classList.remove('b2m-v6-bell-pulse', 'b2m-v9-bell-pulse', 'b2m-v10-bell-pulse', 'b2m-bell-flash', 'b2m-v12-bell-flash');
-    const bell = link.querySelector('i.ti-bell');
-    if (bell) {
-      const normalColor = window.getComputedStyle(bell).color;
-      if (normalColor) link.style.setProperty('--b2m-bell-color', normalColor);
-    }
+    window.clearTimeout(flashTimer);
+    link.classList.remove(
+      'b2m-v6-bell-pulse',
+      'b2m-v9-bell-pulse',
+      'b2m-v10-bell-pulse',
+      'b2m-bell-flash',
+      'b2m-v12-bell-flash'
+    );
 
     void link.offsetWidth;
     link.classList.add('b2m-v12-bell-flash');
     flashTimer = window.setTimeout(function () {
       link.classList.remove('b2m-v12-bell-flash');
-      link.style.removeProperty('--b2m-bell-color');
     }, 500);
   }
 

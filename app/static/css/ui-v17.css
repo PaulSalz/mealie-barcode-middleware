@@ -1,0 +1,58 @@
+/* v2026.09.21.17: notification bell behaves like the adjacent Tabler nav button. */
+
+#notif-dropdown > a.nav-link {
+  position: relative;
+  overflow: visible;
+}
+
+#notif-dropdown > a.nav-link > i.ti-bell,
+#notif-dropdown > a.nav-link.b2m-v4-unread > i.ti-bell,
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash > i.ti-bell {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: currentColor !important;
+  fill: none !important;
+  transition: none !important;
+}
+
+#notif-dropdown .b2m-v4-bell-filled,
+#notif-dropdown .b2m-bell-active-icon {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+#notif-badge {
+  position: absolute !important;
+  z-index: 3 !important;
+  top: .25rem !important;
+  right: .25rem !important;
+  pointer-events: none !important;
+}
+#notif-badge:not(.d-none) { display: block !important; }
+
+/* Normal + hover are intentionally handled by Tabler's .nav-link styles,
+   exactly like the adjacent ti-dots-vertical button. */
+
+/* Physical scanner receipt: only the button surface/frame changes for 500 ms.
+   The glyph stays completely untouched. Outline avoids any layout shift. */
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash {
+  background-color: rgba(var(--tblr-primary-rgb, 6, 111, 209), .14) !important;
+  background-image: none !important;
+  outline: 1px solid var(--tblr-primary, #066fd1) !important;
+  outline-offset: -1px !important;
+  box-shadow: 0 0 0 2px rgba(var(--tblr-primary-rgb, 6, 111, 209), .12) !important;
+}
+
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash > i.ti-bell {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: currentColor !important;
+}
+
+html.b2m-epaper-v9 #notif-dropdown > a.nav-link.b2m-v12-bell-flash {
+  background-color: #eee !important;
+  outline-color: #000 !important;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.12) !important;
+}
