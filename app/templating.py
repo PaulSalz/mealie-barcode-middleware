@@ -13,6 +13,10 @@ BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 _tz = ZoneInfo(settings.timezone)
+_GERMAN_MONTHS = (
+    "", "Januar", "Februar", "März", "April", "Mai", "Juni",
+    "Juli", "August", "September", "Oktober", "November", "Dezember",
+)
 
 # Cache-buster: short hash of JS/CSS modification times (recomputed on startup)
 _static_dir = BASE_DIR / "static"
@@ -55,12 +59,20 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
-def _localtime(value, fmt="%Y-%m-%d %H:%M"):
-    """Jinja2 filter: convert a UTC datetime to the configured local timezone."""
+def _localtime(value, fmt=None):
+    """Convert a UTC datetime to local time using the configured full-date style."""
     value = _as_utc(value)
     if not value:
         return "—"
-    return value.astimezone(_tz).strftime(fmt)
+    local = value.astimezone(_tz)
+    if fmt:
+        return local.strftime(fmt)
+    style = _current_theme.get("date_style", THEME_DEFAULTS["date_style"])
+    if style == "short":
+        return local.strftime("%d.%m.%y %H:%M")
+    if style == "long":
+        return f"{local.day}. {_GERMAN_MONTHS[local.month]} {local.year}, {local:%H:%M}"
+    return local.strftime("%d.%m.%Y %H:%M")
 
 
 def _relative_time(value):
