@@ -1,15 +1,13 @@
-/* v2026.09.21.20: one stable notification-bell glyph and early scanner feedback. */
+/* v2026.09.21.21: stable notification bell with direct early scanner SSE. */
 (function () {
   'use strict';
   if (window.__b2mBellV12Loaded) return;
   window.__b2mBellV12Loaded = true;
 
-  const NativeEventSource = window.EventSource;
-  if (!NativeEventSource) return;
-
   let flashTimer = null;
   let lastBarcode = '';
   let lastReceivedAt = 0;
+  let receivedSource = null;
 
   function createStableBell() {
     const icon = document.createElement('span');
@@ -27,13 +25,11 @@
     const link = document.querySelector('#notif-dropdown > a');
     if (!link) return null;
 
-    // Match the neighbouring three-dots control: plain Tabler nav-link sizing.
-    // The visible glyph deliberately does not carry ti-bell/ti-bell-filled,
-    // because legacy observers used those classes as mutable state and could
-    // temporarily replace the icon while a scan was being processed.
     link.classList.add('nav-link');
     link.classList.remove('px-0');
 
+    // Legacy UI layers used ti-bell / ti-bell-filled as mutable state. Keep
+    // those nodes out of the visible control; the stable SVG is the only bell.
     link.querySelectorAll(
       'i.ti-bell,i.ti-bell-filled,.b2m-v4-bell-filled,.b2m-bell-active-icon'
     ).forEach(function (node) {
@@ -80,9 +76,8 @@
     }
   }
 
-  function onReceived(event) {
-    let data = {};
-    try { data = JSON.parse(event.data || '{}'); } catch (e) {}
+  function handleReceivedData(data) {
+    data = data || {};
     const barcode = String(data.barcode || '');
     const now = Date.now();
 
@@ -95,26 +90,37 @@
     window.dispatchEvent(new CustomEvent('b2m:scanner-received', {detail: data}));
   }
 
-  function WrappedEventSource(url, options) {
-    const source = new NativeEventSource(url, options);
-    try {
-      const value = String(url || '');
-      if (value === '/events' || value.endsWith('/events')) {
-        source.addEventListener('received', onReceived);
-      }
-    } catch (e) {}
-    return source;
+  function onReceived(event) {
+    let data = {};
+    try { data = JSON.parse(event.data || '{}'); } catch (e) {}
+    handleReceivedData(data);
   }
 
-  WrappedEventSource.prototype = NativeEventSource.prototype;
-  ['CONNECTING', 'OPEN', 'CLOSED'].forEach(function (key) {
-    try { WrappedEventSource[key] = NativeEventSource[key]; } catch (e) {}
+  function connectReceivedSource() {
+    if (!window.EventSource || receivedSource) return;
+    receivedSource = new EventSource('/events');
+    receivedSource.addEventListener('received', onReceived);
+  }
+
+  // Final scan is only a fallback for a short SSE reconnect race. It must not
+  // create a second flash after a normal early `received` event.
+  window.addEventListener('b2m:scan', function (event) {
+    if (Date.now() - lastReceivedAt < 1200) return;
+    handleReceivedData((event && event.detail) || {});
   });
-  window.EventSource = WrappedEventSource;
+
+  window.addEventListener('beforeunload', function () {
+    if (receivedSource) receivedSource.close();
+  });
+
+  function init() {
+    ensureBell();
+    connectReceivedSource();
+  }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', ensureBell, {once: true});
+    document.addEventListener('DOMContentLoaded', init, {once: true});
   } else {
-    ensureBell();
+    init();
   }
 })();
