@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.models import BarcodeTarget, Item
 from app.services.homeassistant import notify_shopping_route
-from app.services.shopping import add_recipe_to_list, effective_list_ids, get_default_shopping_list_id, route_item_scan
+from app.services.shopping import add_recipe_to_list, effective_list_ids, route_item_scan
 from app.services.targets import list_ids
 
 
@@ -53,7 +53,9 @@ def route_targets(barcode: str, targets: list[BarcodeTarget], db, *, paused: boo
         if target.target_type == "recipe":
             name = target.target_name or target.target_id
             route = _effective_route(target, None)
-            ids = effective_list_ids(list_ids(target), db, fallback=get_default_shopping_list_id(db))
+            # effective_list_ids resolves the default lazily only when this target
+            # does not already contain explicit list IDs.
+            ids = effective_list_ids(list_ids(target), db)
             mealie_ok = None
             ha_ok = None
             if paused:
