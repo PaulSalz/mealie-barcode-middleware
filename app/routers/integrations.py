@@ -75,6 +75,11 @@ async def save_accessibility_theme(request: Request, db: Session = Depends(get_d
         current["contrast"] = str(max(0, min(100, int(float(body.get("contrast", current.get("contrast", 65)))))))
     except (TypeError, ValueError):
         return JSONResponse({"error":"contrast must be 0–100"}, status_code=400)
+    if "date_style" in body:
+        date_style = str(body.get("date_style") or "").strip().lower()
+        if date_style not in {"short", "medium", "long"}:
+            return JSONResponse({"error":"date_style must be short, medium or long"}, status_code=400)
+        current["date_style"] = date_style
     save_theme(db, current)
     fresh = get_theme(db)
     set_cached_theme(fresh)
