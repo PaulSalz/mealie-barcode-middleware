@@ -1,0 +1,52 @@
+/* Post-B21 UI consistency fixes. */
+
+/* Tables: highlight the complete row only, never the individual cell. */
+.table.table-vcenter tbody td:hover {
+    box-shadow: none !important;
+}
+
+/* Keep statistic cards visually consistent across dashboard/detail pages. */
+.b2m-stat-card {
+    box-shadow: var(--tblr-box-shadow-card);
+    transition: transform .12s ease, box-shadow .12s ease;
+}
+.b2m-stat-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--tblr-box-shadow-card);
+}
+
+/* Toasts belong below the top navigation, not over navigation controls. */
+#scan-toasts {
+    top: 4.25rem !important;
+    bottom: auto !important;
+}
+
+/* Desktop primary navigation sits on the right side of the brand area. */
+@media (min-width: 768px) {
+    #navbar-menu > .navbar-nav {
+        margin-left: auto;
+    }
+}
+
+/* The modal size was already sufficient; let the scannable artwork use it. */
+#item-code-preview-img,
+#code-preview-modal #code-preview-large {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: 65vh !important;
+    margin-inline: auto;
+    object-fit: contain;
+}
+
+/* Short scanner acknowledgement in the dashboard health card. */
+#scan-received-status {
+    min-height: 1.25rem;
+    transition: opacity .18s ease;
+}
+
+/* Brief non-notification scan acknowledgement on the bell. */
+#notif-dropdown .b2m-scan-received-bell {
+    color: var(--tblr-primary) !important;
+}
