@@ -1,4 +1,5 @@
 import secrets
+from datetime import timedelta
 
 import bcrypt
 from fastapi import Depends, HTTPException, Request, status
@@ -35,6 +36,19 @@ def _update_scanner_telemetry(request: Request, token: ApiToken, db: Session) ->
     version = request.headers.get("X-B2M-Scanner-Version")
     if not version:
         return
+
+    now = utcnow().replace(tzinfo=None)
+    last_seen = token.scanner_last_seen_at
+    if last_seen is not None and last_seen.tzinfo is not None:
+        last_seen = last_seen.replace(tzinfo=None)
+
+    # A physical scan is the latency-sensitive path. The bridge heartbeat already
+    # writes full telemetry every minute, so repeated scans only need to refresh
+    # it occasionally instead of opening another SQLite writer transaction for
+    # every barcode.
+    if request.url.path == "/scan" and last_seen and now - last_seen < timedelta(seconds=15):
+        return
+
     token.scanner_version = version[:64]
     token.scanner_hostname = (request.headers.get("X-B2M-Scanner-Hostname") or "")[:128] or None
     token.scanner_device = (request.headers.get("X-B2M-Scanner-Device") or "")[:255] or None
@@ -43,9 +57,7 @@ def _update_scanner_telemetry(request: Request, token: ApiToken, db: Session) ->
     token.scanner_total_scans = _header_int(request, "X-B2M-Scanner-Scans")
     token.scanner_errors = _header_int(request, "X-B2M-Scanner-Errors")
     token.scanner_last_latency_ms = _header_int(request, "X-B2M-Scanner-Last-Latency")
-    # SQLite DateTime columns are timezone-naive. Keep the in-session value naive
-    # as well; scanner_heartbeat uses the same ORM object immediately after auth.
-    token.scanner_last_seen_at = utcnow().replace(tzinfo=None)
+    token.scanner_last_seen_at = now
     db.commit()
 
 
