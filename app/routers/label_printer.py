@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from copy import deepcopy
 
 from fastapi import APIRouter, Depends, Request
@@ -23,7 +24,10 @@ router = APIRouter()
 
 _PROFILES_KEY = "labels.b21.roll_profiles"
 _RFID_BINDINGS_KEY = "labels.b21.rfid_bindings"
+_CALIBRATIONS_KEY = "labels.b21.calibration_offsets"
+_CONNECTION_DESIRED_KEY = "labels.b21.connection_desired"
 _PROFILE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_last_auto_reconnect = 0.0
 
 _DEFAULT_PROFILES = [
     {"id": "50x30", "name": "50 × 30 mm", "width_mm": 50.0, "height_mm": 30.0, "dpi": 300, "density": 3, "label_type": 1},
@@ -65,6 +69,15 @@ def _bindings(db: Session) -> dict[str, str]:
     return rows if isinstance(rows, dict) else {}
 
 
+def _calibrations(db: Session) -> dict[str, dict]:
+    rows = _load_state(db, _CALIBRATIONS_KEY, {})
+    return rows if isinstance(rows, dict) else {}
+
+
+def _connection_desired(db: Session) -> bool:
+    return bool(_load_state(db, _CONNECTION_DESIRED_KEY, False))
+
+
 def _profile_from_body(body: dict) -> dict:
     profile_id = str(body.get("id") or "").strip()
     name = str(body.get("name") or "").strip()
@@ -100,24 +113,51 @@ def _profile_from_body(body: dict) -> dict:
 
 
 @router.get("/labels/b21/status")
-def b21_status():
-    return printer_status()
+def b21_status(db: Session = Depends(get_db)):
+    global _last_auto_reconnect
+    desired = _connection_desired(db)
+    try:
+        status = printer_status()
+    except Exception as exc:
+        return JSONResponse({"error": str(exc), "connected": False, "desired_connected": desired}, status_code=502)
+
+    # Connection intent is server-side, not browser-side. If niimblue-node lost
+    # the BLE link while the user still wants B2M connected, re-establish it with
+    # a small cooldown so ordinary page navigation never loses the printer state.
+    if desired and niim_is_configured() and not status.get("connected"):
+        now = time.monotonic()
+        if now - _last_auto_reconnect >= 10:
+            _last_auto_reconnect = now
+            try:
+                status = connect_printer()
+            except Exception as exc:
+                status = dict(status)
+                status["reconnect_error"] = str(exc)
+    status = dict(status)
+    status["desired_connected"] = desired
+    return status
 
 
 @router.post("/labels/b21/connect")
-def b21_connect():
+def b21_connect(db: Session = Depends(get_db)):
+    _save_state(db, _CONNECTION_DESIRED_KEY, True)
     try:
-        return connect_printer()
+        result = dict(connect_printer())
+        result["desired_connected"] = True
+        return result
     except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=502)
+        return JSONResponse({"error": str(exc), "desired_connected": True}, status_code=502)
 
 
 @router.post("/labels/b21/disconnect")
-def b21_disconnect():
+def b21_disconnect(db: Session = Depends(get_db)):
+    _save_state(db, _CONNECTION_DESIRED_KEY, False)
     try:
-        return disconnect_printer()
+        result = dict(disconnect_printer())
+        result["desired_connected"] = False
+        return result
     except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=502)
+        return JSONResponse({"error": str(exc), "desired_connected": False}, status_code=502)
 
 
 @router.get("/labels/b21/rfid")
@@ -137,7 +177,35 @@ def b21_rfid(db: Session = Depends(get_db)):
 
 @router.get("/labels/b21/profiles")
 def b21_profiles(db: Session = Depends(get_db)):
-    return {"profiles": _profiles(db), "rfid_bindings": _bindings(db)}
+    return {
+        "profiles": _profiles(db),
+        "rfid_bindings": _bindings(db),
+        "calibrations": _calibrations(db),
+    }
+
+
+@router.get("/labels/b21/calibration")
+def b21_calibration(db: Session = Depends(get_db)):
+    return {"calibrations": _calibrations(db)}
+
+
+@router.post("/labels/b21/calibration")
+async def b21_save_calibration(request: Request, db: Session = Depends(get_db)):
+    body = await request.json()
+    profile_id = str(body.get("profile_id") or "").strip()
+    if not any(str(profile.get("id")) == profile_id for profile in _profiles(db)):
+        return JSONResponse({"error": "Roll profile not found"}, status_code=404)
+    try:
+        x_mm = float(body.get("x_mm") or 0)
+        y_mm = float(body.get("y_mm") or 0)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Invalid calibration offset"}, status_code=400)
+    if not -10 <= x_mm <= 10 or not -10 <= y_mm <= 10:
+        return JSONResponse({"error": "Calibration offset must be between -10 and 10 mm"}, status_code=400)
+    rows = _calibrations(db)
+    rows[profile_id] = {"xMm": round(x_mm, 2), "yMm": round(y_mm, 2)}
+    _save_state(db, _CALIBRATIONS_KEY, rows)
+    return {"ok": True, "profile_id": profile_id, "calibration": rows[profile_id], "calibrations": rows}
 
 
 @router.post("/labels/b21/profiles")
@@ -169,9 +237,12 @@ def b21_delete_profile(profile_id: str, db: Session = Depends(get_db)):
     if not remaining:
         return JSONResponse({"error": "At least one roll profile is required"}, status_code=400)
     bindings = {barcode: pid for barcode, pid in _bindings(db).items() if pid != profile_id}
+    calibrations = _calibrations(db)
+    calibrations.pop(profile_id, None)
     _save_state(db, _PROFILES_KEY, remaining)
     _save_state(db, _RFID_BINDINGS_KEY, bindings)
-    return {"ok": True, "profiles": remaining, "rfid_bindings": bindings}
+    _save_state(db, _CALIBRATIONS_KEY, calibrations)
+    return {"ok": True, "profiles": remaining, "rfid_bindings": bindings, "calibrations": calibrations}
 
 
 @router.post("/labels/b21/rfid-bind")

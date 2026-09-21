@@ -1,4 +1,4 @@
-/* v2026.09.21.17: notification bell behaves like the adjacent Tabler nav button. */
+/* Notification bell behaves like the adjacent Tabler nav button. */
 
 #notif-dropdown > a.nav-link {
   position: relative;
@@ -31,17 +31,21 @@
 }
 #notif-badge:not(.d-none) { display: block !important; }
 
-/* Normal + hover are intentionally handled by Tabler's .nav-link styles,
-   exactly like the adjacent ti-dots-vertical button. */
-
-/* Physical scanner receipt: only the button surface/frame changes for 500 ms.
-   The glyph stays completely untouched. Outline avoids any layout shift. */
-#notif-dropdown > a.nav-link.b2m-v12-bell-flash {
-  background-color: rgba(var(--tblr-primary-rgb, 6, 111, 209), .14) !important;
+/* Normal + hover use Tabler's native nav-link appearance. During the physical
+   scanner receipt window the accent surface must win even when the pointer is
+   not hovering the control. */
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash:not(.disabled),
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash:not(.disabled):hover,
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash:not(.disabled):focus,
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash:not(.disabled):active {
+  background-color: rgba(var(--tblr-primary-rgb, 6, 111, 209), .18) !important;
   background-image: none !important;
+  border-color: var(--tblr-primary, #066fd1) !important;
   outline: 1px solid var(--tblr-primary, #066fd1) !important;
   outline-offset: -1px !important;
-  box-shadow: 0 0 0 2px rgba(var(--tblr-primary-rgb, 6, 111, 209), .12) !important;
+  box-shadow:
+    inset 0 0 0 1px var(--tblr-primary, #066fd1),
+    0 0 0 2px rgba(var(--tblr-primary-rgb, 6, 111, 209), .14) !important;
 }
 
 #notif-dropdown > a.nav-link.b2m-v12-bell-flash > i.ti-bell {
@@ -54,5 +58,24 @@
 html.b2m-epaper-v9 #notif-dropdown > a.nav-link.b2m-v12-bell-flash {
   background-color: #eee !important;
   outline-color: #000 !important;
-  box-shadow: 0 0 0 2px rgba(0,0,0,.12) !important;
+  box-shadow: inset 0 0 0 1px #000, 0 0 0 2px rgba(0,0,0,.12) !important;
+}
+
+/* Item statistics use the same light/translucent icon treatment as barcode
+   statistics instead of opaque coloured avatar blocks. */
+.card:has(#item-stat-total) .avatar {
+  background: var(--tblr-primary-lt) !important;
+  color: var(--tblr-primary) !important;
+}
+.card:has(#item-stat-7) .avatar {
+  background: var(--tblr-green-lt) !important;
+  color: var(--tblr-green) !important;
+}
+.card:has(#item-stat-30) .avatar {
+  background: var(--tblr-blue-lt) !important;
+  color: var(--tblr-blue) !important;
+}
+.card:has(#item-stat-last) .avatar {
+  background: var(--tblr-purple-lt) !important;
+  color: var(--tblr-purple) !important;
 }
