@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.auth import require_token
+from app.auth import require_token, require_token_no_telemetry
 from app.database import SessionLocal, get_db
 from app.events import scan_events
 from app.models import Activity, BarcodeCache, BarcodeTarget
@@ -156,6 +156,34 @@ def _route_known_targets(barcode: str, target_ids: list[int], paused: bool) -> N
         db.close()
 
 
+@router.post("/scanner/received")
+def fast_scanner_received(
+    body: legacy_scan.ScanRequest,
+    _token=Depends(require_token_no_telemetry),
+    db: Session = Depends(get_db),
+):
+    """Record the physical scanner receipt before /scan routing starts.
+
+    The USB bridge sends this request independently from /scan. Keeping the
+    receipt entirely local makes UI feedback deterministic even if lookup or
+    Mealie routing takes seconds. The later /scan request updates the same
+    unread notification with the final result.
+    """
+    barcode = body.barcode.strip()
+    if not barcode:
+        raise HTTPException(status_code=422, detail="Barcode cannot be empty")
+    item, targets = _local_label(barcode, db)
+    _upsert_notification(db, barcode, "Scan received", item, "processing")
+    logger.info("Scanner received barcode=%r targets=%d", barcode, len(targets))
+    scan_events.publish_threadsafe("received", {
+        "barcode": barcode,
+        "item": item,
+        "result": "processing",
+        "target_count": len(targets),
+    })
+    return {"ok": True, "barcode": barcode, "target_count": len(targets)}
+
+
 @router.post("/scan", response_model=legacy_scan.ScanResponse)
 def fast_scan_barcode(
     body: legacy_scan.ScanRequest,
@@ -172,7 +200,8 @@ def fast_scan_barcode(
     item, targets = _local_label(barcode, db)
 
     # The red notification dot and scan-received SSE are committed/emitted before
-    # any external routing begins, so the UI reacts immediately.
+    # any external routing begins, so the UI reacts immediately. If the scanner's
+    # /scanner/received request already created this row, this only updates it.
     _upsert_notification(db, barcode, "Scan received", item, "processing")
     _emit_received(barcode, item, len(targets))
 

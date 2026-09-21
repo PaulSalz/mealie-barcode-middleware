@@ -1,0 +1,66 @@
+/* v2026.09.21.12: deterministic notification bell. */
+#notif-dropdown > a {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 2.25rem !important;
+  height: 2.25rem !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--tblr-border-radius) !important;
+  background: transparent !important;
+  color: var(--tblr-body-color) !important;
+}
+
+#notif-dropdown > a > i.ti-bell {
+  position: relative !important;
+  z-index: 3 !important;
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: currentColor !important;
+  font-size: 1.25rem !important;
+  line-height: 1 !important;
+}
+
+#notif-dropdown .b2m-v4-bell-filled,
+#notif-dropdown .b2m-bell-active-icon {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+#notif-badge {
+  position: absolute !important;
+  z-index: 5 !important;
+  top: .15rem !important;
+  right: .15rem !important;
+  pointer-events: none !important;
+}
+#notif-badge:not(.d-none) { display: block !important; }
+
+/* Legacy completion-time pulses must never alter the bell anymore. */
+#notif-dropdown > a.b2m-v6-bell-pulse:not(.b2m-v12-bell-flash),
+#notif-dropdown > a.b2m-v9-bell-pulse:not(.b2m-v12-bell-flash),
+#notif-dropdown > a.b2m-v10-bell-pulse:not(.b2m-v12-bell-flash),
+#notif-dropdown > a.b2m-bell-flash:not(.b2m-v12-bell-flash) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--tblr-body-color) !important;
+}
+
+/* Physical scanner receipt: full button accent for exactly 500 ms. */
+#notif-dropdown > a.b2m-v12-bell-flash {
+  background: var(--tblr-primary) !important;
+  border-color: var(--tblr-primary) !important;
+  box-shadow: 0 0 0 2px rgba(var(--tblr-primary-rgb), .28) !important;
+  color: var(--tblr-primary-fg, #fff) !important;
+}
+#notif-dropdown > a.b2m-v12-bell-flash > i.ti-bell {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: var(--tblr-primary-fg, #fff) !important;
+}
