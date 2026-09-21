@@ -1,12 +1,22 @@
 """Home Assistant webhook integration."""
 
 import logging
+import time
 
 import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+_http = httpx.Client(
+    limits=httpx.Limits(max_connections=10, max_keepalive_connections=5, keepalive_expiry=60.0),
+)
+
+
+def _log_slow(operation: str, started: float) -> None:
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    if elapsed_ms >= 1000:
+        logger.warning("Slow Home Assistant webhook: %s took %d ms", operation, elapsed_ms)
 
 
 def should_send_scan_webhook(result: str, needs_action: bool = False) -> bool:
@@ -47,15 +57,19 @@ def notify_scan(
         "paused": paused,
     }
 
+    started = time.monotonic()
     try:
-        resp = httpx.post(url, json=payload, timeout=3)
+        resp = _http.post(url, json=payload, timeout=3)
+        _log_slow("scan notification", started)
         if resp.status_code >= 400:
             logger.warning("HA webhook returned %d: %s", resp.status_code, resp.text[:200])
         else:
             logger.debug("HA webhook notified: %s → %s", barcode, result)
     except httpx.TimeoutException:
+        _log_slow("scan notification", started)
         logger.warning("HA webhook timed out for barcode %s", barcode)
     except Exception:
+        _log_slow("scan notification", started)
         logger.warning("HA webhook failed for barcode %s", barcode, exc_info=True)
 
 
@@ -87,13 +101,16 @@ def notify_shopping_route(
         "unit_id": unit_id,
         "route": route,
     }
+    started = time.monotonic()
     try:
-        resp = httpx.post(url, json=payload, timeout=3)
+        resp = _http.post(url, json=payload, timeout=3)
+        _log_slow("shopping route", started)
         if resp.status_code >= 400:
             logger.warning("HA shopping route returned %d: %s", resp.status_code, resp.text[:200])
             return False
         return True
     except Exception:
+        _log_slow("shopping route", started)
         logger.warning("HA shopping route failed for barcode %s", barcode, exc_info=True)
         return False
 
@@ -148,14 +165,18 @@ def dismiss_notification(barcode: str, result: str | None = None) -> None:
 
     payload = {"action": "clear", "barcode": barcode}
 
+    started = time.monotonic()
     try:
-        resp = httpx.post(url, json=payload, timeout=3)
+        resp = _http.post(url, json=payload, timeout=3)
+        _log_slow("dismiss notification", started)
         if resp.status_code >= 400:
             logger.warning("HA dismiss webhook returned %d: %s", resp.status_code, resp.text[:200])
         else:
             _mark_actionable_dismissed(barcode)
             logger.debug("HA dismiss sent for barcode %s", barcode)
     except httpx.TimeoutException:
+        _log_slow("dismiss notification", started)
         logger.warning("HA dismiss webhook timed out for barcode %s", barcode)
     except Exception:
+        _log_slow("dismiss notification", started)
         logger.warning("HA dismiss webhook failed for barcode %s", barcode, exc_info=True)
