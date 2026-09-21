@@ -9,7 +9,7 @@ from app.admin_write_guard import AdminWriteGuardMiddleware
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
-from app.routers import actions, appearance_v3, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scan_fast_v11, scanner, settings as settings_router, target_editor_v6, theme_preview_v2, version_api
+from app.routers import actions, appearance_v3, barcodes, cache_recovery_v15, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scan_fast_v11, scanner, settings as settings_router, target_editor_v6, theme_preview_v2, version_api
 from app.scan_timing_v6 import ScanTimingMiddleware
 from app.services.scheduler import start_scheduler, stop_scheduler
 
@@ -87,6 +87,9 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 app.include_router(version_api.router, tags=["system"])
 app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(docs.router, tags=["docs"])
+# Rebuild a minimal local barcode identity after lookup-cache resets. These
+# wrappers must run before the existing scan and barcode-detail routes.
+app.include_router(cache_recovery_v15.router, tags=["scan", "barcodes"])
 # Fast local acknowledgement for mapped scans must precede the legacy /scan route.
 app.include_router(scan_fast_v11.router, tags=["scan"])
 app.include_router(scan.router, tags=["scan"])
