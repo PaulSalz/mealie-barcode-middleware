@@ -1,0 +1,24 @@
+.b21-output-card .b2m-choice-card { min-height: 68px; }
+.b21-connection-bar { border-top: 1px solid var(--tblr-border-color); margin-top: 1rem; padding-top: 1rem; }
+.b21-status-dot { width: .65rem; height: .65rem; border-radius: 50%; display: inline-block; background: var(--tblr-secondary); box-shadow: 0 0 0 .2rem rgba(98,105,118,.12); }
+.b21-status-dot.connected { background: var(--tblr-success); box-shadow: 0 0 0 .2rem rgba(var(--tblr-success-rgb),.12); }
+.b21-status-dot.error { background: var(--tblr-danger); box-shadow: 0 0 0 .2rem rgba(var(--tblr-danger-rgb),.12); }
+.b21-label-shell { display: flex; justify-content: center; align-items: center; min-height: 320px; padding: 1.25rem; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); overflow: auto; }
+.b21-label-stage { position: relative; width: min(100%,760px); background: #fff; color: #111; box-shadow: 0 4px 18px rgba(0,0,0,.14); overflow: hidden; touch-action: none; user-select: none; }
+.b21-label-frame { position: absolute; pointer-events: none; border-style: solid; border-color: #111; box-sizing: border-box; }
+.b21-element { position: absolute; transform: translate(-50%,-50%); cursor: move; touch-action: none; }
+.b21-code { object-fit: contain; max-width: none; max-height: none; }
+.b21-text,.b21-value { display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.08; overflow: hidden; overflow-wrap: anywhere; font-family: Inter, "DejaVu Sans", sans-serif; }
+.b21-value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.b21-label-stage .b21-element:hover { outline: 1px dashed rgba(var(--tblr-primary-rgb),.65); outline-offset: 2px; }
+.b21-control-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .75rem; }
+.b21-control-grid .form-range { min-width: 0; }
+.b21-section { border-top: 1px solid var(--tblr-border-color); padding-top: 1rem; margin-top: 1rem; }
+.b21-rfid-badge { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.b21-preview-meta { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.b21-profile-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+.b21-profile-editor { background: var(--tblr-bg-surface-secondary); border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); padding: .75rem; }
+@media (max-width: 767.98px) {
+  .b21-control-grid { grid-template-columns: 1fr; }
+  .b21-label-shell { min-height: 230px; padding: .75rem; }
+}
