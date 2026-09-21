@@ -1,4 +1,4 @@
-/* v2026.09.21.12: bell feedback is driven by the physical scanner receipt event. */
+/* v2026.09.21.16: bell feedback is driven by the physical scanner receipt event. */
 (function () {
   'use strict';
   if (window.__b2mBellV12Loaded) return;
@@ -30,11 +30,22 @@
     const link = ensureBell();
     if (!link) return;
     window.clearTimeout(flashTimer);
+
+    /* Remove every legacy flash state first, then snapshot the bell's normal
+       computed text colour. The v16 CSS keeps exactly this colour throughout
+       the 500 ms feedback instead of recolouring/fading the glyph. */
     link.classList.remove('b2m-v6-bell-pulse', 'b2m-v9-bell-pulse', 'b2m-v10-bell-pulse', 'b2m-bell-flash', 'b2m-v12-bell-flash');
+    const bell = link.querySelector('i.ti-bell');
+    if (bell) {
+      const normalColor = window.getComputedStyle(bell).color;
+      if (normalColor) link.style.setProperty('--b2m-bell-color', normalColor);
+    }
+
     void link.offsetWidth;
     link.classList.add('b2m-v12-bell-flash');
     flashTimer = window.setTimeout(function () {
       link.classList.remove('b2m-v12-bell-flash');
+      link.style.removeProperty('--b2m-bell-color');
     }, 500);
   }
 
@@ -56,8 +67,6 @@
     const barcode = String(data.barcode || '');
     const now = Date.now();
 
-    // Some pages currently have two /events subscribers. De-duplicate the same
-    // physical scanner receipt so the 500 ms animation is not restarted twice.
     if (barcode && barcode === lastBarcode && now - lastReceivedAt < 120) return;
     lastBarcode = barcode;
     lastReceivedAt = now;
@@ -72,8 +81,6 @@
     try {
       const value = String(url || '');
       if (value === '/events' || value.endsWith('/events')) {
-        // This is emitted by /scanner/received, i.e. the same moment as the
-        // already-fast dashboard scanner feedback. Do not wait for /scan.
         source.addEventListener('received', onReceived);
       }
     } catch (e) {}
