@@ -9,7 +9,8 @@ from app.admin_write_guard import AdminWriteGuardMiddleware
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
-from app.routers import actions, appearance_v3, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scanner, settings as settings_router, theme_preview_v2, version_api
+from app.routers import actions, appearance_v3, barcodes, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scanner, settings as settings_router, target_editor_v6, theme_preview_v2, version_api
+from app.scan_timing_v6 import ScanTimingMiddleware
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -78,6 +79,7 @@ app.add_middleware(CSRFOriginMiddleware)
 app.add_middleware(AdminWriteGuardMiddleware)
 app.add_middleware(LoginRequiredMiddleware)
 app.add_middleware(RememberMeSessionMiddleware, secret_key=get_session_secret(), max_age=settings.session_max_age_days * 24 * 3600)
+app.add_middleware(ScanTimingMiddleware)
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
@@ -95,6 +97,7 @@ app.include_router(theme_preview_v2.router, tags=["theme"])
 app.include_router(health.router, tags=["health"])
 app.include_router(login.router, tags=["auth"])
 app.include_router(barcodes.router, tags=["barcodes"])
+app.include_router(target_editor_v6.router, tags=["barcodes"])
 app.include_router(items.router, tags=["items"])
 app.include_router(recipes.router, tags=["recipes"])
 app.include_router(labels.router, tags=["labels"])

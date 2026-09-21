@@ -1,7 +1,8 @@
 import json
 import logging
 import re
-from datetime import datetime, timezone
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 import httpx
 from sqlalchemy.orm import Session
@@ -12,6 +13,13 @@ from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
 
+_LOOKUP_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="barcode-lookup")
+_LOOKUP_TIMEOUT = httpx.Timeout(3.0, connect=1.0)
+_LOOKUP_BUDGET_SECONDS = 3.25
+_http = httpx.Client(
+    limits=httpx.Limits(max_connections=12, max_keepalive_connections=6, keepalive_expiry=60.0),
+)
+
 
 def lookup_openfoodfacts(barcode: str) -> dict | None:
     """Query OpenFoodFacts. Returns product dict or None."""
@@ -19,8 +27,8 @@ def lookup_openfoodfacts(barcode: str) -> dict | None:
         return None
     url = f"{settings.off_url_base}{barcode}.json"
     try:
-        resp = httpx.get(url, timeout=5)
-        logger.info(f"OpenFoodFacts {barcode}: HTTP {resp.status_code}")
+        resp = _http.get(url, timeout=_LOOKUP_TIMEOUT)
+        logger.info("OpenFoodFacts %s: HTTP %s", barcode, resp.status_code)
         if resp.status_code == 404:
             return None
         if resp.status_code != 200:
@@ -39,34 +47,31 @@ def lookup_openfoodfacts(barcode: str) -> dict | None:
             "quantity": (product.get("quantity") or "").strip() or None,
             "source": "openfoodfacts",
         }
-    except httpx.HTTPError as e:
-        logger.error(f"OpenFoodFacts error for {barcode}: {e}")
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("OpenFoodFacts error for %s: %s", barcode, exc)
         return None
 
 
 def lookup_upcdatabase(barcode: str) -> dict | None:
     """Query UPCDatabase. Returns product dict or None."""
-    if not settings.upcdb_enabled:
-        return None
-    if not settings.upcdb_api_key:
+    if not settings.upcdb_enabled or not settings.upcdb_api_key:
         return None
     url = f"{settings.upcdb_url_base}{barcode}"
     try:
-        resp = httpx.get(url, params={"apikey": settings.upcdb_api_key}, timeout=5)
-        logger.info(f"UPCDatabase {barcode}: HTTP {resp.status_code}")
+        resp = _http.get(url, params={"apikey": settings.upcdb_api_key}, timeout=_LOOKUP_TIMEOUT)
+        logger.info("UPCDatabase %s: HTTP %s", barcode, resp.status_code)
         if resp.status_code != 200:
             return None
-        # UPCDatabase sometimes prepends stray HTML before the JSON
         text = resp.text
         match = re.search(r'\{\s*"', text)
         if not match:
-            logger.warning(f"UPCDatabase {barcode}: no JSON object found in response")
+            logger.warning("UPCDatabase %s: no JSON object found in response", barcode)
             return None
         clean = text[match.start():]
         try:
             data = json.loads(clean)
         except json.JSONDecodeError:
-            logger.warning(f"UPCDatabase {barcode}: failed to parse extracted JSON")
+            logger.warning("UPCDatabase %s: failed to parse extracted JSON", barcode)
             return None
         if not data.get("success"):
             return None
@@ -81,46 +86,29 @@ def lookup_upcdatabase(barcode: str) -> dict | None:
             "quantity": (metadata.get("quantity") or "").split(",")[0].strip() or None,
             "source": "upcdatabase",
         }
-    except httpx.HTTPError as e:
-        logger.error(f"UPCDatabase error for {barcode}: {e}")
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("UPCDatabase error for %s: %s", barcode, exc)
         return None
 
 
 def _get_lookup_functions() -> tuple:
-    """Return (primary_fn, secondary_fn) based on LOOKUP_PRIMARY config.
-
-    Each function is the raw lookup callable.  If a source is disabled or
-    missing its API key the corresponding slot is ``None``.
-    """
+    """Return (primary_fn, secondary_fn) based on LOOKUP_PRIMARY config."""
     off_fn = lookup_openfoodfacts if settings.off_enabled else None
-    upcdb_fn = (
-        lookup_upcdatabase
-        if settings.upcdb_enabled and settings.upcdb_api_key
-        else None
-    )
-
+    upcdb_fn = lookup_upcdatabase if settings.upcdb_enabled and settings.upcdb_api_key else None
     if settings.lookup_primary == "upcdb":
         primary, secondary = upcdb_fn, off_fn
     else:
         primary, secondary = off_fn, upcdb_fn
-
-    # If the chosen primary is unavailable, swap.
     if primary is None:
         primary, secondary = secondary, None
-
     return primary, secondary
 
 
 def _result_has_gaps(result: dict) -> bool:
-    """True when any enrichment field is empty."""
-    return not all(result.get(f) for f in ("brand", "quantity", "product_type"))
+    return not all(result.get(field) for field in ("brand", "quantity", "product_type"))
 
 
 def _merge_gaps(base: dict, supplement: dict) -> bool:
-    """Fill empty enrichment fields in *base* from *supplement*.
-
-    Returns True if any field was actually filled.
-    """
     changed = False
     for field in ("brand", "quantity", "product_type"):
         if not base.get(field) and supplement.get(field):
@@ -131,47 +119,61 @@ def _merge_gaps(base: dict, supplement: dict) -> bool:
     return changed
 
 
-def perform_lookup(barcode: str, db: Session) -> BarcodeCache:
-    """Lookup barcode in external APIs and upsert into barcode_cache.
+def _lookup_with_budget(barcode: str, primary_fn, secondary_fn) -> tuple[dict | None, dict | None]:
+    """Run providers concurrently so failover latency is bounded by one provider timeout."""
+    started = time.monotonic()
+    if primary_fn is None:
+        return None, None
+    if secondary_fn is None:
+        return primary_fn(barcode), None
 
-    Strategy (``LOOKUP_STRATEGY``):
-    * ``failover`` — try primary, use secondary only if primary returns
-      nothing.  (Default, current behaviour.)
-    * ``complement`` — try primary, respond with whatever it gives, then
-      (optionally in background) fill gaps from the secondary.
-      When ``LOOKUP_ENRICH_IN_BACKGROUND`` is *False* the secondary call
-      is made synchronously before returning.
+    primary_future = _LOOKUP_POOL.submit(primary_fn, barcode)
+    secondary_future = _LOOKUP_POOL.submit(secondary_fn, barcode)
+    primary_result = None
+    secondary_result = None
+    try:
+        primary_result = primary_future.result(timeout=_LOOKUP_BUDGET_SECONDS)
+    except FutureTimeoutError:
+        logger.warning("Primary barcode lookup exceeded %.2fs for %s", _LOOKUP_BUDGET_SECONDS, barcode)
+    except Exception:
+        logger.exception("Primary barcode lookup failed for %s", barcode)
 
-    Returns the cache row.  When complement+background mode is active the
-    caller is expected to schedule ``enrich_barcode_background()`` *after*
-    sending the HTTP response.
-    """
-    primary_fn, secondary_fn = _get_lookup_functions()
-
-    result = None
-    if primary_fn:
-        result = primary_fn(barcode)
-
-    if not result:
-        # Primary returned nothing — always try secondary as full fallback
-        # regardless of strategy (we need *something*).
-        if secondary_fn:
-            result = secondary_fn(barcode)
-    elif (
+    if not primary_result or (
         settings.lookup_strategy == "complement"
         and not settings.lookup_enrich_in_background
-        and secondary_fn
+        and _result_has_gaps(primary_result)
+    ):
+        remaining = max(0.05, _LOOKUP_BUDGET_SECONDS - (time.monotonic() - started))
+        try:
+            secondary_result = secondary_future.result(timeout=remaining)
+        except FutureTimeoutError:
+            logger.warning("Secondary barcode lookup exceeded remaining scan budget for %s", barcode)
+        except Exception:
+            logger.exception("Secondary barcode lookup failed for %s", barcode)
+
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    if elapsed_ms >= 1000:
+        logger.warning("Barcode lookup %s took %d ms", barcode, elapsed_ms)
+    return primary_result, secondary_result
+
+
+def perform_lookup(barcode: str, db: Session) -> BarcodeCache:
+    """Lookup a barcode with a bounded hot-path latency and upsert the cache."""
+    primary_fn, secondary_fn = _get_lookup_functions()
+    primary_result, secondary_result = _lookup_with_budget(barcode, primary_fn, secondary_fn)
+    result = primary_result or secondary_result
+    if (
+        result
+        and primary_result
+        and settings.lookup_strategy == "complement"
+        and not settings.lookup_enrich_in_background
+        and secondary_result
         and _result_has_gaps(result)
     ):
-        # Complement mode, synchronous: fill gaps right now.
-        supplement = secondary_fn(barcode)
-        if supplement:
-            _merge_gaps(result, supplement)
+        _merge_gaps(result, secondary_result)
 
-    # --- upsert cache ---
     existing = db.get(BarcodeCache, barcode)
     now = utcnow()
-
     if result:
         if existing:
             existing.source = result["source"]
@@ -183,15 +185,9 @@ def perform_lookup(barcode: str, db: Session) -> BarcodeCache:
             existing.lookup_attempted_at = now
         else:
             existing = BarcodeCache(
-                barcode=barcode,
-                source=result["source"],
-                title=result["title"],
-                brand=result["brand"],
-                quantity=result["quantity"],
-                product_type=result["product_type"],
-                found=True,
-                lookup_attempted_at=now,
-                created_at=now,
+                barcode=barcode, source=result["source"], title=result["title"], brand=result["brand"],
+                quantity=result["quantity"], product_type=result["product_type"], found=True,
+                lookup_attempted_at=now, created_at=now,
             )
             db.add(existing)
     else:
@@ -201,25 +197,20 @@ def perform_lookup(barcode: str, db: Session) -> BarcodeCache:
             existing.lookup_attempted_at = now
         else:
             existing = BarcodeCache(
-                barcode=barcode,
-                source="not_found",
-                found=False,
-                lookup_attempted_at=now,
-                created_at=now,
+                barcode=barcode, source="not_found", found=False,
+                lookup_attempted_at=now, created_at=now,
             )
             db.add(existing)
-
     db.commit()
     db.refresh(existing)
     return existing
 
 
 def needs_background_enrich(cached: BarcodeCache) -> bool:
-    """Return True if a background enrichment call should be scheduled."""
     if settings.lookup_strategy != "complement":
         return False
     if not settings.lookup_enrich_in_background:
-        return False  # already done synchronously
+        return False
     if not cached.found:
         return False
     _, secondary_fn = _get_lookup_functions()
@@ -229,33 +220,26 @@ def needs_background_enrich(cached: BarcodeCache) -> bool:
 
 
 def enrich_barcode_background(barcode: str) -> None:
-    """Background task: call secondary API and fill gaps in cache.
-
-    Runs outside the request lifecycle — creates its own DB session.
-    """
+    """Background task: call secondary API and fill gaps in cache."""
     from app.database import SessionLocal
 
     _, secondary_fn = _get_lookup_functions()
     if secondary_fn is None:
         return
-
     supplement = secondary_fn(barcode)
     if not supplement:
         logger.info("Background enrich %s: secondary returned nothing", barcode)
         return
-
     db = SessionLocal()
     try:
         cached = db.get(BarcodeCache, barcode)
         if not cached or not cached.found:
             return
-
         changed = False
         for field in ("brand", "quantity", "product_type"):
             if not getattr(cached, field) and supplement.get(field):
                 setattr(cached, field, supplement[field])
                 changed = True
-
         if changed:
             cached.source = f"{cached.source}+{supplement['source']}"
             db.commit()

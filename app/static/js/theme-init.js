@@ -1,4 +1,4 @@
-/* Apply persisted theme before render, then load the single current UI layer. */
+/* Apply persisted theme before render, then load the current UI layers. */
 (function() {
     'use strict';
 
@@ -7,40 +7,57 @@
 
     var legacyCss = document.createElement('link');
     legacyCss.rel = 'stylesheet';
-    legacyCss.href = '/static/css/ui-v2.css?v=2026.09.21.5';
+    legacyCss.href = '/static/css/ui-v2.css?v=2026.09.21.6';
     document.head.appendChild(legacyCss);
 
     var uiCss = document.createElement('link');
     uiCss.rel = 'stylesheet';
-    uiCss.href = '/static/css/ui-v4.css?v=2026.09.21.5';
+    uiCss.href = '/static/css/ui-v4.css?v=2026.09.21.6';
     document.head.appendChild(uiCss);
 
+    var v6Css = document.createElement('link');
+    v6Css.rel = 'stylesheet';
+    v6Css.href = '/static/css/ui-v6.css?v=2026.09.21.6';
+    document.head.appendChild(v6Css);
+
     var ui = document.createElement('script');
-    ui.src = '/static/js/ui-v4.js?v=2026.09.21.5';
+    ui.src = '/static/js/ui-v4.js?v=2026.09.21.6';
     ui.async = false;
     document.head.appendChild(ui);
 
+    var v6 = document.createElement('script');
+    v6.src = '/static/js/ui-v6.js?v=2026.09.21.6';
+    v6.async = false;
+    document.head.appendChild(v6);
+
     if (window.location.pathname === '/settings') {
         var themePreview = document.createElement('script');
-        themePreview.src = '/static/js/theme-live-v2.js?v=2026.09.21.5';
+        themePreview.src = '/static/js/theme-live-v2.js?v=2026.09.21.6';
         themePreview.async = false;
         document.head.appendChild(themePreview);
     }
 
     if (window.location.pathname === '/labels') {
         var designer = document.createElement('script');
-        designer.src = '/static/js/labels-b21-v2.js?v=2026.09.21.5';
+        designer.src = '/static/js/labels-b21-v2.js?v=2026.09.21.6';
         designer.async = false;
         document.head.appendChild(designer);
 
         var resizePatch = document.createElement('script');
-        resizePatch.src = '/static/js/labels-b21-v2-patch.js?v=2026.09.21.5';
+        resizePatch.src = '/static/js/labels-b21-v2-patch.js?v=2026.09.21.6';
         resizePatch.async = false;
         document.head.appendChild(resizePatch);
 
         var v4Patch = document.createElement('script');
-        v4Patch.src = '/static/js/labels-b21-v4.js?v=2026.09.21.5';
+        v4Patch.src = '/static/js/labels-b21-v4.js?v=2026.09.21.6';
         v4Patch.async = false;
         document.head.appendChild(v4Patch);
+    }
+
+    if (window.location.pathname.startsWith('/barcodes/')) {
+        var targets = document.createElement('script');
+        targets.src = '/static/js/barcode-targets-v6.js?v=2026.09.21.6';
+        targets.async = false;
+        document.head.appendChild(targets);
     }
 })();
