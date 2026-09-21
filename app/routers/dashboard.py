@@ -1,5 +1,7 @@
 import asyncio
 import json
+import threading
+import time
 from collections import Counter
 from datetime import timedelta
 
@@ -18,6 +20,22 @@ from app.utils import utcnow
 from app.config import settings
 
 router = APIRouter()
+_mealie_health_lock = threading.Lock()
+_mealie_health_cache: tuple[float, bool] | None = None
+
+
+def _cached_mealie_reachable(ttl_seconds: float = 20.0) -> bool:
+    """Avoid blocking every dashboard render on a fresh Mealie network request."""
+    global _mealie_health_cache
+    now = time.monotonic()
+    with _mealie_health_lock:
+        cached = _mealie_health_cache
+        if cached and now - cached[0] < ttl_seconds:
+            return cached[1]
+    reachable = check_connectivity()
+    with _mealie_health_lock:
+        _mealie_health_cache = (time.monotonic(), reachable)
+    return reachable
 
 
 def _scan_status(result: str, target_type: str | None) -> str:
@@ -120,7 +138,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     total_barcodes, mapped_count, pending_count, queue_depth, unknown_count = _summary_counts(db)
     recent_items = _recent_scans(db, 25)
     frequent_foods, frequent_recipes, frequent_actions = _frequent_targets(db)
-    mealie_reachable = check_connectivity()
+    mealie_reachable = _cached_mealie_reachable()
     scanner_online, scanner_total = _scanner_summary(db)
     last_sync = db.query(Item.synced_at).filter(Item.source == "mealie").order_by(Item.synced_at.desc()).first()
     last_sync_time = last_sync[0] if last_sync else None

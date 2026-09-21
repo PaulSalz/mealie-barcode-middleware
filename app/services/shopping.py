@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 _list_cache_lock = threading.Lock()
 _list_cache: tuple[float, list[dict]] | None = None
 _counts_cache: tuple[float, list[dict]] | None = None
+_http = httpx.Client(
+    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10, keepalive_expiry=60.0),
+)
 
 
 def _headers() -> dict:
@@ -30,10 +33,22 @@ def _items(data) -> list[dict]:
     return []
 
 
+def _invalidate_counts_cache() -> None:
+    global _counts_cache
+    with _list_cache_lock:
+        _counts_cache = None
+
+
+def _log_slow(operation: str, started: float) -> None:
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    if elapsed_ms >= 1000:
+        logger.warning("Slow Mealie request: %s took %d ms", operation, elapsed_ms)
+
+
 def test_mealie_connection() -> dict:
     started = time.monotonic()
     try:
-        response = httpx.get(
+        response = _http.get(
             f"{settings.mealie_url.rstrip('/')}/api/households/shopping/lists",
             headers=_headers(), params={"perPage": 1}, timeout=8,
         )
@@ -50,7 +65,7 @@ def get_shopping_lists(force: bool = False) -> list[dict]:
         if not force and _list_cache and now - _list_cache[0] < 120:
             return list(_list_cache[1])
     try:
-        response = httpx.get(
+        response = _http.get(
             f"{settings.mealie_url}/api/households/shopping/lists",
             headers=_headers(), params={"perPage": -1}, timeout=10,
         )
@@ -69,7 +84,12 @@ def get_shopping_lists(force: bool = False) -> list[dict]:
 
 
 def get_default_shopping_list_id(db=None, *, force_lists: bool = False) -> str:
-    """Runtime-selected default list; legacy env ID is only a fallback."""
+    """Runtime-selected default list; legacy env ID is only a fallback.
+
+    Normal hot-path reads trust the already selected ID. Remote list discovery is
+    only needed when no ID exists or when the caller explicitly asks to validate
+    against Mealie. This avoids a network GET before every scan.
+    """
     close_db = False
     if db is None:
         from app.database import SessionLocal
@@ -79,11 +99,18 @@ def get_default_shopping_list_id(db=None, *, force_lists: bool = False) -> str:
         from app.models import SystemState
         row = db.get(SystemState, "mealie.default_shopping_list_id")
         configured = (row.value or "").strip() if row else ""
+        legacy = (getattr(settings, "mealie_shopping_list_id", "") or "").strip()
+
+        if not force_lists:
+            if configured:
+                return configured
+            if legacy:
+                return legacy
+
         lists = get_shopping_lists(force=force_lists)
         available = {str(item["id"]) for item in lists}
         if configured and (not available or configured in available):
             return configured
-        legacy = (getattr(settings, "mealie_shopping_list_id", "") or "").strip()
         if legacy and (not available or legacy in available):
             return legacy
         return str(lists[0]["id"]) if lists else legacy
@@ -117,7 +144,7 @@ def get_shopping_list_counts(force: bool = False) -> list[dict]:
     lists = get_shopping_lists(force=force)
     counts = {str(row["id"]): 0 for row in lists}
     try:
-        response = httpx.get(
+        response = _http.get(
             f"{settings.mealie_url}/api/households/shopping/items",
             headers=_headers(), params={"perPage": -1}, timeout=10,
         )
@@ -155,43 +182,57 @@ def add_food_to_list(food_id: str, quantity: float | None, unit_id: str | None, 
         payload["quantity"] = quantity
     if unit_id:
         payload["unitId"] = unit_id
+    started = time.monotonic()
     try:
-        response = httpx.post(
+        response = _http.post(
             f"{settings.mealie_url}/api/households/shopping/items",
             headers=_headers(), json=payload, timeout=10,
         )
+        _log_slow("add food", started)
         if response.status_code in (200, 201):
+            _invalidate_counts_cache()
             return True
         logger.warning("Mealie add Food returned %s: %s", response.status_code, response.text[:300])
     except httpx.HTTPError as exc:
+        _log_slow("add food", started)
         logger.warning("Mealie add Food failed: %s", exc)
     return False
 
 
 def add_note_to_list(note: str, list_id: str) -> bool:
     payload = {"shoppingListId": list_id, "note": note, "quantity": 1}
+    started = time.monotonic()
     try:
-        response = httpx.post(
+        response = _http.post(
             f"{settings.mealie_url}/api/households/shopping/items",
             headers=_headers(), json=payload, timeout=10,
         )
-        return response.status_code in (200, 201)
+        _log_slow("add note", started)
+        ok = response.status_code in (200, 201)
+        if ok:
+            _invalidate_counts_cache()
+        return ok
     except httpx.HTTPError:
+        _log_slow("add note", started)
         return False
 
 
 def add_recipe_to_list(recipe_id: str, scale: float, list_id: str) -> bool:
+    started = time.monotonic()
     try:
-        response = httpx.post(
+        response = _http.post(
             f"{settings.mealie_url}/api/households/shopping/lists/{list_id}/recipe",
             headers=_headers(),
             json=[{"recipeId": recipe_id, "recipeIncrementQuantity": scale or 1.0}],
             timeout=15,
         )
+        _log_slow("add recipe", started)
         if response.status_code in (200, 201):
+            _invalidate_counts_cache()
             return True
         logger.warning("Mealie add Recipe returned %s: %s", response.status_code, response.text[:300])
     except httpx.HTTPError as exc:
+        _log_slow("add recipe", started)
         logger.warning("Mealie add Recipe failed: %s", exc)
     return False
 
@@ -221,8 +262,18 @@ def route_item_scan(
         route = (item.shopping_route or "default").lower()
     if route == "default":
         route = "mealie"
-    fallback_list = item.shopping_list_id or get_default_shopping_list_id(db)
-    list_ids = effective_list_ids(list_ids_override, db, fallback=fallback_list)
+
+    # Do not resolve the default list when the target already carries explicit
+    # list IDs. Function arguments are evaluated eagerly, so the previous code
+    # performed a needless DB/cache/network lookup even when it was never used.
+    explicit_lists = list(dict.fromkeys(str(value).strip() for value in (list_ids_override or []) if str(value).strip()))
+    if explicit_lists:
+        list_ids = explicit_lists
+    elif item.shopping_list_id:
+        list_ids = [str(item.shopping_list_id)]
+    else:
+        list_ids = effective_list_ids(None, db)
+
     explicit_quantity = _explicit_quantity(quantity)
 
     mealie_required = route in {"mealie", "both"}

@@ -4,6 +4,14 @@
 .table.table-vcenter tbody td:hover {
     box-shadow: none !important;
 }
+#item-assign-table tbody tr:hover > td {
+    background: rgba(var(--tblr-primary-rgb), .035) !important;
+    box-shadow: none !important;
+}
+#item-assign-table tbody td:hover {
+    background: rgba(var(--tblr-primary-rgb), .035) !important;
+    box-shadow: none !important;
+}
 
 /* Keep statistic cards visually consistent across dashboard/detail pages. */
 .b2m-stat-card {
