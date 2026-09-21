@@ -92,14 +92,46 @@ def add_target(
     recipe_scale: float = 1.0,
     mapped_by: str = "manual",
 ) -> BarcodeTarget:
+    """Add or update one logical target for a barcode.
+
+    A Food/recipe already attached to the barcode is updated in place instead of
+    creating another identical row. This makes repeated UI submissions safe and
+    avoids position races from producing duplicate targets.
+    """
+    normalized_route = route if route in {"inherit", "mealie", "homeassistant", "both", "none"} else "inherit"
+    existing_target = (
+        db.query(BarcodeTarget)
+        .filter(
+            BarcodeTarget.barcode == barcode,
+            BarcodeTarget.target_type == target_type,
+            BarcodeTarget.target_id == target_id,
+        )
+        .order_by(BarcodeTarget.id)
+        .first()
+    )
+    if existing_target:
+        existing_target.target_name = target_name
+        existing_target.route = normalized_route
+        existing_target.quantity = quantity
+        existing_target.unit_id = unit_id or None
+        existing_target.recipe_scale = recipe_scale or 1.0
+        existing_target.enabled = True
+        existing_target.mapped_by = mapped_by or existing_target.mapped_by or "manual"
+        set_list_ids(existing_target, list_ids_value or [])
+        db.commit()
+        db.refresh(existing_target)
+        sync_legacy_primary(barcode, db)
+        return existing_target
+
     existing = ensure_targets(barcode, db)
-    position = max((row.position for row in existing), default=-1) + 1
+    positions = [row.position for row in existing if isinstance(row.position, int)]
+    position = max(positions, default=-1) + 1
     target = BarcodeTarget(
         barcode=barcode,
         target_type=target_type,
         target_id=target_id,
         target_name=target_name,
-        route=route if route in {"inherit", "mealie", "homeassistant", "both", "none"} else "inherit",
+        route=normalized_route,
         quantity=quantity,
         unit_id=unit_id or None,
         recipe_scale=recipe_scale or 1.0,
