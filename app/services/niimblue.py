@@ -15,6 +15,10 @@ import time
 
 import httpx
 
+_http = httpx.Client(
+    limits=httpx.Limits(max_connections=10, max_keepalive_connections=5, keepalive_expiry=60.0),
+)
+
 
 def _env(name: str, default: str = "") -> str:
     return (os.getenv(name, default) or default).strip()
@@ -62,11 +66,11 @@ def is_configured() -> bool:
     return bool(cfg["url"] and cfg["address"] and cfg["transport"] in {"ble", "serial"})
 
 
-def _request(method: str, path: str, *, json: dict | None = None, timeout: float | None = None) -> httpx.Response:
+def _request(method: str, path: str, *, json: dict | None = None, timeout: float | httpx.Timeout | None = None) -> httpx.Response:
     cfg = config()
     if not cfg["url"]:
         raise RuntimeError("NIIMBLUE_URL is not configured")
-    response = httpx.request(method, f"{cfg['url']}{path}", json=json, timeout=timeout or cfg["timeout"])
+    response = _http.request(method, f"{cfg['url']}{path}", json=json, timeout=timeout or cfg["timeout"])
     response.raise_for_status()
     return response
 
@@ -93,11 +97,20 @@ def _http_error_message(exc: Exception, *, action: str = "request") -> str:
     return str(exc)
 
 
-def _connected() -> bool:
+def _connected(*, timeout: float = 2.0) -> bool:
     try:
-        return bool(_request("GET", "/connected", timeout=3).json().get("connected"))
+        return bool(_request("GET", "/connected", timeout=timeout).json().get("connected"))
     except Exception:
         return False
+
+
+def _wait_connected(seconds: float = 3.0) -> bool:
+    deadline = time.monotonic() + max(0.2, seconds)
+    while time.monotonic() < deadline:
+        if _connected(timeout=1.0):
+            return True
+        time.sleep(0.2)
+    return _connected(timeout=1.0)
 
 
 def printer_status() -> dict:
@@ -114,21 +127,36 @@ def printer_status() -> dict:
     if not result["configured"]:
         return result
     try:
-        result["connected"] = bool(_request("GET", "/connected", timeout=3).json().get("connected"))
+        result["connected"] = bool(_request("GET", "/connected", timeout=2).json().get("connected"))
         if result["connected"]:
             try:
-                info = _request("GET", "/info", timeout=5).json()
+                info = _request("GET", "/info", timeout=4).json()
                 result["info"] = info
                 metadata = info.get("modelMetadata") or {}
                 if metadata.get("dpi"):
                     result["dpi"] = metadata["dpi"]
                 if info.get("detectedPrintTask"):
                     result["detected_print_task"] = info["detectedPrintTask"]
-            except Exception:
-                pass
+            except Exception as exc:
+                result["info_error"] = _http_error_message(exc, action="info request")
     except Exception as exc:
         result["error"] = _http_error_message(exc, action="status request")
     return result
+
+
+def _disconnect_best_effort() -> None:
+    try:
+        _request("POST", "/disconnect", json={}, timeout=2.5)
+    except Exception:
+        pass
+
+
+def _connect_once(payload: dict, *, timeout: float = 8.0) -> Exception | None:
+    try:
+        _request("POST", "/connect", json=payload, timeout=timeout)
+        return None
+    except Exception as exc:
+        return exc
 
 
 def connect_printer() -> dict:
@@ -141,36 +169,37 @@ def connect_printer() -> dict:
         return result
 
     payload = {"transport": cfg["transport"], "address": cfg["address"]}
-    try:
-        _request("POST", "/connect", json=payload, timeout=20)
-    except httpx.HTTPError as first_error:
-        time.sleep(0.2)
-        if _connected():
-            result = printer_status()
-            result["message"] = "Connected"
-            return result
+    # Clear a stale niimblue-node transport state first. This is cheap when
+    # disconnected and avoids the common transient "Disconnected 62" BLE state.
+    _disconnect_best_effort()
+    time.sleep(0.15)
 
-        status_code = first_error.response.status_code if isinstance(first_error, httpx.HTTPStatusError) else None
-        if status_code is None or status_code >= 500:
-            try:
-                _request("POST", "/disconnect", json={}, timeout=6)
-            except Exception:
-                pass
-            time.sleep(0.45)
-            try:
-                _request("POST", "/connect", json=payload, timeout=20)
-            except httpx.HTTPError as retry_error:
-                time.sleep(0.2)
-                if not _connected():
-                    raise RuntimeError(_http_error_message(retry_error, action="connect")) from retry_error
-        else:
-            raise RuntimeError(_http_error_message(first_error, action="connect")) from first_error
+    first_error = _connect_once(payload, timeout=min(cfg["timeout"], 8.0))
+    if first_error is None and _wait_connected(3.0):
+        result = printer_status()
+        result["message"] = "Connected"
+        return result
+    if first_error is not None and _wait_connected(0.5):
+        result = printer_status()
+        result["message"] = "Connected"
+        return result
 
-    result = printer_status()
-    if not result.get("connected"):
-        raise RuntimeError("niimblue-node accepted Connect, but the printer did not become connected")
-    result["message"] = "Connected"
-    return result
+    # One bounded retry is useful for BLE after a browser/direct connection was
+    # released only moments ago. Do not leave the HTTP request hanging forever.
+    _disconnect_best_effort()
+    time.sleep(0.3)
+    retry_error = _connect_once(payload, timeout=min(cfg["timeout"], 8.0))
+    if _wait_connected(3.5):
+        result = printer_status()
+        result["message"] = "Connected"
+        return result
+
+    error = retry_error or first_error
+    if error is not None:
+        raise RuntimeError(_http_error_message(error, action="connect")) from error
+    raise RuntimeError(
+        f"niimblue-node accepted Connect for {cfg['address']}, but the printer did not become connected"
+    )
 
 
 def disconnect_printer() -> dict:
@@ -179,7 +208,7 @@ def disconnect_printer() -> dict:
         raise RuntimeError("NIIMBLUE_URL is not configured")
     if _connected():
         try:
-            _request("POST", "/disconnect", json={}, timeout=10)
+            _request("POST", "/disconnect", json={}, timeout=5)
         except httpx.HTTPError as exc:
             raise RuntimeError(_http_error_message(exc, action="disconnect")) from exc
     result = printer_status()
