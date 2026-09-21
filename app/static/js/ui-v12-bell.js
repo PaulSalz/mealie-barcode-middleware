@@ -1,4 +1,4 @@
-/* v2026.09.21.17: scanner feedback on the native-style notification nav-link. */
+/* v2026.09.21.20: one stable notification-bell glyph and early scanner feedback. */
 (function () {
   'use strict';
   if (window.__b2mBellV12Loaded) return;
@@ -11,25 +11,40 @@
   let lastBarcode = '';
   let lastReceivedAt = 0;
 
+  function createStableBell() {
+    const icon = document.createElement('span');
+    icon.className = 'b2m-stable-bell icon icon-1';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M10 5a2 2 0 0 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3H4a4 4 0 0 0 2-3v-3a7 7 0 0 1 4-6"/>' +
+        '<path d="M9 17v1a3 3 0 0 0 6 0v-1"/>' +
+      '</svg>';
+    return icon;
+  }
+
   function ensureBell() {
     const link = document.querySelector('#notif-dropdown > a');
     if (!link) return null;
 
-    // Match the neighbouring three-dots control: plain Tabler nav-link with
-    // the standard icon/icon-1 classes. No replacement/fill icon is used.
+    // Match the neighbouring three-dots control: plain Tabler nav-link sizing.
+    // The visible glyph deliberately does not carry ti-bell/ti-bell-filled,
+    // because legacy observers used those classes as mutable state and could
+    // temporarily replace the icon while a scan was being processed.
     link.classList.add('nav-link');
     link.classList.remove('px-0');
 
-    let bell = link.querySelector('i.ti-bell');
-    if (!bell) {
-      bell = document.createElement('i');
-      link.insertBefore(bell, link.firstChild);
-    }
-    bell.className = 'ti ti-bell icon icon-1';
-
-    link.querySelectorAll('.b2m-v4-bell-filled,.b2m-bell-active-icon').forEach(function (node) {
+    link.querySelectorAll(
+      'i.ti-bell,i.ti-bell-filled,.b2m-v4-bell-filled,.b2m-bell-active-icon'
+    ).forEach(function (node) {
       node.remove();
     });
+
+    let bell = link.querySelector('.b2m-stable-bell');
+    if (!bell) {
+      bell = createStableBell();
+      link.insertBefore(bell, link.firstChild);
+    }
     return link;
   }
 

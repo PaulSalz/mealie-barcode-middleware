@@ -6,22 +6,31 @@
   isolation: isolate;
 }
 
-#notif-dropdown > a.nav-link > i.ti-bell,
-#notif-dropdown > a.nav-link.b2m-v4-unread > i.ti-bell,
-#notif-dropdown > a.nav-link.b2m-v12-bell-flash > i.ti-bell {
-  display: inline-block !important;
+/* One immutable visible bell. Legacy ti-bell/ti-bell-filled nodes are hidden
+   and may still be touched by old scripts without affecting what the user sees. */
+#notif-dropdown > a.nav-link > .b2m-stable-bell {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   position: relative !important;
   z-index: 5 !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
   visibility: visible !important;
   opacity: 1 !important;
   color: currentColor !important;
-  fill: none !important;
-  filter: none !important;
-  mix-blend-mode: normal !important;
   transition: none !important;
   pointer-events: none !important;
 }
+#notif-dropdown > a.nav-link > .b2m-stable-bell > svg {
+  display: block !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  overflow: visible !important;
+}
 
+#notif-dropdown > a.nav-link > i.ti-bell,
+#notif-dropdown > a.nav-link > i.ti-bell-filled,
 #notif-dropdown .b2m-v4-bell-filled,
 #notif-dropdown .b2m-bell-active-icon {
   display: none !important;
@@ -37,9 +46,21 @@
 }
 #notif-badge:not(.d-none) { display: block !important; }
 
-/* Normal + hover use Tabler's native nav-link appearance. During the physical
-   scanner receipt window the accent surface must win even when the pointer is
-   not hovering the control. */
+/* Old completion-time pulse handlers may still add these classes internally.
+   They must never produce a second visible flash. */
+#notif-dropdown > a.nav-link.b2m-v6-bell-pulse:not(.b2m-v12-bell-flash),
+#notif-dropdown > a.nav-link.b2m-v9-bell-pulse:not(.b2m-v12-bell-flash),
+#notif-dropdown > a.nav-link.b2m-v10-bell-pulse:not(.b2m-v12-bell-flash),
+#notif-dropdown > a.nav-link.b2m-bell-flash:not(.b2m-v12-bell-flash) {
+  background: transparent !important;
+  background-image: none !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  color: inherit !important;
+}
+
+/* Physical scanner receipt: only the button surface/frame changes for 500 ms.
+   Hover/focus/active cannot override this state. */
 #notif-dropdown > a.nav-link.b2m-v12-bell-flash:not(.disabled),
 #notif-dropdown > a.nav-link.b2m-v12-bell-flash:not(.disabled):hover,
 #notif-dropdown > a.nav-link.b2m-v12-bell-flash:not(.disabled):focus,
@@ -54,22 +75,19 @@
     0 0 0 2px rgba(var(--tblr-primary-rgb, 6, 111, 209), .14) !important;
 }
 
-/* Any theme/Tabler pseudo surface stays below the actual bell glyph while the
-   scanner feedback class is active. */
 #notif-dropdown > a.nav-link.b2m-v12-bell-flash::before,
 #notif-dropdown > a.nav-link.b2m-v12-bell-flash::after {
   z-index: 0 !important;
   pointer-events: none !important;
 }
 
-#notif-dropdown > a.nav-link.b2m-v12-bell-flash > i.ti-bell {
-  display: inline-block !important;
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash > .b2m-stable-bell {
+  display: inline-flex !important;
   position: relative !important;
   z-index: 5 !important;
   visibility: visible !important;
   opacity: 1 !important;
   color: var(--tblr-primary, #066fd1) !important;
-  fill: none !important;
 }
 
 html.b2m-epaper-v9 #notif-dropdown > a.nav-link.b2m-v12-bell-flash {
@@ -77,7 +95,7 @@ html.b2m-epaper-v9 #notif-dropdown > a.nav-link.b2m-v12-bell-flash {
   outline-color: #000 !important;
   box-shadow: inset 0 0 0 1px #000, 0 0 0 2px rgba(0,0,0,.12) !important;
 }
-html.b2m-epaper-v9 #notif-dropdown > a.nav-link.b2m-v12-bell-flash > i.ti-bell {
+html.b2m-epaper-v9 #notif-dropdown > a.nav-link.b2m-v12-bell-flash > .b2m-stable-bell {
   color: #000 !important;
 }
 
