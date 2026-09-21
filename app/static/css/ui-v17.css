@@ -3,17 +3,23 @@
 #notif-dropdown > a.nav-link {
   position: relative;
   overflow: visible;
+  isolation: isolate;
 }
 
 #notif-dropdown > a.nav-link > i.ti-bell,
 #notif-dropdown > a.nav-link.b2m-v4-unread > i.ti-bell,
 #notif-dropdown > a.nav-link.b2m-v12-bell-flash > i.ti-bell {
   display: inline-block !important;
+  position: relative !important;
+  z-index: 5 !important;
   visibility: visible !important;
   opacity: 1 !important;
   color: currentColor !important;
   fill: none !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
   transition: none !important;
+  pointer-events: none !important;
 }
 
 #notif-dropdown .b2m-v4-bell-filled,
@@ -24,7 +30,7 @@
 
 #notif-badge {
   position: absolute !important;
-  z-index: 3 !important;
+  z-index: 6 !important;
   top: .25rem !important;
   right: .25rem !important;
   pointer-events: none !important;
@@ -48,17 +54,31 @@
     0 0 0 2px rgba(var(--tblr-primary-rgb, 6, 111, 209), .14) !important;
 }
 
+/* Any theme/Tabler pseudo surface stays below the actual bell glyph while the
+   scanner feedback class is active. */
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash::before,
+#notif-dropdown > a.nav-link.b2m-v12-bell-flash::after {
+  z-index: 0 !important;
+  pointer-events: none !important;
+}
+
 #notif-dropdown > a.nav-link.b2m-v12-bell-flash > i.ti-bell {
   display: inline-block !important;
+  position: relative !important;
+  z-index: 5 !important;
   visibility: visible !important;
   opacity: 1 !important;
-  color: currentColor !important;
+  color: var(--tblr-primary, #066fd1) !important;
+  fill: none !important;
 }
 
 html.b2m-epaper-v9 #notif-dropdown > a.nav-link.b2m-v12-bell-flash {
   background-color: #eee !important;
   outline-color: #000 !important;
   box-shadow: inset 0 0 0 1px #000, 0 0 0 2px rgba(0,0,0,.12) !important;
+}
+html.b2m-epaper-v9 #notif-dropdown > a.nav-link.b2m-v12-bell-flash > i.ti-bell {
+  color: #000 !important;
 }
 
 /* Item statistics use the same light/translucent icon treatment as barcode
