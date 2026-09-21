@@ -101,10 +101,20 @@
         }).observe(count, {childList:true, characterData:true, subtree:true});
     }
 
+    function loadB21Designer() {
+        if (document.getElementById('b21-designer-script')) return;
+        var script = document.createElement('script');
+        script.id = 'b21-designer-script';
+        script.src = '/static/js/labels-b21.js?v=20260921-1';
+        script.defer = true;
+        document.body.appendChild(script);
+    }
+
     moveQueueFeedback();
     preloadActions();
     prefillRecipeFromUrl();
     watchQueue();
+    loadB21Designer();
 
     var foodResults = document.getElementById('generator-food-results');
     if (foodResults) {
