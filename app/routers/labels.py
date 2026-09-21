@@ -87,12 +87,7 @@ def labels_page(request: Request, db: Session = Depends(get_db)):
 
 
 def _qr_svg(value: str) -> bytes:
-    """Render a QR SVG with intrinsic dimensions intact.
-
-    Keeping Segno's native width/height is important when the SVG is loaded through
-    an <img>: replacing them with only a viewBox can leave the image without a usable
-    intrinsic size in some browser/flex layouts.
-    """
+    """Render a QR SVG with intrinsic dimensions intact."""
     qr = segno.make(value, error="m")
     buf = io.BytesIO()
     qr.save(buf, kind="svg", scale=4, border=2, xmldecl=False)
@@ -156,7 +151,6 @@ def generate_code_svg(
     return Response(content=content, media_type="image/svg+xml", headers={"X-Code-Kind": kind})
 
 
-# Backward-compatible endpoint for old bookmarks / JS.
 @router.get("/labels/qr.svg")
 def generate_qr_svg(text: str = Query(..., min_length=1)):
     return Response(content=_qr_svg(f"GENERIC:{text}"), media_type="image/svg+xml")
@@ -278,6 +272,24 @@ def _upsert_cache(code: str, label: str, source: str, db: Session) -> BarcodeCac
     return cached
 
 
+def _ensure_local_food_reference(food_id: str, food_name: str, db: Session) -> None:
+    """Make a generated FOOD:<id> routable without waiting for a full Mealie sync."""
+    if not food_id or db.get(Item, food_id):
+        return
+    now = utcnow()
+    db.add(Item(
+        id=food_id,
+        name=food_name or food_id,
+        source="mealie",
+        aliases="[]",
+        shopping_route="default",
+        created_at=now,
+        updated_at=now,
+        synced_at=now,
+    ))
+    db.flush()
+
+
 @router.post("/labels/register", response_class=JSONResponse)
 async def register_labels_batch(request: Request, db: Session = Depends(get_db)):
     body = await request.json()
@@ -307,6 +319,8 @@ async def register_labels_batch(request: Request, db: Session = Depends(get_db))
             registered += 1
 
         if target_type in {"food", "recipe"} and target_id:
+            if target_type == "food":
+                _ensure_local_food_reference(target_id, target_name or label, db)
             mapping = db.get(BarcodeMapping, code)
             if not mapping:
                 mapping = BarcodeMapping(barcode=code, target_type=target_type, target_id=target_id)
