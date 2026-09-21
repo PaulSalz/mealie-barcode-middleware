@@ -169,6 +169,18 @@
         var dateStyle=document.getElementById('theme-date-style');
         fetch('/api/theme',{headers:{'Accept':'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(theme){if(theme&&dateStyle)dateStyle.value=theme.date_style||'medium';}).catch(function(){});
 
+        // Persist the date style only when the user presses the normal Save button.
+        // The existing appearance handler saves e-paper/contrast in the same submit.
+        form.addEventListener('submit',function(){
+            if(!dateStyle)return;
+            fetch('/api/theme/accessibility',{
+                method:'POST',
+                keepalive:true,
+                headers:{'Content-Type':'application/json','Accept':'application/json'},
+                body:JSON.stringify({epaper:epaper.checked,contrast:Number(contrast.value),date_style:dateStyle.value})
+            }).catch(function(){});
+        },{capture:true});
+
         var themeLink=document.querySelector('link[href="/theme.css"], link[href^="/theme.css?"]');
         var previewStyle=document.getElementById('b2m-theme-preview-style');
         if(!previewStyle){previewStyle=document.createElement('style');previewStyle.id='b2m-theme-preview-style';document.head.appendChild(previewStyle);}
