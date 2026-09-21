@@ -12,11 +12,14 @@ engine = create_engine(
 
 @event.listens_for(engine, "connect")
 def _configure_sqlite_connection(dbapi_connection, _connection_record) -> None:
-    """Allow short concurrent scanner/UI writes without surfacing lock errors."""
+    """Apply cheap per-connection pragmas only.
+
+    journal_mode=WAL is database-wide and can acquire locks, so it is configured
+    once during startup instead of every time SQLAlchemy opens a connection.
+    """
     cursor = dbapi_connection.cursor()
     try:
         cursor.execute("PRAGMA busy_timeout=30000")
-        cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
     finally:
         cursor.close()
@@ -37,7 +40,14 @@ def get_db():
         db.close()
 
 
+def _configure_sqlite_database() -> None:
+    """Apply database-wide SQLite settings once at process startup."""
+    with engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+
+
 def init_db():
+    _configure_sqlite_database()
     _migrate()
     Base.metadata.create_all(bind=engine)
     _backfill_barcode_targets()
@@ -93,6 +103,9 @@ def _migrate():
         with engine.begin() as conn:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_activities_is_scan_event ON activities (is_scan_event)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_activities_target_id ON activities (target_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_activities_scan_created ON activities (is_scan_event, created_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_activities_barcode_scan_created ON activities (barcode, is_scan_event, created_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_activities_barcode_read ON activities (barcode, is_read)"))
 
     if "barcode_cache" in tables:
         columns = {c["name"] for c in insp.get_columns("barcode_cache")}
