@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.auth import require_token
+from app.auth import require_token_no_telemetry
 from app.config import settings
 from app.database import get_db
 from app.events import scan_events
@@ -14,7 +14,7 @@ from app.models import Action, ActionExecution, Activity, BarcodeCache, BarcodeM
 from app.services.multitarget import route_targets
 from app.services.targets import ensure_targets, sync_legacy_primary
 from app.templating import set_cached_theme
-from app.theme import get_theme, save_theme
+from app.theme import build_theme_css, get_theme, save_theme
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ class ScannerReceived(BaseModel):
 
 
 @router.post("/scanner/received")
-def scanner_received(body: ScannerReceived, _token=Depends(require_token)):
+def scanner_received(body: ScannerReceived, _token=Depends(require_token_no_telemetry)):
     barcode = body.barcode.strip()
     scan_events.publish_threadsafe("received", {"barcode": barcode})
     return {"ok": True}
@@ -81,6 +81,21 @@ async def save_accessibility_theme(request: Request, db: Session = Depends(get_d
     return {"ok":True,"theme":fresh}
 
 
+@router.post("/api/theme/preview")
+async def preview_accessibility_theme(request: Request, db: Session = Depends(get_db)):
+    """Render e-paper/contrast CSS without persisting it."""
+    if not request.session.get("is_admin", False):
+        return JSONResponse({"error":"admin required"}, status_code=403)
+    body = await request.json()
+    current = get_theme(db)
+    current["epaper"] = "true" if bool(body.get("epaper")) else "false"
+    try:
+        current["contrast"] = str(max(0, min(100, int(float(body.get("contrast", current.get("contrast", 65)))))))
+    except (TypeError, ValueError):
+        return JSONResponse({"error":"contrast must be 0–100"}, status_code=400)
+    return {"ok":True,"css":build_theme_css(current),"theme":current}
+
+
 def _remove_local_item(item: Item, db: Session) -> None:
     targets = db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item.id).all()
     mappings = db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food", BarcodeMapping.target_id == item.id).all()
@@ -93,6 +108,22 @@ def _remove_local_item(item: Item, db: Session) -> None:
         sync_legacy_primary(barcode, db)
 
 
+def _delete_mealie_item_upstream(item: Item) -> str | None:
+    if item.source != "mealie":
+        return None
+    try:
+        response = httpx.delete(
+            f"{settings.mealie_url.rstrip('/')}/api/foods/{item.id}",
+            headers={"Authorization":f"Bearer {settings.mealie_api_key}","Accept":"application/json"},
+            timeout=12,
+        )
+    except httpx.HTTPError as exc:
+        return f"Mealie delete failed: {exc}"
+    if response.status_code not in (200, 202, 204, 404):
+        return f"Mealie returned HTTP {response.status_code}: {response.text[:240]}"
+    return None
+
+
 @router.delete("/api/items/{item_id}")
 def delete_item(item_id: str, request: Request, db: Session = Depends(get_db)):
     """Delete one item explicitly; Mealie-backed items are deleted upstream first."""
@@ -101,20 +132,12 @@ def delete_item(item_id: str, request: Request, db: Session = Depends(get_db)):
     item = db.get(Item, item_id)
     if not item:
         return JSONResponse({"error":"item not found"}, status_code=404)
-    if item.source == "mealie":
-        try:
-            response = httpx.delete(
-                f"{settings.mealie_url.rstrip('/')}/api/foods/{item.id}",
-                headers={"Authorization":f"Bearer {settings.mealie_api_key}","Accept":"application/json"},
-                timeout=12,
-            )
-        except httpx.HTTPError as exc:
-            return JSONResponse({"error":f"Mealie delete failed: {exc}"}, status_code=502)
-        if response.status_code not in (200, 202, 204, 404):
-            return JSONResponse({"error":f"Mealie returned HTTP {response.status_code}: {response.text[:240]}"}, status_code=502)
+    source = item.source
+    if error := _delete_mealie_item_upstream(item):
+        return JSONResponse({"error":error}, status_code=502)
     _remove_local_item(item, db)
     db.commit()
-    return {"ok":True,"deleted":item_id,"source":item.source}
+    return {"ok":True,"deleted":item_id,"source":source}
 
 
 class BulkDeleteRequest(BaseModel):
@@ -128,9 +151,10 @@ def bulk_delete(body: BulkDeleteRequest, request: Request, db: Session = Depends
         return JSONResponse({"error":"admin required"}, status_code=403)
     ids = list(dict.fromkeys(str(value).strip() for value in body.ids if str(value).strip()))
     if not ids:
-        return {"ok":True,"deleted":0,"skipped":[]}
+        return {"ok":True,"deleted":0,"skipped":[],"errors":[]}
     deleted = 0
     skipped: list[str] = []
+    errors: list[str] = []
     if body.kind == "barcodes":
         db.query(Activity).filter(Activity.barcode.in_(ids)).delete(synchronize_session=False)
         db.query(RetryQueue).filter(RetryQueue.barcode.in_(ids)).delete(synchronize_session=False)
@@ -155,9 +179,15 @@ def bulk_delete(body: BulkDeleteRequest, request: Request, db: Session = Depends
         items=db.query(Item).filter(Item.id.in_(ids)).all(); by_id={row.id:row for row in items}
         for value in ids:
             item=by_id.get(value)
-            if not item or item.source != "manual": skipped.append(value); continue
-            _remove_local_item(item, db); deleted += 1
+            if not item:
+                skipped.append(value)
+                continue
+            if error := _delete_mealie_item_upstream(item):
+                errors.append(f"{item.name}: {error}")
+                continue
+            _remove_local_item(item, db)
+            deleted += 1
     else:
         return JSONResponse({"error":"unsupported bulk-delete kind"}, status_code=400)
     db.commit()
-    return {"ok":True,"deleted":deleted,"skipped":skipped}
+    return {"ok":True,"deleted":deleted,"skipped":skipped,"errors":errors}
