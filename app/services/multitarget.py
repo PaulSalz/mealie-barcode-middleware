@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import logging
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from types import SimpleNamespace
+
 from app.models import BarcodeTarget, Item
 from app.services.homeassistant import notify_shopping_route
 from app.services.shopping import add_recipe_to_list, effective_list_ids, route_item_scan
 from app.services.targets import list_ids
+
+logger = logging.getLogger(__name__)
+_ROUTE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="target-route")
 
 
 def _effective_route(target: BarcodeTarget, item: Item | None) -> str:
@@ -15,81 +23,215 @@ def _effective_route(target: BarcodeTarget, item: Item | None) -> str:
     return route
 
 
+def _food_snapshot(item: Item):
+    """Detach the fields needed by the worker from the SQLAlchemy session."""
+    return SimpleNamespace(
+        id=item.id,
+        name=item.name,
+        source=item.source,
+        shopping_route=item.shopping_route,
+        shopping_list_id=item.shopping_list_id,
+    )
+
+
+def _route_food(plan: dict) -> dict:
+    started = time.monotonic()
+    item = plan["item"]
+    route = plan["route"]
+    if route == "none":
+        routed = {
+            "ok": True,
+            "via": "none",
+            "list_ids": plan["list_ids"],
+            "mealie": None,
+            "ha": None,
+        }
+    else:
+        routed = route_item_scan(
+            item,
+            barcode=plan["barcode"],
+            quantity=plan["quantity"],
+            unit_id=plan["unit_id"],
+            route_override=route,
+            list_ids_override=plan["list_ids"],
+            # Never share the request Session across worker threads. Explicit
+            # list IDs avoid DB work; if a fallback is still required the
+            # shopping helper opens its own short-lived Session.
+            db=None,
+        )
+    duration_ms = int((time.monotonic() - started) * 1000)
+    if duration_ms >= 1000:
+        logger.warning(
+            "Slow Food target route: barcode=%s target=%s took %d ms via=%s",
+            plan["barcode"], plan["target_id"], duration_ms, route,
+        )
+    return {
+        "ok": bool(routed.get("ok")),
+        "result": "added" if routed.get("ok") else "error",
+        "name": item.name,
+        "via": routed.get("via"),
+        "list_ids": routed.get("list_ids", plan["list_ids"]),
+        "duration_ms": duration_ms,
+    }
+
+
+def _route_recipe(plan: dict) -> dict:
+    started = time.monotonic()
+    route = plan["route"]
+    ids = plan["list_ids"]
+    mealie_ok = None
+    ha_ok = None
+
+    if route in {"mealie", "both"}:
+        mealie_results = [
+            add_recipe_to_list(plan["target_id"], plan["scale"], list_id)
+            for list_id in ids
+        ]
+        mealie_ok = bool(mealie_results) and all(mealie_results)
+    if route in {"homeassistant", "both"}:
+        ha_ok = notify_shopping_route(
+            barcode=plan["barcode"],
+            item_id=plan["target_id"],
+            item_name=plan["name"],
+            quantity=plan["scale"],
+            unit_id=None,
+            route=route,
+        )
+
+    if route == "none":
+        ok = True
+    else:
+        required = [value for value in (mealie_ok, ha_ok) if value is not None]
+        ok = bool(required) and all(required)
+
+    duration_ms = int((time.monotonic() - started) * 1000)
+    if duration_ms >= 1000:
+        logger.warning(
+            "Slow Recipe target route: barcode=%s target=%s took %d ms via=%s",
+            plan["barcode"], plan["target_id"], duration_ms, route,
+        )
+    return {
+        "ok": ok,
+        "result": "added" if ok else "error",
+        "name": plan["name"],
+        "via": route,
+        "list_ids": ids,
+        "duration_ms": duration_ms,
+    }
+
+
 def route_targets(barcode: str, targets: list[BarcodeTarget], db, *, paused: bool = False) -> dict:
-    """Execute all enabled targets for one physical scan and aggregate the result."""
-    results = []
+    """Execute enabled targets and aggregate results.
+
+    DB-backed target resolution happens on the request thread. Independent
+    network routes then run concurrently so three slow Mealie/HA targets cost
+    roughly the slowest target latency instead of the sum of all target latencies.
+    """
+    slots: list[dict | None] = []
+    jobs: list[tuple[int, BarcodeTarget, dict, object]] = []
+
     for target in targets:
         if not target.enabled:
             continue
+
+        slot_index = len(slots)
+        slots.append(None)
+
         if target.target_type == "food":
             item = db.get(Item, target.target_id)
             if not item:
-                results.append({"target": target, "ok": False, "result": "needs_mapping", "name": target.target_name or target.target_id})
+                slots[slot_index] = {
+                    "target": target,
+                    "ok": False,
+                    "result": "needs_mapping",
+                    "name": target.target_name or target.target_id,
+                    "duration_ms": 0,
+                }
                 continue
             route = _effective_route(target, item)
             ids = list_ids(target)
             if paused:
-                routed = {"ok": True, "via": route, "list_ids": ids, "mealie": None, "ha": None}
-            else:
-                routed = route_item_scan(
-                    item,
-                    barcode=barcode,
-                    quantity=target.quantity,
-                    unit_id=target.unit_id or item.default_unit_id,
-                    route_override=route,
-                    list_ids_override=ids,
-                    db=db,
-                )
-            results.append({
-                "target": target,
-                "ok": bool(routed.get("ok")),
-                "result": "added" if routed.get("ok") else "error",
-                "name": item.name,
-                "via": routed.get("via"),
-                "list_ids": routed.get("list_ids", ids),
-            })
+                slots[slot_index] = {
+                    "target": target,
+                    "ok": True,
+                    "result": "added",
+                    "name": item.name,
+                    "via": route,
+                    "list_ids": ids,
+                    "duration_ms": 0,
+                }
+                continue
+            plan = {
+                "barcode": barcode,
+                "target_id": target.id,
+                "item": _food_snapshot(item),
+                "route": route,
+                "list_ids": ids,
+                "quantity": target.quantity,
+                "unit_id": target.unit_id or item.default_unit_id,
+            }
+            future = _ROUTE_POOL.submit(_route_food, plan)
+            jobs.append((slot_index, target, plan, future))
             continue
 
         if target.target_type == "recipe":
             name = target.target_name or target.target_id
             route = _effective_route(target, None)
-            # effective_list_ids resolves the default lazily only when this target
-            # does not already contain explicit list IDs.
             ids = effective_list_ids(list_ids(target), db)
-            mealie_ok = None
-            ha_ok = None
             if paused:
-                ok = True
-            else:
-                if route in {"mealie", "both"}:
-                    mealie_results = [add_recipe_to_list(target.target_id, target.recipe_scale or 1.0, list_id) for list_id in ids]
-                    mealie_ok = bool(mealie_results) and all(mealie_results)
-                if route in {"homeassistant", "both"}:
-                    ha_ok = notify_shopping_route(
-                        barcode=barcode,
-                        item_id=target.target_id,
-                        item_name=name,
-                        quantity=target.recipe_scale or 1.0,
-                        unit_id=None,
-                        route=route,
-                    )
-                if route == "none":
-                    ok = True
-                else:
-                    required = [value for value in (mealie_ok, ha_ok) if value is not None]
-                    ok = bool(required) and all(required)
-            results.append({
-                "target": target,
-                "ok": ok,
-                "result": "added" if ok else "error",
+                slots[slot_index] = {
+                    "target": target,
+                    "ok": True,
+                    "result": "added",
+                    "name": name,
+                    "via": route,
+                    "list_ids": ids,
+                    "duration_ms": 0,
+                }
+                continue
+            plan = {
+                "barcode": barcode,
+                "target_id": target.target_id,
                 "name": name,
-                "via": route,
+                "route": route,
                 "list_ids": ids,
-            })
+                "scale": target.recipe_scale or 1.0,
+            }
+            future = _ROUTE_POOL.submit(_route_recipe, plan)
+            jobs.append((slot_index, target, plan, future))
             continue
 
-        results.append({"target": target, "ok": False, "result": "error", "name": target.target_name or target.target_id})
+        slots[slot_index] = {
+            "target": target,
+            "ok": False,
+            "result": "error",
+            "name": target.target_name or target.target_id,
+            "duration_ms": 0,
+        }
 
+    future_map = {future: (index, target, plan) for index, target, plan, future in jobs}
+    for future in as_completed(future_map):
+        index, target, plan = future_map[future]
+        try:
+            row = future.result()
+        except Exception as exc:
+            logger.exception(
+                "Target route failed unexpectedly: barcode=%s target=%s",
+                barcode, getattr(target, "id", None),
+            )
+            row = {
+                "ok": False,
+                "result": "error",
+                "name": plan.get("name") or getattr(plan.get("item"), "name", None) or target.target_name or target.target_id,
+                "via": plan.get("route"),
+                "list_ids": plan.get("list_ids") or [],
+                "duration_ms": 0,
+                "error": str(exc),
+            }
+        row["target"] = target
+        slots[index] = row
+
+    results = [row for row in slots if row is not None]
     if not results:
         return {"ok": False, "result": "needs_mapping", "results": [], "names": []}
     failures = [row for row in results if not row["ok"]]
