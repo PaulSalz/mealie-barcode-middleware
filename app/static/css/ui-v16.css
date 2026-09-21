@@ -1,0 +1,66 @@
+/* v2026.09.21.16: isolate scanner feedback from the bell glyph itself. */
+
+#notif-dropdown > a {
+  isolation: isolate !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#notif-dropdown > a::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  opacity: 0;
+}
+
+/* Older layers used to style the anchor and the glyph during the flash. Keep
+   the anchor visually neutral and draw only the temporary surface below. */
+#notif-dropdown > a.b2m-v12-bell-flash {
+  background: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  color: var(--b2m-bell-color, var(--tblr-body-color)) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#notif-dropdown > a.b2m-v12-bell-flash::before {
+  background: var(--tblr-primary, #066fd1) !important;
+  border-color: var(--tblr-primary, #066fd1) !important;
+  box-shadow: 0 0 0 2px rgba(var(--tblr-primary-rgb, 6,111,209), .30) !important;
+  opacity: 1 !important;
+}
+
+/* The glyph keeps the exact computed pre-flash colour and never participates
+   in the flash transition. */
+#notif-dropdown > a > i.ti-bell,
+#notif-dropdown > a.b2m-v4-unread > i.ti-bell,
+#notif-dropdown > a.b2m-v12-bell-flash > i.ti-bell,
+#notif-dropdown > a.b2m-v12-bell-flash > i.ti-bell::before {
+  position: relative !important;
+  z-index: 3 !important;
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: var(--b2m-bell-color, currentColor) !important;
+  fill: none !important;
+  transition: none !important;
+}
+
+#notif-badge {
+  z-index: 5 !important;
+}
+
+html.b2m-epaper-v9 #notif-dropdown > a.b2m-v12-bell-flash::before {
+  background: #fff !important;
+  border-color: #000 !important;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.24) !important;
+}
