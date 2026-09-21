@@ -24,6 +24,14 @@
     });
   }
 
+  function friendlyDeleteError(message) {
+    const raw = String(message || 'Delete failed');
+    if (/HTTP 409|ForeignKeyViolation|shopping_list_items_food_id_fkey|integrity error/i.test(raw)) {
+      return 'Mealie cannot delete this Food because it is still referenced by one or more shopping-list entries. Remove or complete those shopping-list entries first, then try deleting the Food again.';
+    }
+    return raw;
+  }
+
   function installDeleteButton() {
     const list = document.querySelector('.page-header .btn-list');
     if (!list || list.querySelector('form[action$="/delete"]') || document.getElementById('item-delete-source')) return;
@@ -46,7 +54,7 @@
           window.location.href = '/items';
         } catch (error) {
           button.disabled = false;
-          window.alert(error.message);
+          window.alert(friendlyDeleteError(error.message));
         }
       }, 'Delete Item');
     });
@@ -123,7 +131,7 @@
       listWrapper.innerHTML = Array.from(list.options).map((option) => {
         const text = option.textContent.trim();
         const isDefault = !option.value || /default/i.test(text);
-        return '<label class="b2m-choice-card"><input class="form-check-input me-2" type="radio" name="b2m-item-list-ui" value="' + esc(option.value) + '"' + (option.selected ? ' checked' : '') + '><span><strong>' + esc(text.replace(/^Default configured list$/, 'Default shopping list')) + '</strong><small>' + (isDefault ? 'Use current B2M default' : 'Mealie list') + '</small></span></label>';
+        return '<label class="b2m-choice-card"><input class="form-check-input me-2" type="radio" name="b2m-item-list-ui" value="' + esc(option.value) + '"' + (option.selected ? ' checked' : '') + '><span><strong>' + esc(text.replace(/^Default configured list$/, 'Default shopping list')) + '</strong><small>' + (isDefault ? '<span class="badge bg-blue-lt">Default</span>' : 'Mealie list') + '</small></span></label>';
       }).join('');
       list.insertAdjacentElement('afterend', listWrapper);
       listWrapper.querySelectorAll('input').forEach((input) => input.addEventListener('change', () => { if (input.checked) list.value = input.value; }));
