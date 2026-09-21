@@ -18,7 +18,7 @@ import urllib.request
 
 from evdev import InputDevice, ecodes
 
-SCANNER_VERSION = "2.3.0"
+SCANNER_VERSION = "2.3.1"
 STARTED_MONO = time.monotonic()
 _stats_lock = threading.Lock()
 _stats = {"scans": 0, "errors": 0, "last_latency_ms": 0}
@@ -107,26 +107,48 @@ def api_token() -> str:
     return token
 
 
+def auth_headers() -> dict[str, str]:
+    return {
+        "Authorization": "Bearer " + api_token(),
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+
 def telemetry_headers() -> dict[str, str]:
     with _stats_lock:
         stats = dict(_stats)
-    return {
-        "Authorization": "Bearer " + api_token(), "Content-Type": "application/json", "Accept": "application/json",
+    headers = auth_headers()
+    headers.update({
         "X-B2M-Scanner-Version": SCANNER_VERSION, "X-B2M-Scanner-Hostname": socket.gethostname(),
         "X-B2M-Scanner-Device": _runtime["device"], "X-B2M-Scanner-Layout": _runtime["layout"],
         "X-B2M-Scanner-Uptime": str(int(time.monotonic() - STARTED_MONO)), "X-B2M-Scanner-Scans": str(stats["scans"]),
         "X-B2M-Scanner-Errors": str(stats["errors"]), "X-B2M-Scanner-Last-Latency": str(stats["last_latency_ms"]),
-    }
+    })
+    return headers
 
 
-def _post(url: str, payload: dict, *, count_scan: bool = False, log_scan: str | None = None, timeout_override: float | None = None) -> bool:
+def _post(
+    url: str,
+    payload: dict,
+    *,
+    count_scan: bool = False,
+    log_scan: str | None = None,
+    timeout_override: float | None = None,
+    include_telemetry: bool = True,
+) -> bool:
     if count_scan:
         with _stats_lock:
             _stats["scans"] += 1
     timeout = timeout_override if timeout_override is not None else float(_env("HTTP_TIMEOUT", default="8") or "8")
     started = time.monotonic()
     try:
-        request = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST", headers=telemetry_headers())
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+            headers=telemetry_headers() if include_telemetry else auth_headers(),
+        )
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8", "replace")
             elapsed = int((time.monotonic() - started) * 1000)
@@ -182,7 +204,7 @@ def ack_sender_loop() -> None:
     while True:
         barcode = _ack_queue.get()
         try:
-            _post(received_url(), {"barcode": barcode}, timeout_override=1.5)
+            _post(received_url(), {"barcode": barcode}, timeout_override=1.0, include_telemetry=False)
         finally:
             _ack_queue.task_done()
 
@@ -282,13 +304,13 @@ def _read_device(device: InputDevice, layout: str, min_length: int, max_length: 
 def main() -> int:
     global _scan_queue, _ack_queue
     device_spec = _env("SCANNER_DEVICE", "BARCODE_DEVICE", default="auto") or "auto"
-    min_length = int(_env("MIN_BARCODE_LENGTH", default="4") or "4")
+    min_length = int(_env("MIN_BARCODE_LENGTH", default="1") or "1")
     max_length = int(_env("MAX_BARCODE_LENGTH", default="256") or "256")
     layout = (_env("SCANNER_KEYBOARD_LAYOUT", default="de") or "de").strip().lower()
     heartbeat_interval = float(_env("HEARTBEAT_INTERVAL", default="60") or "60")
     reconnect_interval = max(0.5, float(_env("SCANNER_RECONNECT_INTERVAL", default="2") or "2"))
     queue_size = max(8, int(_env("SCAN_QUEUE_SIZE", default="128") or "128"))
-    max_key_gap = max(0.05, float(_env("SCAN_KEY_GAP_SECONDS", default="0.4") or "0.4"))
+    max_key_gap = max(0.05, float(_env("SCAN_KEY_GAP_SECONDS", default="1.5") or "1.5"))
     if layout not in {"de", "us"}:
         raise RuntimeError("SCANNER_KEYBOARD_LAYOUT must be 'de' or 'us'")
     api_token()
