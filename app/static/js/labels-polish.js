@@ -7,7 +7,7 @@
         box.textContent = message;
         box.classList.remove('d-none');
         clearTimeout(window._b2mLabelFeedbackTimer);
-        window._b2mLabelFeedbackTimer = setTimeout(function() { box.classList.add('d-none'); }, 1800);
+        window._b2mLabelFeedbackTimer = window.setTimeout(function() { box.classList.add('d-none'); }, 1800);
     }
 
     function moveQueueFeedback() {
@@ -73,7 +73,7 @@
         });
         observer.observe(results, {childList:true, subtree:true});
         input.dispatchEvent(new Event('input', {bubbles:true}));
-        setTimeout(function() { observer.disconnect(); }, 5000);
+        window.setTimeout(function() { observer.disconnect(); }, 5000);
     }
 
     function watchQueue() {
@@ -102,6 +102,13 @@
     }
 
     function loadB21Designer() {
+        if (!document.getElementById('b21-designer-stylesheet')) {
+            var link = document.createElement('link');
+            link.id = 'b21-designer-stylesheet';
+            link.rel = 'stylesheet';
+            link.href = '/static/css/labels-b21.css?v=20260921-1';
+            document.head.appendChild(link);
+        }
         if (document.getElementById('b21-designer-script')) return;
         var script = document.createElement('script');
         script.id = 'b21-designer-script';
