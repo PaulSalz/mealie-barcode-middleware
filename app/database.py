@@ -79,6 +79,14 @@ def _migrate():
         _add_column_if_missing("api_tokens", "scanner_errors", "INTEGER", columns)
         _add_column_if_missing("api_tokens", "scanner_last_latency_ms", "INTEGER", columns)
 
+    if "users" in tables:
+        columns = {c["name"] for c in insp.get_columns("users")}
+        _add_column_if_missing("users", "permissions_json", "TEXT DEFAULT '{}'", columns)
+        _add_column_if_missing("users", "appearance_json", "TEXT DEFAULT '{}'", columns)
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE users SET permissions_json = '{}' WHERE permissions_json IS NULL OR permissions_json = ''"))
+            conn.execute(text("UPDATE users SET appearance_json = '{}' WHERE appearance_json IS NULL OR appearance_json = ''"))
+
     if "notifications" in tables and "activities" not in tables:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE notifications RENAME TO activities"))
