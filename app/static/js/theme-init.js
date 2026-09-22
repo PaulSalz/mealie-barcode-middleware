@@ -42,6 +42,7 @@
     if (window.location.pathname === '/actions/new' || /^\/actions\/[^/]+$/.test(window.location.pathname)) {
         script('/static/js/action-v22.js');
         script('/static/js/action-v23.js');
+        script('/static/js/action-v23-ha-compat.js');
     }
 
     if (window.location.pathname === '/labels') {
