@@ -11,12 +11,18 @@ from app.services.shopping_print import (
     load_print_settings,
     save_category_aliases,
     save_category_order,
+    save_local_content,
     save_print_settings,
     shopping_list_payload,
 )
 from app.templating import templates
 
 router = APIRouter()
+
+
+def _valid_list_id(list_id: str) -> bool:
+    available = {str(row.get("id")) for row in get_shopping_lists(force=False)}
+    return bool(list_id and list_id in available)
 
 
 @router.get("/shopping-print", response_class=HTMLResponse)
@@ -73,8 +79,7 @@ async def shopping_print_save_category_order(request: Request, db: Session = Dep
         return JSONResponse({"error": "category_order array required"}, status_code=400)
     if not isinstance(aliases, dict):
         return JSONResponse({"error": "category_aliases object required"}, status_code=400)
-    available = {str(row.get("id")) for row in get_shopping_lists(force=False)}
-    if not list_id or list_id not in available:
+    if not _valid_list_id(list_id):
         return JSONResponse({"error": "Shopping list not found"}, status_code=404)
     try:
         saved_order = save_category_order(db, list_id, order)
@@ -87,6 +92,26 @@ async def shopping_print_save_category_order(request: Request, db: Session = Dep
         "category_order": saved_order,
         "category_aliases": saved_aliases,
     }
+
+
+@router.post("/api/shopping-print/local-content")
+async def shopping_print_save_local_content(request: Request, db: Session = Depends(get_db)):
+    body = await request.json()
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
+    list_id = str(body.get("list_id") or "").strip()
+    if not _valid_list_id(list_id):
+        return JSONResponse({"error": "Shopping list not found"}, status_code=404)
+    try:
+        saved = save_local_content(
+            db,
+            list_id,
+            str(body.get("comment") or ""),
+            body.get("entries") or [],
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"ok": True, "list_id": list_id, **saved}
 
 
 @router.post("/api/shopping-print/print")
