@@ -217,6 +217,7 @@ def barcode_create_manual(code: str = Form(...), title: str = Form(""), brand: s
     else:
         if title.strip(): cached.custom_title = title.strip()
         if brand.strip(): cached.custom_brand = brand.strip()
+        if title.strip(): cached.found = True
     db.commit()
     return RedirectResponse(f"/barcodes/{quote(code, safe='')}", status_code=303)
 
@@ -281,6 +282,10 @@ async def barcode_metadata(request: Request, barcode: str, db: Session = Depends
     if cached:
         cached.custom_title = str(form.get("title") or "").strip() or None
         cached.custom_brand = str(form.get("brand") or "").strip() or None
+        # A manually supplied product title is a valid local identification even
+        # when external providers returned no product. Such barcodes are known but
+        # still unmapped, so the existing status logic presents them as pending.
+        cached.found = bool(cached.display_title)
         db.commit()
     if request.headers.get("x-requested-with") == "fetch":
         return JSONResponse({"ok": True, "title": cached.display_title if cached else None, "brand": cached.display_brand if cached else None})
