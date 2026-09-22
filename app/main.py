@@ -10,7 +10,7 @@ from app.admin_write_guard import AdminWriteGuardMiddleware
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
-from app.routers import actions, appearance_v3, barcodes, cache_recovery_v15, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scan_fast_v11, scanner, settings as settings_router, settings_v23, target_editor_v6, theme_preview_v2, version_api
+from app.routers import actions, actions_v23, appearance_v3, barcodes, cache_recovery_v15, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scan_fast_v11, scanner, settings as settings_router, settings_v23, target_editor_v6, theme_preview_v2, version_api
 from app.scan_timing_v6 import ScanTimingMiddleware
 from app.services.scheduler import start_scheduler, stop_scheduler
 
@@ -113,6 +113,9 @@ app.include_router(items.router, tags=["items"])
 app.include_router(recipes.router, tags=["recipes"])
 app.include_router(labels.router, tags=["labels"])
 app.include_router(label_printer.router, tags=["labels", "printer"])
+# New Action defaults need to shadow the legacy /actions/new GET while the
+# legacy router continues to own create/edit/delete/test endpoints.
+app.include_router(actions_v23.router, tags=["actions"])
 app.include_router(actions.router, tags=["actions"])
 app.include_router(notifications.router, tags=["notifications"])
 app.include_router(settings_router.router, tags=["settings"])
