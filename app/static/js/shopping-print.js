@@ -2,10 +2,12 @@
   'use strict';
 
   var $ = function (id) { return document.getElementById(id); };
+  var scanRefreshTimer = null;
   var state = {
     settings: null,
     data: null,
     order: [],
+    aliases: {},
     printer: {},
     canPrint: false,
   };
@@ -62,7 +64,17 @@
       threshold: Number($('sp-threshold').value),
       dpi: Number($('sp-dpi').value),
       label_type: Number($('sp-label-type').value),
+      show_checkboxes: $('sp-show-checkboxes').checked,
+      show_item_names: $('sp-show-item-names').checked,
+      show_quantities: $('sp-show-quantities').checked,
+      show_item_dividers: $('sp-show-item-dividers').checked,
+      show_category_dividers: $('sp-show-category-dividers').checked,
+      category_divider_style: $('sp-category-divider-style').value || 'solid',
     };
+  }
+
+  function syncConditionalSettings() {
+    $('sp-category-divider-style').disabled = !$('sp-show-category-dividers').checked;
   }
 
   function populateSettings(settings) {
@@ -76,7 +88,14 @@
     $('sp-density').value = state.settings.density == null ? 3 : state.settings.density;
     $('sp-threshold').value = state.settings.threshold == null ? 145 : state.settings.threshold;
     $('sp-dpi').value = state.settings.dpi == null ? 300 : state.settings.dpi;
-    $('sp-label-type').value = state.settings.label_type == null ? 1 : state.settings.label_type;
+    $('sp-label-type').value = state.settings.label_type == null ? 3 : state.settings.label_type;
+    $('sp-show-checkboxes').checked = state.settings.show_checkboxes !== false;
+    $('sp-show-item-names').checked = state.settings.show_item_names !== false;
+    $('sp-show-quantities').checked = state.settings.show_quantities !== false;
+    $('sp-show-item-dividers').checked = state.settings.show_item_dividers === true;
+    $('sp-show-category-dividers').checked = state.settings.show_category_dividers !== false;
+    $('sp-category-divider-style').value = state.settings.category_divider_style === 'dashed' ? 'dashed' : 'solid';
+    syncConditionalSettings();
   }
 
   function updatePrinterStatus(printer) {
@@ -115,6 +134,11 @@
     els.list.value = wanted;
   }
 
+  function displayCategory(name) {
+    var alias = String(state.aliases[name] || '').trim();
+    return alias || name;
+  }
+
   function renderOrder() {
     if (!state.data) {
       els.order.innerHTML = '<div class="list-group-item text-secondary">Choose a shopping list first.</div>';
@@ -127,9 +151,13 @@
       return;
     }
     els.order.innerHTML = state.order.map(function (name, index) {
+      var alias = state.aliases[name] || '';
       return '<div class="list-group-item d-flex align-items-center shopping-print-category-row" data-index="' + index + '">' +
         '<span class="shopping-print-category-position text-secondary">' + (index + 1) + '</span>' +
-        '<span class="me-auto fw-medium">' + esc(name) + '</span>' +
+        '<div class="shopping-print-category-main">' +
+          '<div class="fw-medium shopping-print-category-original" title="' + esc(name) + '">' + esc(name) + '</div>' +
+          '<input type="text" maxlength="120" class="form-control form-control-sm shopping-print-category-alias" data-alias-index="' + index + '" value="' + esc(alias) + '" placeholder="Print alias (optional)">' +
+        '</div>' +
         '<div class="btn-list shopping-print-category-actions">' +
           '<button type="button" class="btn btn-sm btn-icon btn-outline-secondary" data-move="up" title="Move up"' + (index === 0 ? ' disabled' : '') + '><i class="ti ti-chevron-up"></i></button>' +
           '<button type="button" class="btn btn-sm btn-icon btn-outline-secondary" data-move="down" title="Move down"' + (index === state.order.length - 1 ? ' disabled' : '') + '><i class="ti ti-chevron-down"></i></button>' +
@@ -158,7 +186,7 @@
 
   function wrapText(ctx, text, maxWidth) {
     text = String(text || '').trim();
-    if (!text) return [''];
+    if (!text) return [];
     var words = text.split(/\s+/);
     var lines = [];
     var current = '';
@@ -172,7 +200,7 @@
       }
     });
     if (current) lines.push(current);
-    return lines.length ? lines : [text];
+    return lines;
   }
 
   function receiptDate() {
@@ -181,6 +209,18 @@
     } catch (e) {
       return new Date().toLocaleDateString();
     }
+  }
+
+  function drawHorizontalRule(ctx, left, right, y, dpi, style) {
+    if (style === 'dashed') ctx.setLineDash([Math.max(3, Math.round(dpi / 42)), Math.max(2, Math.round(dpi / 70))]);
+    else ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+    ctx.lineWidth = Math.max(1, Math.round(dpi / 180));
+    ctx.strokeStyle = '#000';
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   function renderReceipt() {
@@ -229,14 +269,7 @@
       var date = receiptDate();
       if (draw) ctx.fillText(date, margin + (contentWidth - ctx.measureText(date).width) / 2, y);
       y += Math.round(dateSize * 1.7);
-      if (draw) {
-        ctx.beginPath();
-        ctx.moveTo(margin, y);
-        ctx.lineTo(widthPx - margin, y);
-        ctx.lineWidth = Math.max(1, Math.round(dpi / 150));
-        ctx.strokeStyle = '#000';
-        ctx.stroke();
-      }
+      if (draw) drawHorizontalRule(ctx, margin, widthPx - margin, y, dpi, 'solid');
       y += Math.round(body * .65);
 
       var items = orderedItems();
@@ -259,45 +292,61 @@
         if (!categories.some(function (name) { return name.toLowerCase() === category.toLowerCase(); })) categories.push(category);
       });
 
-      categories.forEach(function (category, categoryIndex) {
+      var renderedCategoryCount = 0;
+      categories.forEach(function (category) {
         var rows = grouped[category] || [];
         if (!rows.length) return;
-        if (categoryIndex > 0) y += categoryGap;
+        if (renderedCategoryCount > 0) y += categoryGap;
+        renderedCategoryCount += 1;
+
         font(categorySize, 700);
-        var heading = String(category).toUpperCase();
+        var heading = String(displayCategory(category)).toUpperCase();
         var headingLines = wrapText(ctx, heading, contentWidth);
         headingLines.forEach(function (line) {
           if (draw) ctx.fillText(line, margin, y);
           y += Math.round(categorySize * 1.15);
         });
-        y += Math.round(lineGap * .4);
+        if (cfg.show_category_dividers) {
+          y += Math.max(1, Math.round(lineGap * .2));
+          if (draw) drawHorizontalRule(ctx, margin, widthPx - margin, y, dpi, cfg.category_divider_style);
+          y += Math.max(2, Math.round(lineGap * .65));
+        } else {
+          y += Math.round(lineGap * .4);
+        }
 
-        rows.forEach(function (item) {
+        rows.forEach(function (item, rowIndex) {
           font(body, 400);
-          var box = Math.max(8, Math.round(body * .72));
-          var boxGap = Math.round(body * .38);
-          var qty = String(item.quantity_text || '').trim();
+          var box = cfg.show_checkboxes ? Math.max(8, Math.round(body * .72)) : 0;
+          var boxGap = cfg.show_checkboxes ? Math.round(body * .38) : 0;
+          var qty = cfg.show_quantities ? String(item.quantity_text || '').trim() : '';
           var qtyWidth = qty ? Math.min(Math.round(contentWidth * .30), Math.ceil(ctx.measureText(qty).width)) : 0;
           var qtyGap = qty ? Math.round(body * .35) : 0;
           var textX = margin + box + boxGap;
           var nameWidth = Math.max(body * 3, contentWidth - box - boxGap - qtyWidth - qtyGap);
-          var lines = wrapText(ctx, item.name || 'Item', nameWidth);
+          var lines = cfg.show_item_names ? wrapText(ctx, item.name || 'Item', nameWidth) : [];
           var lineHeight = Math.round(body * 1.18);
-          var rowHeight = Math.max(box, lines.length * lineHeight);
+          var contentHeight = lines.length ? lines.length * lineHeight : body;
+          var rowHeight = Math.max(box || 0, contentHeight);
 
           if (draw) {
             ctx.lineWidth = Math.max(1, Math.round(dpi / 200));
             ctx.strokeStyle = '#000';
-            ctx.strokeRect(margin, y + Math.round((body - box) / 3), box, box);
-            lines.forEach(function (line, lineIndex) {
-              ctx.fillText(line, textX, y + lineIndex * lineHeight);
-            });
+            if (cfg.show_checkboxes) ctx.strokeRect(margin, y + Math.round((body - box) / 3), box, box);
+            if (cfg.show_item_names) {
+              lines.forEach(function (line, lineIndex) {
+                ctx.fillText(line, textX, y + lineIndex * lineHeight);
+              });
+            }
             if (qty) {
               var measured = ctx.measureText(qty).width;
               ctx.fillText(qty, widthPx - margin - measured, y);
             }
           }
           y += rowHeight + lineGap;
+          if (cfg.show_item_dividers && rowIndex < rows.length - 1) {
+            if (draw) drawHorizontalRule(ctx, margin + Math.round(body * .35), widthPx - margin, y - Math.max(1, Math.round(lineGap * .35)), dpi, 'solid');
+            y += Math.max(1, Math.round(lineGap * .25));
+          }
         });
       });
 
@@ -320,28 +369,58 @@
     els.empty.classList.add('d-none');
   }
 
-  async function loadList(listId) {
+  function mergeLocalRoute(data, oldOrder, oldAliases) {
+    var available = {};
+    (data.categories || []).forEach(function (name) { available[String(name).toLowerCase()] = name; });
+    var merged = [];
+    var used = {};
+    oldOrder.concat(data.category_order || []).forEach(function (name) {
+      var actual = available[String(name).toLowerCase()];
+      if (!actual || used[String(actual).toLowerCase()]) return;
+      merged.push(actual);
+      used[String(actual).toLowerCase()] = true;
+    });
+    state.order = merged;
+    state.aliases = Object.assign({}, data.category_aliases || {}, oldAliases || {});
+  }
+
+  async function loadList(listId, options) {
+    options = options || {};
     listId = String(listId || '').trim();
     if (!listId) return;
     localStorage.setItem('b2m-shopping-print-list', listId);
-    setStatus(els.status, 'Loading open items…', 'secondary');
+    var sameList = !!(state.data && String(state.data.id) === listId);
+    var oldOrder = sameList ? state.order.slice() : [];
+    var oldAliases = sameList ? Object.assign({}, state.aliases) : {};
+    if (!options.silent) setStatus(els.status, 'Loading open items…', 'secondary');
     els.list.disabled = true;
     try {
       var data = await fetchJson('/api/shopping-print/lists/' + encodeURIComponent(listId), {cache: 'no-store'});
       state.data = data;
-      state.order = (data.category_order || []).slice();
+      if (options.preserveLocal && sameList) mergeLocalRoute(data, oldOrder, oldAliases);
+      else {
+        state.order = (data.category_order || []).slice();
+        state.aliases = Object.assign({}, data.category_aliases || {});
+      }
       els.summary.textContent = data.count + ' open item' + (data.count === 1 ? '' : 's') + ' · ' + state.order.length + ' categor' + (state.order.length === 1 ? 'y' : 'ies');
-      setStatus(els.status, data.count ? 'Preview uses the current unchecked items from Mealie.' : 'This shopping list currently has no unchecked items.', data.count ? 'secondary' : 'yellow');
-      setStatus(els.orderStatus, '', '');
+      if (!options.silent) {
+        setStatus(els.status, data.count ? 'Preview uses the current unchecked items from Mealie.' : 'This shopping list currently has no unchecked items.', data.count ? 'secondary' : 'yellow');
+        setStatus(els.orderStatus, '', '');
+      } else {
+        setStatus(els.status, 'Shopping list updated after scan.', 'success');
+      }
       renderOrder();
       renderReceipt();
     } catch (error) {
-      state.data = null;
-      state.order = [];
-      els.summary.textContent = 'Could not load list';
+      if (!options.silent) {
+        state.data = null;
+        state.order = [];
+        state.aliases = {};
+        els.summary.textContent = 'Could not load list';
+        renderOrder();
+        renderReceipt();
+      }
       setStatus(els.status, error.message, 'danger');
-      renderOrder();
-      renderReceipt();
     } finally {
       els.list.disabled = false;
       updateButtons();
@@ -384,7 +463,7 @@
 
   els.list.addEventListener('change', function () { loadList(els.list.value); });
   els.refresh.addEventListener('click', function () {
-    if (els.list.value) loadList(els.list.value);
+    if (els.list.value) loadList(els.list.value, {preserveLocal: true});
     refreshPrinter();
   });
 
@@ -402,20 +481,33 @@
     setStatus(els.orderStatus, 'Route changed — save to make it global.', 'yellow');
   });
 
+  els.order.addEventListener('input', function (event) {
+    var input = event.target.closest('input[data-alias-index]');
+    if (!input) return;
+    var name = state.order[Number(input.dataset.aliasIndex)];
+    if (!name) return;
+    var value = input.value;
+    if (value.trim()) state.aliases[name] = value;
+    else delete state.aliases[name];
+    renderReceipt();
+    setStatus(els.orderStatus, 'Alias changed — save to make it global.', 'yellow');
+  });
+
   els.saveOrder.addEventListener('click', async function () {
     if (!state.data) return;
     els.saveOrder.disabled = true;
-    setStatus(els.orderStatus, 'Saving route…', 'secondary');
+    setStatus(els.orderStatus, 'Saving route and aliases…', 'secondary');
     try {
       var data = await fetchJson('/api/shopping-print/category-order', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', Accept: 'application/json'},
-        body: JSON.stringify({list_id: state.data.id, category_order: state.order}),
+        body: JSON.stringify({list_id: state.data.id, category_order: state.order, category_aliases: state.aliases}),
       });
       state.order = (data.category_order || state.order).slice();
+      state.aliases = Object.assign({}, data.category_aliases || {});
       renderOrder();
       renderReceipt();
-      setStatus(els.orderStatus, 'Route saved globally for this list.', 'success');
+      setStatus(els.orderStatus, 'Route and aliases saved globally for this list.', 'success');
     } catch (error) {
       setStatus(els.orderStatus, error.message, 'danger');
     } finally {
@@ -423,8 +515,15 @@
     }
   });
 
-  document.querySelectorAll('#sp-width,#sp-margin,#sp-font,#sp-line-gap,#sp-category-gap,#sp-bottom-margin,#sp-density,#sp-threshold,#sp-dpi,#sp-label-type').forEach(function (input) {
-    input.addEventListener('input', function () { if (state.data) renderReceipt(); });
+  document.querySelectorAll('#sp-width,#sp-margin,#sp-font,#sp-line-gap,#sp-category-gap,#sp-bottom-margin,#sp-density,#sp-threshold,#sp-dpi,#sp-label-type,#sp-show-checkboxes,#sp-show-item-names,#sp-show-quantities,#sp-show-item-dividers,#sp-show-category-dividers,#sp-category-divider-style').forEach(function (input) {
+    input.addEventListener('input', function () {
+      syncConditionalSettings();
+      if (state.data) renderReceipt();
+    });
+    input.addEventListener('change', function () {
+      syncConditionalSettings();
+      if (state.data) renderReceipt();
+    });
   });
 
   els.saveSettings.addEventListener('click', async function () {
@@ -488,6 +587,14 @@
       els.print.innerHTML = original;
       updateButtons();
     }
+  });
+
+  window.addEventListener('b2m:scan', function () {
+    if (!els.list.value) return;
+    clearTimeout(scanRefreshTimer);
+    scanRefreshTimer = window.setTimeout(function () {
+      loadList(els.list.value, {preserveLocal: true, silent: true});
+    }, 450);
   });
 
   bootstrap();
