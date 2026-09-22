@@ -8,6 +8,10 @@ from app.templating import _localtime, _relative_time, templates
 
 router = APIRouter()
 
+# Scan outcomes that represent an actual failed/degraded scan. Keep this shared
+# semantic for the Activity Errors tab and scanner-health error-scan count.
+ERROR_SCAN_RESULTS = ("error", "partial", "broken", "retry_failed", "action_disabled")
+
 
 @router.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db)):
@@ -52,6 +56,7 @@ def _activity_query(db: Session, result: str):
     query = db.query(Activity).order_by(Activity.created_at.desc())
     if result == "unread": query = query.filter(Activity.is_read == False)
     elif result == "added": query = query.filter(Activity.result.in_(["added", "added_as_note", "queued"]))
+    elif result == "errors": query = query.filter(Activity.is_scan_event == True, Activity.result.in_(ERROR_SCAN_RESULTS))
     elif result != "all": query = query.filter(Activity.result == result)
     return query
 
@@ -63,12 +68,24 @@ def activity_page(request: Request, result: str = Query("all"), db: Session = De
 
 @router.get("/api/activities")
 def get_activities(result: str = Query("all"), db: Session = Depends(get_db)):
-    activities = _activity_query(db, result).limit(200).all()
-    return {"items": [{
+    query = _activity_query(db, result)
+    count = query.count()
+    activities = query.limit(200).all()
+    return {"count": count, "items": [{
         "id": a.id, "barcode": a.barcode, "title": a.title, "message": a.message,
         "result": a.result, "is_read": a.is_read,
         "created_at": _relative_time(a.created_at), "created_at_absolute": _localtime(a.created_at),
     } for a in activities]}
+
+
+@router.get("/api/dashboard/frequent")
+def dashboard_frequent(db: Session = Depends(get_db)):
+    # Reuse the dashboard's canonical aggregation so the live client and initial
+    # server render always rank targets identically.
+    from app.routers.dashboard import _frequent_targets
+
+    foods, recipes, actions = _frequent_targets(db)
+    return {"foods": foods, "recipes": recipes, "actions": actions}
 
 
 @router.post("/activities/mark-all-read")

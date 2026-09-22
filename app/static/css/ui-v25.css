@@ -27,10 +27,29 @@
 
 #b2m-dashboard-mealie-sync {
   flex: 0 0 auto;
+  width: 2.5rem;
+  height: 2.5rem;
+  min-width: 2.5rem;
+  padding: 0;
+}
+
+/* Activity rows are neutral at rest; hover always highlights the complete row. */
+#activity-table tbody tr[data-href] > td {
+  background-color: transparent !important;
+  transition: background-color .12s ease;
+}
+
+#activity-table tbody tr[data-href]:hover > td {
+  background-color: color-mix(in srgb, var(--tblr-primary, #066fd1) 8%, var(--tblr-bg-surface, #fff)) !important;
 }
 
 html.b2m-epaper-v9 .b2m-scan-link-card,
 html.b2m-epaper .b2m-scan-link-card {
   background: #fff !important;
   border-color: #000 !important;
+}
+
+html.b2m-epaper-v9 #activity-table tbody tr[data-href]:hover > td,
+html.b2m-epaper #activity-table tbody tr[data-href]:hover > td {
+  background: #eee !important;
 }
