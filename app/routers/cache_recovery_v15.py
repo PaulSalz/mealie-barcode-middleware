@@ -24,6 +24,31 @@ def _has_local_barcode_state(barcode: str, db: Session) -> bool:
     return db.query(Activity.id).filter(Activity.barcode == barcode).first() is not None
 
 
+def _has_routable_barcode_state(barcode: str, db: Session) -> bool:
+    """Return True only for state that can route without a provider lookup.
+
+    Activity rows are deliberately excluded: /scanner/received creates a local
+    processing Activity before /scan starts. Treating that Activity as a known
+    barcode used to create an empty BarcodeCache shell and prevented the normal
+    first-scan OpenFoodFacts/UPC lookup from running.
+    """
+    if db.get(BarcodeMapping, barcode):
+        return True
+    return db.query(BarcodeTarget.id).filter(BarcodeTarget.barcode == barcode).first() is not None
+
+
+def _drop_stale_lookup_shell(barcode: str, db: Session) -> None:
+    """Remove old recovery shells that never represented a provider lookup."""
+    if not barcode.isdigit() or _has_routable_barcode_state(barcode, db):
+        return
+    cached = db.get(BarcodeCache, barcode)
+    if not cached:
+        return
+    if cached.source == "scan" and not cached.found and cached.lookup_attempted_at is None:
+        db.delete(cached)
+        db.commit()
+
+
 def _ensure_cache_shell(barcode: str, db: Session, *, only_if_known: bool = False) -> BarcodeCache | None:
     """Restore the local cache identity without doing any external product lookup.
 
@@ -65,7 +90,10 @@ def scanner_received_with_cache_recovery(
     barcode = body.barcode.strip()
     if not barcode:
         raise HTTPException(status_code=422, detail="Barcode cannot be empty")
-    _ensure_cache_shell(barcode, db)
+    # Only mapped/known local barcodes need a cache shell at receipt time. New
+    # product barcodes must stay cache-missing so /scan performs provider lookup.
+    if _has_routable_barcode_state(barcode, db):
+        _ensure_cache_shell(barcode, db)
     return scan_fast_v11.fast_scanner_received(body=body, _token=token, db=db)
 
 
@@ -79,7 +107,11 @@ def scan_with_cache_recovery(
     barcode = body.barcode.strip()
     if not barcode:
         raise HTTPException(status_code=422, detail="Barcode cannot be empty")
-    _ensure_cache_shell(barcode, db)
+    # Heal shells produced by the older recovery wrapper. Once removed, the
+    # legacy scan code sees cache=None and performs the configured provider lookup.
+    _drop_stale_lookup_shell(barcode, db)
+    if _has_routable_barcode_state(barcode, db):
+        _ensure_cache_shell(barcode, db)
     return scan_fast_v11.fast_scan_barcode(
         body=body,
         background_tasks=background_tasks,

@@ -2,7 +2,7 @@
 (function() {
     'use strict';
 
-    var version = '2026.09.22.2';
+    var version = '2026.09.22.4';
     var override = localStorage.getItem('theme-mode-override');
     if (override) document.documentElement.setAttribute('data-bs-theme', override);
 
@@ -26,6 +26,7 @@
     stylesheet('/static/css/ui-v17.css');
     stylesheet('/static/css/ui-v22.css');
     stylesheet('/static/css/ui-v23.css');
+    stylesheet('/static/css/ui-v24.css');
 
     // Global theme.css is the deployment default; this user-scoped layer wins
     // afterwards without changing another account's appearance.
@@ -42,6 +43,7 @@
     script('/static/js/ui-v6.js');
     script('/static/js/ui-v9.js');
     script('/static/js/ui-v23.js');
+    script('/static/js/ui-v24.js');
 
     // Physical scanner receipt timing remains the early /scanner/received event.
     script('/static/js/ui-v12-bell.js');
@@ -53,6 +55,7 @@
     if (window.location.pathname === '/actions/new' || /^\/actions\/[^/]+$/.test(window.location.pathname)) {
         script('/static/js/action-v22.js');
         script('/static/js/action-v23.js');
+        script('/static/js/action-v24.js');
     }
 
     if (window.location.pathname === '/labels') {
@@ -64,6 +67,7 @@
         script('/static/js/labels-v18.js');
         script('/static/js/labels-v22.js');
         script('/static/js/labels-v23.js');
+        script('/static/js/labels-v24.js');
     }
 
     if (window.location.pathname.startsWith('/barcodes/')) {
