@@ -2,7 +2,7 @@
 (function() {
     'use strict';
 
-    var version = '2026.09.22.7';
+    var version = '2026.09.22.8';
     var override = localStorage.getItem('theme-mode-override');
     if (override) document.documentElement.setAttribute('data-bs-theme', override);
 
@@ -42,6 +42,7 @@
     script('/static/js/ui-v23.js');
     script('/static/js/ui-v24.js');
     script('/static/js/ui-v25.js');
+    script('/static/js/ui-v26.js');
 
     // Physical scanner receipt timing remains the early /scanner/received event.
     script('/static/js/ui-v12-bell.js');
