@@ -1,0 +1,68 @@
+/* Shopping-list receipt printing. */
+.shopping-print-preview-card {
+  top: 1rem;
+}
+
+.shopping-print-preview-wrap {
+  min-height: 32rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tblr-bg-surface-secondary, #f6f8fb) 80%, transparent);
+  overflow: auto;
+}
+
+.shopping-print-paper-shell {
+  display: none;
+  width: min(100%, 430px);
+  padding: 1.25rem;
+}
+
+.shopping-print-paper-shell.is-visible {
+  display: block;
+}
+
+#shopping-print-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  box-shadow: 0 .25rem 1rem rgba(0, 0, 0, .12);
+  border: 1px solid rgba(98, 105, 118, .25);
+}
+
+.shopping-print-category-row {
+  gap: .75rem;
+}
+
+.shopping-print-category-position {
+  width: 2rem;
+  flex: 0 0 2rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.shopping-print-category-actions {
+  flex: 0 0 auto;
+}
+
+.shopping-print-category-actions .btn {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+}
+
+html.b2m-epaper #shopping-print-canvas,
+html.b2m-epaper-v9 #shopping-print-canvas {
+  box-shadow: none;
+  border-color: #000;
+}
+
+@media (max-width: 991.98px) {
+  .shopping-print-preview-card {
+    position: static !important;
+  }
+  .shopping-print-preview-wrap {
+    min-height: 20rem;
+  }
+}
