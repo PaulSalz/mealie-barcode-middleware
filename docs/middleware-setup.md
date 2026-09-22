@@ -1,54 +1,33 @@
 # Middleware Setup
 
-The middleware is a Python FastAPI service that sits between the ESP32 barcode scanner and your Mealie instance. It handles barcode lookups, fuzzy matching, shopping list management, and provides a web UI for barcode management.
+B2M is a FastAPI service between scanner clients and Mealie. It owns local barcode identity/routing, product lookup/cache, Actions, retries, label generation, the web UI, and optional Home Assistant integration.
 
 ## Architecture
 
-```
-[ESP32 Scanner] ──HTTP POST──► [Middleware :9930] ──REST API──► [Mealie :9925]
-                                     │
-                                     ├── SQLite database (/data/barcode.db)
-                                     ├── Web UI (dashboard, barcode management)
-                                     └── Background jobs (retry queue, item sync)
-```
-
-The middleware is the only component that talks to Mealie. The ESP32 never contacts Mealie directly. Home Assistant is **not** in the critical path — scanning works without it.
-
----
-
-## Docker Deployment (Recommended)
-
-### 1. Create the `.env` File
-
-```bash
-# Required
-MEALIE_URL=http://your-mealie-ip:9925
-MEALIE_API_KEY=your-mealie-api-token
-MEALIE_SHOPPING_LIST_ID=uuid-of-your-shopping-list
-
-# Optional — see Configuration Reference below
-MIDDLEWARE_BASE_URL=http://your-middleware-ip:9930
-TIMEZONE=Europe/Berlin
+```text
+Scanner / phone / label
+        │  POST /scan
+        ▼
+      B2M
+   ┌────┼───────────────┐
+   │    │               │
+SQLite  Mealie API   Home Assistant / Actions
+   │                    │
+Web UI + SSE         optional webhooks
 ```
 
-**Getting the Mealie API key:**
+Mealie is part of Food/recipe routing but Home Assistant is not required for normal scanning.
 
-1. Open Mealie → Settings → API Tokens
-2. Create a new token with a descriptive name
-3. Copy the token value
+## Docker Deployment
 
-**Getting the Shopping List ID:**
+Persist `/data`; it contains the SQLite database and application state used by the container.
 
-1. Open Mealie → Shopping Lists → select your list
-2. The UUID is in the URL: `https://mealie.example.com/shopping-lists/<THIS-UUID>`
-
-### 2. Create `docker-compose.yml`
+Example Compose service:
 
 ```yaml
 services:
   barcode-middleware:
-    build: .
-    image: mealie-barcode-middleware:latest
+    image: ghcr.io/paulsalz/mealie-barcode-middleware:latest
     restart: unless-stopped
     ports:
       - "9930:8000"
@@ -56,224 +35,137 @@ services:
       - ./middleware-data:/data
     env_file:
       - .env
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
-        ]
-      interval: 30s
-      timeout: 5s
-      start_period: 15s
 ```
 
-### 3. Start the Container
+Use the image/build strategy appropriate to your deployment. After an update, redeploy the container so database migrations and the new static assets load from the same application version.
+
+## Required Mealie Configuration
+
+The core environment values are:
 
 ```bash
-docker compose up -d
+MEALIE_URL=http://mealie:9925
+MEALIE_API_KEY=your-mealie-api-token
 ```
 
-The service is available at `http://your-middleware-ip:9930`. The SQLite database is persisted in `./middleware-data/barcode.db`.
+`MEALIE_SHOPPING_LIST_ID` still exists as a legacy fallback, but the normal runtime default shopping list is discovered from Mealie and selected in the B2M Settings UI. This lets targets select one or more shopping lists without rebuilding the container.
 
-### Updating
+## Common Optional Configuration
 
 ```bash
-git pull
-docker compose up -d --build
+MIDDLEWARE_BASE_URL=https://b2m.example.internal
+TIMEZONE=Europe/Berlin
+LOG_LEVEL=INFO
+
+OFF_ENABLED=true
+UPCDB_ENABLED=false
+LOOKUP_STRATEGY=failover
+LOOKUP_PRIMARY=off
+LOOKUP_ENRICH_IN_BACKGROUND=true
+
+HA_WEBHOOK_URL=http://homeassistant.local:8123/api/webhook/barcode-scanner
+HA_NOTIFICATION_MODE=unresolved
 ```
 
----
+Many non-secret runtime settings can be changed by an administrator in the web UI. Read-only infrastructure/secrets such as the Mealie API key remain deployment settings.
 
-## Local Development
+## Lookup Sources
+
+B2M can use Open Food Facts and UPCDatabase. `failover` tries the secondary source only when the primary source has no product. `complement` can use the secondary source to fill missing metadata.
+
+When background enrichment is enabled, the secondary complement lookup can happen after the scanner has already received its response. This keeps the scan path responsive while still enriching the cache.
+
+UPCDatabase requires its API key. If the source is enabled without a usable key, B2M skips it.
+
+## Matching and Sync
+
+Important runtime controls include:
+
+- Fuzzy match threshold
+- Fuzzy ambiguity gap
+- Item sync interval
+- Lookup cache TTL
+- Retry count
+- Unknown-barcode behavior
+
+Mealie Foods are synchronized into B2M for local matching/search. A manual sync is available from the Items page.
+
+## Home Assistant
+
+There are two distinct Home Assistant uses:
+
+### Scan notifications
+
+`HA_WEBHOOK_URL` can receive selected scan notifications/events. `HA_NOTIFICATION_MODE` controls whether B2M sends unresolved/actionable/all scans or disables the notification webhook.
+
+### Actions
+
+The Actions page can create dedicated Home Assistant webhook Actions. A new Action can derive a unique webhook URL from its generated `action_<name>` ID and generates example automation YAML for Light, TTS, Timer, Automation, or generic Data behavior.
+
+These Action webhooks are independent from the general scan-notification webhook. See [Actions & Home Assistant](actions.md).
+
+## B21 / niimblue-node
+
+Direct B21 printing is optional. The runtime adapter reads these environment defaults and lets permitted users override them in the Printer Settings UI:
 
 ```bash
-# Clone the repo
-git clone https://github.com/thisisastoryof/mealie-barcode-middleware.git
-cd mealie-barcode-middleware
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .\.venv\Scripts\Activate.ps1  # Windows PowerShell
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure
-cp .env.example .env
-# Edit .env with your values
-
-# Download Tabler UI assets (one-time, Windows)
-.\scripts\download-tabler.ps1
-
-# Run
-uvicorn app.main:app --reload --port 8000
+NIIMBLUE_URL=http://niimblue-node:5000
+NIIMBLUE_TRANSPORT=ble
+NIIMBLUE_ADDRESS=C3:18:28:04:16:99
+NIIMBLUE_PRINT_TASK=D110M_V4
+NIIMBLUE_PRINT_DIRECTION=top
+NIIMBLUE_DENSITY=3
+NIIMBLUE_LABEL_TYPE=1
+NIIMBLUE_DPI=300
+NIIMBLUE_MAX_LABEL_WIDTH_MM=50
+NIIMBLUE_TIMEOUT=30
 ```
 
----
+Runtime overrides are stored by B2M and take precedence over the environment defaults. Printer connection remains explicit; printing does not silently acquire BLE.
 
-## Configuration Reference
+See [Labels & B21 Printing](label-printing.md).
 
-All settings are environment variables. Set them in `.env` or directly in `docker-compose.yml`.
+## Users and Permissions
 
-### Required
+The first account is Admin. Admin is the unrestricted superuser.
 
-| Variable                  | Description                                                  |
-| ------------------------- | ------------------------------------------------------------ |
-| `MEALIE_URL`              | Base URL of your Mealie instance (e.g. `http://mealie:9925`) |
-| `MEALIE_API_KEY`          | Mealie long-lived API token                                  |
-| `MEALIE_SHOPPING_LIST_ID` | UUID of the target shopping list                             |
+Normal users can have granular capabilities for printer settings, Scan & Link control, and database administration. Appearance is always personal and stored per account. Printer settings are enabled by default for a normal user but can be disabled by Admin.
 
-### Barcode Lookup Sources
+See [Users, Permissions & Administration](permissions.md).
 
-| Variable                      | Default                                           | Description                                                                                       |
-| ----------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `OFF_ENABLED`                 | `true`                                            | Enable OpenFoodFacts lookups                                                                      |
-| `OFF_URL_BASE`                | `https://world.openfoodfacts.org/api/v2/product/` | OpenFoodFacts API endpoint                                                                        |
-| `UPCDB_ENABLED`               | `false`                                           | Enable UPCDatabase lookups                                                                        |
-| `UPCDB_URL_BASE`              | `https://api.upcdatabase.org/product/`            | UPCDatabase API endpoint                                                                          |
-| `UPCDB_API_KEY`               | —                                                 | Required when `UPCDB_ENABLED=true`                                                                |
-| `LOOKUP_STRATEGY`             | `failover`                                        | `failover` = secondary only when primary returns nothing; `complement` = fill gaps from secondary |
-| `LOOKUP_PRIMARY`              | `off`                                             | Which API is tried first (`off` or `upcdb`)                                                       |
-| `LOOKUP_ENRICH_IN_BACKGROUND` | `true`                                            | In complement mode, run secondary call after the ESP32 response (faster scans)                    |
+## API Tokens
 
-> **OpenFoodFacts** is free, no API key needed, and has excellent coverage for European products. **UPCDatabase** has better US product coverage but requires a (free) API key from [upcdatabase.org](https://upcdatabase.org/).
+Scanner clients authenticate with B2M API tokens. Create tokens in **Settings → Tokens**. The raw token is only displayed when created; store it in the scanner configuration.
 
-#### Lookup Strategies Explained
+Create separate tokens for separate scanner clients so one device can be revoked without replacing every scanner credential.
 
-**`failover`** (default) — The primary API is called first. Only if it returns _nothing_ (no product found at all) is the secondary API called. This is the simplest and fastest strategy — each scan makes at most one API call when the primary has data.
+## Database and Persistent Data
 
-**`complement`** — The primary API is called first and its result is returned to the scanner immediately. If the result has empty enrichment fields (brand, quantity, or product type), the secondary API is called to fill the gaps. By default (`LOOKUP_ENRICH_IN_BACKGROUND=true`), this secondary call runs _after_ the HTTP response is sent to the ESP32, so it adds zero latency to scans. The enriched data is written to the cache and visible on the dashboard and in future scans of the same barcode.
+The default SQLite path is `/data/barcode.db`. Migrations run automatically at startup and are designed to preserve existing data.
 
-If `LOOKUP_ENRICH_IN_BACKGROUND=false`, the secondary call is made synchronously before responding — this gives the ESP32 the richest possible data on the first scan, but adds up to 5 seconds of latency.
+The Database page shows both the main SQLite file and the total persistent directory size, including SQLite WAL/SHM sidecar files. This is more useful for long-term storage monitoring than the `.db` size alone.
 
-> **Guard rails:** If `UPCDB_API_KEY` is not set, UPCDatabase is silently disabled regardless of `UPCDB_ENABLED`. If only one source is enabled, the strategy setting has no effect. If the chosen `LOOKUP_PRIMARY` is unavailable (disabled or missing key), the other source is used automatically.
+Before destructive maintenance, download a database backup and retain your deployment configuration/secrets separately.
 
-### Matching & Sync
+## Health and Diagnostics
 
-| Variable                   | Default       | Description                                                                                                                          |
-| -------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `FUZZY_MATCH_THRESHOLD`    | `85`          | Minimum score (0–100) to auto-link a barcode to a Mealie item                                                                        |
-| `FUZZY_AMBIGUITY_GAP`      | `10`          | Minimum gap between #1 and #2 match scores (prevents ambiguous links)                                                                |
-| `ITEM_SYNC_INTERVAL_HOURS` | `6`           | How often to re-sync the Mealie food catalog                                                                                         |
-| `LOOKUP_TTL_DAYS`          | `30`          | Days before retrying an external lookup for an unresolved barcode                                                                    |
-| `MAX_RETRY_ATTEMPTS`       | `10`          | Max retries for failed Mealie shopping list additions                                                                                |
-| `UNKNOWN_BARCODE_ACTION`   | `add_to_list` | What happens when a barcode can't be linked: `add_to_list` (add as note + notify) or `notify_only` (notify only, skip shopping list) |
+`GET /health` reports application/Mealie/database health for the container health check.
 
-### System
+For operational debugging, combine:
 
-| Variable               | Default            | Description                                                                      |
-| ---------------------- | ------------------ | -------------------------------------------------------------------------------- |
-| `MIDDLEWARE_BASE_URL`  | (empty)            | Full URL for deep links in notifications (e.g. `http://your-middleware-ip:9930`) |
-| `HA_WEBHOOK_URL`       | (empty)            | HA webhook URL for push notifications (see below)                                |
-| `TIMEZONE`             | `Europe/Berlin`    | IANA timezone for UI timestamps                                                  |
-| `SESSION_MAX_AGE_DAYS` | `7`                | How long “Stay signed in” sessions last (days)                                   |
-| `DB_PATH`              | `/data/barcode.db` | SQLite database file path                                                        |
-| `PORT`                 | `8000`             | HTTP listen port (inside container)                                              |
-| `LOG_LEVEL`            | `INFO`             | Python log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)                           |
-
-### Home Assistant Push Notifications (Optional)
-
-When a barcode scan needs attention (unknown product, auto-linked item to review), the middleware can send a push notification to your phone via a Home Assistant webhook. This works for **all** scan sources — the ESP32 hardware scanner, BinaryEye (Android), and iOS Shortcuts.
-
-**Setup:**
-
-1. Copy `ha_automation/barcode-notification.yaml` into Home Assistant (Settings → Automations → Create → YAML mode)
-2. In the automation, replace `notify.mobile_app_YOUR_PHONE` with your HA Companion App service name
-3. Set these env vars in the middleware:
-   ```bash
-   MIDDLEWARE_BASE_URL=http://your-middleware-ip:9930
-   HA_WEBHOOK_URL=http://homeassistant.local:8123/api/webhook/barcode-scanner
-   ```
-
-The webhook ID (`barcode-scanner`) must match the `webhook_id` in the HA automation. You can change it to anything — just keep them in sync.
-
-> **No HA API key needed.** HA webhooks are accessible by their ID alone — the webhook ID acts as the secret. Keep it unique and don't share it publicly.
-
----
-
-## Creating API Tokens
-
-The middleware uses Bearer tokens for authentication. Tokens are hashed with bcrypt — the raw token is shown **once** when created and cannot be recovered.
-
-1. Open the middleware web UI → **Settings** → **Tokens** tab
-2. Enter a name (e.g. "Kitchen Scanner" or "Phone – BinaryEye") and click **Create**
-3. Copy the displayed token immediately
-
-### For the ESP32 DIY Scanner
-
-Add the token to your ESPHome `secrets.yaml`:
-
-```yaml
-middleware_auth_header: "Bearer eyJ..."
+```bash
+docker compose ps
+docker compose logs --tail=200 barcode-middleware
 ```
 
-The ESP32 sends it as a standard `Authorization: Bearer` header.
+with the B2M **Activity** page and, for Actions, the recent execution list on the Action detail page.
 
-### For Mobile Apps (BinaryEye, etc.)
+## Security
 
-Mobile scanner apps that can't set custom HTTP headers use the **same token** as a pre-shared key. In BinaryEye, paste the raw token into the **Scanner ID** setting — see [Mobile Apps Guide](mobile-apps.md) for step-by-step setup.
-
-You can create multiple tokens for multiple devices. Each can be revoked independently.
-
----
-
-## Health Check
-
-The middleware exposes a health endpoint at `GET /health`:
-
-```json
-{
-  "status": "ok",
-  "mealie_reachable": true,
-  "db_ok": true
-}
-```
-
-Status is `"degraded"` if Mealie is unreachable or the database is inaccessible. The Docker health check polls this every 30 seconds.
-
----
-
-## Database
-
-The middleware uses a single SQLite file at `/data/barcode.db` (configurable via `DB_PATH`). Tables are created automatically on first start.
-
-| Table              | Purpose                                        |
-| ------------------ | ---------------------------------------------- |
-| `items`            | Mealie food items + manually created items     |
-| `barcode_cache`    | Cached lookup results from external APIs       |
-| `barcode_mappings` | Links between barcodes and items               |
-| `api_tokens`       | Scanner authentication tokens (bcrypt hashed)  |
-| `retry_queue`      | Failed Mealie requests awaiting retry          |
-| `notifications`    | Activity log and actionable alerts             |
-| `users`            | Web UI user accounts (bcrypt hashed passwords) |
-
-**Backup:** The database is a single file. Copy `middleware-data/barcode.db` to back up everything. You can also download a backup from the Settings → Database tab.
-
-> **Health check:** The Dockerfile includes a `HEALTHCHECK` instruction that polls `GET /health` every 30 seconds. Docker Compose inherits this automatically — no extra config needed.
-
----
-
-## Background Jobs
-
-The middleware runs three background jobs via APScheduler:
-
-| Job            | Interval    | Description                                           |
-| -------------- | ----------- | ----------------------------------------------------- |
-| Item sync      | Every 6 h   | Re-fetches Mealie food catalog, detects deletions     |
-| Retry queue    | Every 2 min | Retries failed shopping list additions (exp. backoff) |
-| Activity purge | Every 24 h  | Deletes read activity entries older than 7 days       |
-
-The item sync also runs on startup if no items exist in the database.
-
----
-
-## Security Notes
-
-- **Scanner → middleware:** Authenticated via Bearer token over HTTP. Use HTTPS if the scanner is on an untrusted network.
-- **Web UI:** Protected by username/password login. On first run, you’ll be prompted to create an admin account. The “Stay signed in” checkbox controls whether the session persists across browser restarts (duration set by `SESSION_MAX_AGE_DAYS`). Without it, the session cookie expires when the browser closes.
-- **CSRF protection:** All state-changing web UI requests are protected via Origin/Referer validation. The `/scan` endpoint is exempt (uses token auth instead).
-- **Content Security Policy:** Strict CSP headers are set on all responses.
-- **Mealie API key:** Stored as an environment variable, never exposed in the UI.
+- The web UI requires a user session.
+- Scanner submission uses API-token authentication.
+- State-changing browser requests are protected by Origin/Referer CSRF checks.
+- A strict Content Security Policy is used; UI behavior must not depend on inline JavaScript.
+- Capability-sensitive settings are checked server-side even if a navigation item is hidden.
+- Treat Mealie tokens and Home Assistant webhook URLs as secrets.
+- Put B2M behind HTTPS when it is accessible across an untrusted network.
