@@ -3,6 +3,10 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var scanRefreshTimer = null;
+  var pollTimer = null;
+  var pollBusy = false;
+  var lastFingerprint = '';
+
   var state = {
     settings: null,
     data: null,
@@ -10,6 +14,7 @@
     aliases: {},
     localComment: '',
     localEntries: [],
+    itemOverrides: [],
     printer: {},
     canPrint: false,
   };
@@ -36,6 +41,12 @@
     localEntries: $('shopping-print-local-entries'),
     saveLocal: $('shopping-print-save-local'),
     localStatus: $('shopping-print-local-status'),
+    overrideItem: $('shopping-print-override-item'),
+    overrideName: $('shopping-print-override-name'),
+    overrideQty: $('shopping-print-override-qty'),
+    overrideSave: $('shopping-print-override-save'),
+    overrideStatus: $('shopping-print-override-status'),
+    overrideList: $('shopping-print-overrides-list'),
     canvas: $('shopping-print-canvas'),
     shell: document.querySelector('.shopping-print-paper-shell'),
     empty: $('shopping-print-empty'),
@@ -51,9 +62,12 @@
   }
 
   async function fetchJson(url, options) {
-    var response = await fetch(url, Object.assign({headers: {Accept: 'application/json'}}, options || {}));
+    var opts = Object.assign({}, options || {});
+    opts.headers = Object.assign({Accept: 'application/json', 'Cache-Control': 'no-cache'}, opts.headers || {});
+    opts.cache = 'no-store';
+    var response = await fetch(url, opts);
     var data = await response.json().catch(function () { return {}; });
-    if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+    if (!response.ok) throw new Error(data.error || data.detail || ('HTTP ' + response.status));
     return data;
   }
 
@@ -63,7 +77,13 @@
     el.className = 'form-hint' + (tone ? ' text-' + tone : '');
   }
 
+  function markerStyle() {
+    var checked = document.querySelector('input[name="sp-item-marker-style"]:checked');
+    return checked ? checked.value : 'checkbox';
+  }
+
   function inputSettings() {
+    var marker = markerStyle();
     return {
       paper_width_mm: Number($('sp-width').value),
       margin_mm: Number($('sp-margin').value),
@@ -75,7 +95,8 @@
       threshold: Number($('sp-threshold').value),
       dpi: Number($('sp-dpi').value),
       label_type: Number($('sp-label-type').value),
-      show_checkboxes: $('sp-show-checkboxes').checked,
+      show_checkboxes: marker === 'checkbox',
+      item_marker_style: marker,
       show_items: $('sp-show-items').checked,
       show_quantities: $('sp-show-quantities').checked,
       show_item_dividers: $('sp-show-item-dividers').checked,
@@ -87,7 +108,7 @@
   function syncConditionalSettings() {
     var showItems = $('sp-show-items').checked;
     $('sp-category-divider-style').disabled = !$('sp-show-category-dividers').checked;
-    $('sp-show-checkboxes').disabled = !showItems;
+    document.querySelectorAll('input[name="sp-item-marker-style"]').forEach(function (input) { input.disabled = !showItems; });
     $('sp-show-quantities').disabled = !showItems;
     $('sp-show-item-dividers').disabled = !showItems;
   }
@@ -104,12 +125,15 @@
     $('sp-threshold').value = state.settings.threshold == null ? 145 : state.settings.threshold;
     $('sp-dpi').value = state.settings.dpi == null ? 300 : state.settings.dpi;
     $('sp-label-type').value = state.settings.label_type == null ? 3 : state.settings.label_type;
-    $('sp-show-checkboxes').checked = state.settings.show_checkboxes !== false;
     $('sp-show-items').checked = state.settings.show_items !== false;
     $('sp-show-quantities').checked = state.settings.show_quantities !== false;
     $('sp-show-item-dividers').checked = state.settings.show_item_dividers === true;
     $('sp-show-category-dividers').checked = state.settings.show_category_dividers !== false;
     $('sp-category-divider-style').value = state.settings.category_divider_style === 'dashed' ? 'dashed' : 'solid';
+    var wantedMarker = state.settings.item_marker_style || (state.settings.show_checkboxes === false ? 'none' : 'checkbox');
+    var markerInput = document.querySelector('input[name="sp-item-marker-style"][value="' + wantedMarker + '"]');
+    if (!markerInput) markerInput = document.querySelector('input[name="sp-item-marker-style"][value="checkbox"]');
+    if (markerInput) markerInput.checked = true;
     syncConditionalSettings();
   }
 
@@ -127,11 +151,7 @@
   }
 
   function hasPrintableContent() {
-    return !!(state.data && (
-      (state.data.items && state.data.items.length) ||
-      state.localEntries.length ||
-      String(state.localComment || '').trim()
-    ));
+    return !!(state.data && (((state.data.items || []).length) || state.localEntries.length || String(state.localComment || '').trim()));
   }
 
   function updateButtons() {
@@ -140,6 +160,7 @@
     els.saveSettings.disabled = !state.canPrint;
     if (els.saveLocal) els.saveLocal.disabled = !(state.canPrint && state.data);
     if (els.localAdd) els.localAdd.disabled = !(state.canPrint && state.data);
+    if (els.overrideSave) els.overrideSave.disabled = !(state.canPrint && state.data && els.overrideItem && els.overrideItem.value);
   }
 
   function populateLists(rows, defaultId) {
@@ -163,38 +184,48 @@
     return alias || name;
   }
 
-  function allCategories() {
-    var result = [];
-    var seen = {};
-    function add(name) {
-      name = String(name || '').trim();
-      var key = name.toLowerCase();
-      if (!name || seen[key]) return;
-      seen[key] = true;
-      result.push(name);
-    }
-    state.order.forEach(add);
-    ((state.data && state.data.categories) || []).forEach(add);
-    state.localEntries.forEach(function (entry) { add(entry.category || 'Extra'); });
-    return result;
+  function activeCategoryMap() {
+    var map = {};
+    ((state.data && state.data.items) || []).forEach(function (item) {
+      var name = String(item.category || 'Other').trim() || 'Other';
+      map[name.toLowerCase()] = name;
+    });
+    state.localEntries.forEach(function (entry) {
+      var name = String(entry.category || 'Extra').trim() || 'Extra';
+      map[name.toLowerCase()] = name;
+    });
+    return map;
   }
 
-  function ensureLocalCategoriesInOrder() {
-    var known = {};
-    state.order.forEach(function (name) { known[String(name).toLowerCase()] = true; });
-    state.localEntries.forEach(function (entry) {
-      var category = String(entry.category || 'Extra').trim() || 'Extra';
-      var key = category.toLowerCase();
-      if (!known[key]) {
-        state.order.push(category);
-        known[key] = true;
+  function normalizeOrder(prune) {
+    var available = activeCategoryMap();
+    var merged = [];
+    var seen = {};
+    state.order.forEach(function (name) {
+      var key = String(name || '').toLowerCase();
+      var actual = available[key];
+      if ((!prune || actual) && key && !seen[key]) {
+        merged.push(actual || name);
+        seen[key] = true;
       }
     });
+    Object.keys(available).sort(function (a, b) { return available[a].localeCompare(available[b]); }).forEach(function (key) {
+      if (!seen[key]) {
+        merged.push(available[key]);
+        seen[key] = true;
+      }
+    });
+    state.order = merged;
+    if (prune) {
+      Object.keys(state.aliases).forEach(function (source) {
+        if (!available[String(source).toLowerCase()]) delete state.aliases[source];
+      });
+    }
   }
 
   function renderCategoryOptions() {
     if (!els.localCategoryOptions) return;
-    els.localCategoryOptions.innerHTML = allCategories().map(function (name) {
+    els.localCategoryOptions.innerHTML = state.order.map(function (name) {
       return '<option value="' + esc(name) + '"></option>';
     }).join('');
   }
@@ -217,10 +248,11 @@
       updateButtons();
       return;
     }
-    ensureLocalCategoriesInOrder();
+    normalizeOrder(true);
     if (!state.order.length) {
       els.order.innerHTML = '<div class="list-group-item text-secondary">This list has no categorized items.</div>';
       renderCategoryOptions();
+      updateSummary();
       updateButtons();
       return;
     }
@@ -252,7 +284,7 @@
         return '<div class="list-group-item shopping-print-local-entry" data-local-index="' + index + '">' +
           '<div class="shopping-print-local-entry-main"><div class="fw-medium shopping-print-local-entry-title">' + esc(entry.name) + '</div>' +
           '<div class="text-secondary shopping-print-local-entry-meta">' + esc(meta) + '</div></div>' +
-          '<button type="button" class="btn btn-sm btn-icon btn-outline-danger" data-local-remove title="Remove"><i class="ti ti-trash"></i></button></div>';
+          '<button type="button" class="btn btn-sm btn-icon btn-outline-danger shopping-print-square-action" data-local-remove title="Remove"><i class="ti ti-trash"></i></button></div>';
       }).join('');
     }
     if (els.localComment && els.localComment.value !== state.localComment) els.localComment.value = state.localComment;
@@ -261,8 +293,57 @@
     updateButtons();
   }
 
+  function currentItemForOverride() {
+    if (!els.overrideItem || !state.data) return null;
+    var key = els.overrideItem.value;
+    return (state.data.items || []).find(function (item) { return String(item.override_key || '') === key; }) || null;
+  }
+
+  function overrideForKey(key) {
+    return state.itemOverrides.find(function (row) { return String(row.key) === String(key); }) || null;
+  }
+
+  function syncOverrideEditor() {
+    if (!els.overrideItem) return;
+    var item = currentItemForOverride();
+    var saved = item ? overrideForKey(item.override_key) : null;
+    els.overrideName.value = saved ? (saved.name_alias || '') : '';
+    els.overrideQty.value = saved ? (saved.quantity_alias || '') : '';
+    updateButtons();
+  }
+
+  function renderOverrideEditor() {
+    if (!els.overrideItem || !els.overrideList) return;
+    var previous = els.overrideItem.value;
+    var items = (state.data && state.data.items) || [];
+    els.overrideItem.innerHTML = '<option value="">Choose an item…</option>' + items.map(function (item) {
+      var originalName = item.original_name || item.name || 'Item';
+      var originalQty = item.original_quantity_text || item.quantity_text || '';
+      var label = originalName + (originalQty ? ' · ' + originalQty : '');
+      return '<option value="' + esc(item.override_key || '') + '">' + esc(label) + '</option>';
+    }).join('');
+    els.overrideItem.disabled = !state.canPrint || !items.length;
+    if (items.some(function (item) { return String(item.override_key || '') === previous; })) els.overrideItem.value = previous;
+
+    if (!state.itemOverrides.length) {
+      els.overrideList.innerHTML = '<div class="list-group-item text-secondary">No item overrides.</div>';
+    } else {
+      els.overrideList.innerHTML = state.itemOverrides.map(function (row) {
+        var parts = [];
+        if (row.name_alias) parts.push('name → ' + row.name_alias);
+        if (row.quantity_alias) parts.push('quantity → ' + row.quantity_alias);
+        return '<div class="list-group-item d-flex align-items-center gap-2" data-override-key="' + esc(row.key) + '">' +
+          '<div class="min-w-0 flex-fill"><div class="fw-medium text-truncate">' + esc(row.source_name || row.key) + '</div>' +
+          '<div class="text-secondary small text-truncate">' + esc(parts.join(' · ')) + (row.active ? '' : ' · currently not open') + '</div></div>' +
+          '<button type="button" class="btn btn-sm btn-icon btn-outline-danger shopping-print-square-action" data-override-remove title="Remove override"><i class="ti ti-trash"></i></button>' +
+          '</div>';
+      }).join('');
+    }
+    syncOverrideEditor();
+  }
+
   function combinedItems() {
-    var items = ((state.data && state.data.items) || []).slice();
+    var items = ((state.data && state.data.items) || []).map(function (item) { return Object.assign({}, item); });
     state.localEntries.forEach(function (entry) {
       items.push({
         id: 'local:' + entry.id,
@@ -369,8 +450,7 @@
     function layout(draw) {
       var y = margin;
       font(titleSize, 700);
-      var titleLines = wrapText(ctx, state.data.name || 'Shopping list', contentWidth);
-      titleLines.forEach(function (line) {
+      wrapText(ctx, state.data.name || 'Shopping list', contentWidth).forEach(function (line) {
         if (draw) ctx.fillText(line, margin + (contentWidth - ctx.measureText(line).width) / 2, y);
         y += Math.round(titleSize * 1.12);
       });
@@ -383,14 +463,11 @@
       var comment = String(state.localComment || '').trim();
       if (comment) {
         font(noteSize, 400);
-        var commentLines = [];
         comment.split(/\n+/).forEach(function (paragraph) {
-          var wrapped = wrapText(ctx, paragraph, contentWidth);
-          if (wrapped.length) commentLines = commentLines.concat(wrapped);
-        });
-        commentLines.forEach(function (line) {
-          if (draw) ctx.fillText(line, margin, y);
-          y += Math.round(noteSize * 1.22);
+          wrapText(ctx, paragraph, contentWidth).forEach(function (line) {
+            if (draw) ctx.fillText(line, margin, y);
+            y += Math.round(noteSize * 1.22);
+          });
         });
         y += Math.round(lineGap * .55);
       }
@@ -426,9 +503,7 @@
         renderedCategoryCount += 1;
 
         font(categorySize, 700);
-        var heading = String(displayCategory(category)).toUpperCase();
-        var headingLines = wrapText(ctx, heading, contentWidth);
-        headingLines.forEach(function (line) {
+        wrapText(ctx, String(displayCategory(category)).toUpperCase(), contentWidth).forEach(function (line) {
           if (draw) ctx.fillText(line, margin, y);
           y += Math.round(categorySize * 1.15);
         });
@@ -443,28 +518,30 @@
         if (!cfg.show_items) return;
         rows.forEach(function (item, rowIndex) {
           font(body, 400);
-          var box = cfg.show_checkboxes ? Math.max(8, Math.round(body * .72)) : 0;
-          var boxGap = cfg.show_checkboxes ? Math.round(body * .38) : 0;
+          var marker = cfg.item_marker_style || 'checkbox';
+          var markerWidth = marker === 'none' ? 0 : Math.max(8, Math.round(body * .72));
+          var markerGap = marker === 'none' ? 0 : Math.round(body * .38);
           var qty = cfg.show_quantities ? String(item.quantity_text || '').trim() : '';
           var qtyWidth = qty ? Math.min(Math.round(contentWidth * .30), Math.ceil(ctx.measureText(qty).width)) : 0;
           var qtyGap = qty ? Math.round(body * .35) : 0;
-          var textX = margin + box + boxGap;
-          var nameWidth = Math.max(body * 3, contentWidth - box - boxGap - qtyWidth - qtyGap);
+          var textX = margin + markerWidth + markerGap;
+          var nameWidth = Math.max(body * 3, contentWidth - markerWidth - markerGap - qtyWidth - qtyGap);
           var lines = wrapText(ctx, item.name || 'Item', nameWidth);
           var lineHeight = Math.round(body * 1.18);
-          var rowHeight = Math.max(box || 0, lines.length * lineHeight || body);
+          var rowHeight = Math.max(markerWidth || 0, lines.length * lineHeight || body);
 
           if (draw) {
             ctx.lineWidth = Math.max(1, Math.round(dpi / 200));
             ctx.strokeStyle = '#000';
-            if (cfg.show_checkboxes) ctx.strokeRect(margin, y + Math.round((body - box) / 3), box, box);
-            lines.forEach(function (line, lineIndex) {
-              ctx.fillText(line, textX, y + lineIndex * lineHeight);
-            });
-            if (qty) {
-              var measured = ctx.measureText(qty).width;
-              ctx.fillText(qty, widthPx - margin - measured, y);
+            if (marker === 'checkbox') {
+              ctx.strokeRect(margin, y + Math.round((body - markerWidth) / 3), markerWidth, markerWidth);
+            } else if (marker === 'dash') {
+              font(body, 700);
+              ctx.fillText('-', margin + Math.round(markerWidth * .18), y);
+              font(body, 400);
             }
+            lines.forEach(function (line, lineIndex) { ctx.fillText(line, textX, y + lineIndex * lineHeight); });
+            if (qty) ctx.fillText(qty, widthPx - margin - ctx.measureText(qty).width, y);
           }
           y += rowHeight + lineGap;
           if (cfg.show_item_dividers && rowIndex < rows.length - 1) {
@@ -493,29 +570,17 @@
     els.empty.classList.add('d-none');
   }
 
+  function dataFingerprint(data) {
+    return JSON.stringify(((data && data.items) || []).map(function (item) {
+      return [item.id, item.original_name || item.name, item.original_quantity_text || item.quantity_text, item.category, item.override_key];
+    }).sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])); }));
+  }
+
   function mergeLocalRoute(data, oldOrder, oldAliases, oldEntries) {
-    var available = {};
-    (data.categories || []).forEach(function (name) { available[String(name).toLowerCase()] = name; });
-    (oldEntries || []).forEach(function (entry) {
-      var name = String(entry.category || 'Extra').trim() || 'Extra';
-      available[name.toLowerCase()] = name;
-    });
-    var merged = [];
-    var used = {};
-    oldOrder.concat(data.category_order || []).forEach(function (name) {
-      var actual = available[String(name).toLowerCase()];
-      if (!actual || used[String(actual).toLowerCase()]) return;
-      merged.push(actual);
-      used[String(actual).toLowerCase()] = true;
-    });
-    Object.keys(available).forEach(function (key) {
-      if (!used[key]) {
-        merged.push(available[key]);
-        used[key] = true;
-      }
-    });
-    state.order = merged;
+    state.order = oldOrder.slice();
     state.aliases = Object.assign({}, data.category_aliases || {}, oldAliases || {});
+    state.localEntries = oldEntries;
+    normalizeOrder(true);
   }
 
   async function loadList(listId, options) {
@@ -529,31 +594,40 @@
     var oldComment = sameList ? state.localComment : '';
     var oldEntries = sameList ? state.localEntries.map(function (entry) { return Object.assign({}, entry); }) : [];
     if (!options.silent) setStatus(els.status, 'Loading open items…', 'secondary');
-    els.list.disabled = true;
+    if (!options.background) els.list.disabled = true;
+
     try {
-      var data = await fetchJson('/api/shopping-print/lists/' + encodeURIComponent(listId), {cache: 'no-store'});
+      var data = await fetchJson('/api/shopping-print/lists/' + encodeURIComponent(listId) + '?_=' + Date.now());
+      var freshFingerprint = dataFingerprint(data);
+      var changed = !sameList || freshFingerprint !== lastFingerprint;
       state.data = data;
+      state.itemOverrides = Array.isArray(data.item_overrides) ? data.item_overrides.slice() : [];
+
       if (options.preserveLocal && sameList) {
         state.localComment = oldComment;
-        state.localEntries = oldEntries;
         mergeLocalRoute(data, oldOrder, oldAliases, oldEntries);
       } else {
         state.order = (data.category_order || []).slice();
         state.aliases = Object.assign({}, data.category_aliases || {});
         state.localComment = data.local_comment || '';
         state.localEntries = (data.local_entries || []).map(function (entry) { return Object.assign({}, entry); });
+        normalizeOrder(true);
       }
-      ensureLocalCategoriesInOrder();
-      if (!options.silent) {
-        setStatus(els.status, data.mealie_count ? 'Preview uses the current unchecked items from Mealie.' : 'This shopping list currently has no unchecked Mealie items.', data.mealie_count ? 'secondary' : 'yellow');
-        setStatus(els.orderStatus, '', '');
-        setStatus(els.localStatus, '', '');
-      } else {
-        setStatus(els.status, 'Shopping list updated after scan.', 'success');
-      }
+
+      lastFingerprint = freshFingerprint;
       renderOrder();
       renderLocalEntries();
+      renderOverrideEditor();
       renderReceipt();
+
+      if (!options.silent) {
+        setStatus(els.status, data.mealie_count ? 'Preview uses the current open items from Mealie.' : 'This shopping list currently has no open Mealie items.', data.mealie_count ? 'secondary' : 'yellow');
+        setStatus(els.orderStatus, '', '');
+        setStatus(els.localStatus, '', '');
+      } else if (changed) {
+        setStatus(els.status, options.reason === 'scan' ? 'Shopping list updated after scan.' : 'Shopping list synced from Mealie.', 'success');
+      }
+      return changed;
     } catch (error) {
       if (!options.silent) {
         state.data = null;
@@ -561,21 +635,26 @@
         state.aliases = {};
         state.localComment = '';
         state.localEntries = [];
+        state.itemOverrides = [];
         els.summary.textContent = 'Could not load list';
         renderOrder();
         renderLocalEntries();
+        renderOverrideEditor();
         renderReceipt();
+        setStatus(els.status, error.message, 'danger');
+      } else if (!options.background) {
+        setStatus(els.status, 'Mealie sync failed: ' + error.message, 'danger');
       }
-      setStatus(els.status, error.message, 'danger');
+      return false;
     } finally {
-      els.list.disabled = false;
+      if (!options.background) els.list.disabled = false;
       updateButtons();
     }
   }
 
   async function refreshPrinter() {
     try {
-      var printer = await fetchJson('/labels/b21/status', {cache: 'no-store'});
+      var printer = await fetchJson('/labels/b21/status');
       updatePrinterStatus(printer);
     } catch (error) {
       updatePrinterStatus({configured: true, connected: false, error: error.message});
@@ -586,8 +665,8 @@
     setStatus(els.status, 'Loading shopping lists…', 'secondary');
     try {
       var results = await Promise.all([
-        fetchJson('/api/shopping-print/bootstrap', {cache: 'no-store'}),
-        fetchJson('/api/access/me', {cache: 'no-store'}).catch(function () { return null; }),
+        fetchJson('/api/shopping-print/bootstrap'),
+        fetchJson('/api/access/me').catch(function () { return null; }),
       ]);
       var data = results[0];
       var access = results[1];
@@ -598,9 +677,11 @@
       if (!state.canPrint) {
         setStatus(els.settingsStatus, 'Preview only: your account does not have printer permission.', 'secondary');
         setStatus(els.localStatus, 'Preview only: printer permission is required to save local content.', 'secondary');
+        setStatus(els.overrideStatus, 'Preview only: printer permission is required to save overrides.', 'secondary');
       }
       if (els.list.value) await loadList(els.list.value);
       else setStatus(els.status, 'No shopping lists are available.', 'yellow');
+      startPolling();
     } catch (error) {
       setStatus(els.status, error.message, 'danger');
       els.list.innerHTML = '<option value="">Could not load shopping lists</option>';
@@ -608,7 +689,31 @@
     }
   }
 
-  els.list.addEventListener('change', function () { loadList(els.list.value); });
+  function startPolling() {
+    clearInterval(pollTimer);
+    pollTimer = window.setInterval(async function () {
+      if (pollBusy || document.hidden || !els.list.value) return;
+      pollBusy = true;
+      try {
+        await loadList(els.list.value, {preserveLocal: true, silent: true, background: true, reason: 'poll'});
+      } finally {
+        pollBusy = false;
+      }
+    }, 2500);
+  }
+
+  function foregroundSync() {
+    if (document.hidden || !els.list.value || pollBusy) return;
+    pollBusy = true;
+    loadList(els.list.value, {preserveLocal: true, silent: true, background: true, reason: 'focus'})
+      .finally(function () { pollBusy = false; });
+  }
+
+  els.list.addEventListener('change', function () {
+    lastFingerprint = '';
+    loadList(els.list.value);
+  });
+
   els.refresh.addEventListener('click', function () {
     if (els.list.value) loadList(els.list.value, {preserveLocal: true});
     refreshPrinter();
@@ -633,8 +738,7 @@
     if (!input) return;
     var name = state.order[Number(input.dataset.aliasIndex)];
     if (!name) return;
-    var value = input.value;
-    if (value.trim()) state.aliases[name] = value;
+    if (input.value.trim()) state.aliases[name] = input.value;
     else delete state.aliases[name];
     renderReceipt();
     setStatus(els.orderStatus, 'Alias changed — save to make it global.', 'yellow');
@@ -647,7 +751,7 @@
     try {
       var data = await fetchJson('/api/shopping-print/category-order', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({list_id: state.data.id, category_order: state.order, category_aliases: state.aliases}),
       });
       state.order = (data.category_order || state.order).slice();
@@ -680,17 +784,16 @@
         els.localName.focus();
         return;
       }
-      var category = String(els.localCategory.value || '').trim() || 'Extra';
       state.localEntries.push({
         id: 'local-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
         name: name,
         quantity_text: String(els.localQty.value || '').trim(),
-        category: category,
+        category: String(els.localCategory.value || '').trim() || 'Extra',
       });
       els.localName.value = '';
       els.localQty.value = '';
       els.localCategory.value = '';
-      ensureLocalCategoriesInOrder();
+      normalizeOrder(true);
       renderOrder();
       renderLocalEntries();
       renderReceipt();
@@ -716,9 +819,11 @@
       var index = Number(row.dataset.localIndex);
       if (index < 0 || index >= state.localEntries.length) return;
       state.localEntries.splice(index, 1);
+      normalizeOrder(true);
+      renderOrder();
       renderLocalEntries();
       renderReceipt();
-      setStatus(els.localStatus, 'Entry removed — save to keep the change.', 'yellow');
+      setStatus(els.localStatus, 'Entry removed; unused category removed from the route. Save to keep the change.', 'yellow');
     });
   }
 
@@ -730,11 +835,14 @@
       try {
         var data = await fetchJson('/api/shopping-print/local-content', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+          headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({list_id: state.data.id, comment: state.localComment, entries: state.localEntries}),
         });
         state.localComment = data.comment || '';
         state.localEntries = (data.entries || []).map(function (entry) { return Object.assign({}, entry); });
+        state.order = (data.category_order || state.order).slice();
+        state.aliases = Object.assign({}, data.category_aliases || state.aliases);
+        normalizeOrder(true);
         renderOrder();
         renderLocalEntries();
         renderReceipt();
@@ -747,15 +855,63 @@
     });
   }
 
-  document.querySelectorAll('#sp-width,#sp-margin,#sp-font,#sp-line-gap,#sp-category-gap,#sp-bottom-margin,#sp-density,#sp-threshold,#sp-dpi,#sp-label-type,#sp-show-checkboxes,#sp-show-items,#sp-show-quantities,#sp-show-item-dividers,#sp-show-category-dividers,#sp-category-divider-style').forEach(function (input) {
-    input.addEventListener('input', function () {
-      syncConditionalSettings();
-      if (state.data) renderReceipt();
+  if (els.overrideItem) els.overrideItem.addEventListener('change', syncOverrideEditor);
+
+  if (els.overrideSave) {
+    els.overrideSave.addEventListener('click', async function () {
+      var item = currentItemForOverride();
+      if (!item || !state.data) return;
+      els.overrideSave.disabled = true;
+      setStatus(els.overrideStatus, 'Saving override…', 'secondary');
+      try {
+        await fetchJson('/api/shopping-print/item-overrides', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            list_id: state.data.id,
+            key: item.override_key,
+            name_alias: els.overrideName.value,
+            quantity_alias: els.overrideQty.value,
+            source_name: item.original_name || item.name || '',
+            source_quantity_text: item.original_quantity_text || item.quantity_text || '',
+          }),
+        });
+        await loadList(state.data.id, {preserveLocal: true, silent: true, reason: 'override'});
+        els.overrideItem.value = item.override_key;
+        syncOverrideEditor();
+        setStatus(els.overrideStatus, (els.overrideName.value.trim() || els.overrideQty.value.trim()) ? 'Override saved for this shopping list.' : 'Override removed.', 'success');
+      } catch (error) {
+        setStatus(els.overrideStatus, error.message, 'danger');
+      } finally {
+        updateButtons();
+      }
     });
-    input.addEventListener('change', function () {
-      syncConditionalSettings();
-      if (state.data) renderReceipt();
+  }
+
+  if (els.overrideList) {
+    els.overrideList.addEventListener('click', async function (event) {
+      var button = event.target.closest('[data-override-remove]');
+      var row = event.target.closest('[data-override-key]');
+      if (!button || !row || !state.data) return;
+      button.disabled = true;
+      try {
+        await fetchJson('/api/shopping-print/item-overrides/delete', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({list_id: state.data.id, key: row.dataset.overrideKey}),
+        });
+        await loadList(state.data.id, {preserveLocal: true, silent: true, reason: 'override'});
+        setStatus(els.overrideStatus, 'Override removed.', 'success');
+      } catch (error) {
+        setStatus(els.overrideStatus, error.message, 'danger');
+        button.disabled = false;
+      }
     });
+  }
+
+  document.querySelectorAll('#sp-width,#sp-margin,#sp-font,#sp-line-gap,#sp-category-gap,#sp-bottom-margin,#sp-density,#sp-threshold,#sp-dpi,#sp-label-type,#sp-show-items,#sp-show-quantities,#sp-show-item-dividers,#sp-show-category-dividers,#sp-category-divider-style,input[name="sp-item-marker-style"]').forEach(function (input) {
+    input.addEventListener('input', function () { syncConditionalSettings(); if (state.data) renderReceipt(); });
+    input.addEventListener('change', function () { syncConditionalSettings(); if (state.data) renderReceipt(); });
   });
 
   els.saveSettings.addEventListener('click', async function () {
@@ -764,7 +920,7 @@
     try {
       var data = await fetchJson('/api/shopping-print/settings', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(inputSettings()),
       });
       populateSettings(data.settings || inputSettings());
@@ -783,10 +939,7 @@
     els.connect.disabled = true;
     setStatus(els.status, connected ? 'Disconnecting printer…' : 'Connecting printer…', 'secondary');
     try {
-      await fetchJson(connected ? '/labels/b21/disconnect' : '/labels/b21/connect', {
-        method: 'POST',
-        headers: {Accept: 'application/json'},
-      });
+      await fetchJson(connected ? '/labels/b21/disconnect' : '/labels/b21/connect', {method: 'POST'});
       await refreshPrinter();
       setStatus(els.status, connected ? 'Printer disconnected.' : 'Printer connected.', 'success');
     } catch (error) {
@@ -805,11 +958,8 @@
     try {
       var data = await fetchJson('/api/shopping-print/print', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json', Accept: 'application/json'},
-        body: JSON.stringify({
-          image_base64: els.canvas.toDataURL('image/png'),
-          height_mm: Number(els.canvas.dataset.heightMm || 0),
-        }),
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({image_base64: els.canvas.toDataURL('image/png'), height_mm: Number(els.canvas.dataset.heightMm || 0)}),
       });
       setStatus(els.status, 'Printed · ' + Number(data.height_mm || els.canvas.dataset.heightMm).toFixed(1) + ' mm paper used.', 'success');
     } catch (error) {
@@ -825,9 +975,12 @@
     if (!els.list.value) return;
     clearTimeout(scanRefreshTimer);
     scanRefreshTimer = window.setTimeout(function () {
-      loadList(els.list.value, {preserveLocal: true, silent: true});
-    }, 450);
+      loadList(els.list.value, {preserveLocal: true, silent: true, reason: 'scan'});
+    }, 350);
   });
+
+  window.addEventListener('focus', foregroundSync);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) foregroundSync(); });
 
   bootstrap();
 })();

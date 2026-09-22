@@ -61,10 +61,15 @@
   flex: 0 0 auto;
 }
 
-.shopping-print-category-actions .btn {
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
+.shopping-print-category-actions .btn,
+.shopping-print-square-action {
+  width: 2rem !important;
+  height: 2rem !important;
+  min-width: 2rem !important;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .shopping-print-content-switches .form-check {
@@ -94,6 +99,21 @@
 
 .shopping-print-local-entry .btn {
   flex: 0 0 auto;
+}
+
+.shopping-print-marker-preview {
+  display: inline-flex;
+  width: 1.15rem;
+  height: 1.15rem;
+  align-items: center;
+  justify-content: center;
+  margin-right: .35rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.shopping-print-marker-checkbox {
+  border: 1px solid currentColor;
 }
 
 html.b2m-epaper #shopping-print-canvas,

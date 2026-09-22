@@ -8,12 +8,20 @@ from app.database import get_db
 from app.services.niimblue import is_configured as niim_is_configured, print_image_base64, printer_status
 from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
 from app.services.shopping_print import (
+    load_category_aliases,
     load_print_settings,
     save_category_aliases,
     save_category_order,
     save_local_content,
     save_print_settings,
     shopping_list_payload,
+)
+from app.services.shopping_print_overrides import (
+    apply_item_overrides,
+    delete_item_override,
+    load_marker_style,
+    save_item_override,
+    save_marker_style,
 )
 from app.templating import templates
 
@@ -23,6 +31,32 @@ router = APIRouter()
 def _valid_list_id(list_id: str) -> bool:
     available = {str(row.get("id")) for row in get_shopping_lists(force=False)}
     return bool(list_id and list_id in available)
+
+
+def _full_payload(db: Session, list_id: str) -> dict:
+    payload = shopping_list_payload(db, list_id)
+    return apply_item_overrides(db, list_id, payload)
+
+
+def _prune_category_state(db: Session, list_id: str, payload: dict) -> None:
+    available = {str(name).casefold(): str(name) for name in payload.get("categories") or [] if str(name).strip()}
+    clean_order = []
+    seen = set()
+    for name in payload.get("category_order") or []:
+        key = str(name).casefold()
+        actual = available.get(key)
+        if actual and key not in seen:
+            clean_order.append(actual)
+            seen.add(key)
+    save_category_order(db, list_id, clean_order)
+
+    aliases = load_category_aliases(db).get(str(list_id), {})
+    clean_aliases = {
+        source: alias
+        for source, alias in aliases.items()
+        if str(source).casefold() in available
+    }
+    save_category_aliases(db, list_id, clean_aliases)
 
 
 @router.get("/shopping-print", response_class=HTMLResponse)
@@ -37,10 +71,12 @@ def shopping_print_bootstrap(db: Session = Depends(get_db)):
         status = printer_status()
     except Exception as exc:
         status = {"configured": niim_is_configured(), "connected": False, "error": str(exc)}
+    print_settings = load_print_settings(db)
+    print_settings["item_marker_style"] = load_marker_style(db)
     return {
         "lists": lists,
         "default_list_id": get_default_shopping_list_id(db),
-        "settings": load_print_settings(db),
+        "settings": print_settings,
         "printer": status,
     }
 
@@ -48,7 +84,7 @@ def shopping_print_bootstrap(db: Session = Depends(get_db)):
 @router.get("/api/shopping-print/lists/{list_id}")
 def shopping_print_list(list_id: str, db: Session = Depends(get_db)):
     try:
-        return shopping_list_payload(db, list_id)
+        return _full_payload(db, list_id)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=404)
     except RuntimeError as exc:
@@ -62,8 +98,10 @@ async def shopping_print_save_settings(request: Request, db: Session = Depends(g
         return JSONResponse({"error": "JSON object required"}, status_code=400)
     try:
         saved = save_print_settings(db, body)
+        marker_style = save_marker_style(db, body.get("item_marker_style", load_marker_style(db)))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+    saved["item_marker_style"] = marker_style
     return {"ok": True, "settings": saved}
 
 
@@ -109,9 +147,65 @@ async def shopping_print_save_local_content(request: Request, db: Session = Depe
             str(body.get("comment") or ""),
             body.get("entries") or [],
         )
+        payload = _full_payload(db, list_id)
+        _prune_category_state(db, list_id, payload)
+        payload = _full_payload(db, list_id)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
-    return {"ok": True, "list_id": list_id, **saved}
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    return {
+        "ok": True,
+        "list_id": list_id,
+        **saved,
+        "category_order": payload.get("category_order", []),
+        "category_aliases": payload.get("category_aliases", {}),
+        "categories": payload.get("categories", []),
+    }
+
+
+@router.post("/api/shopping-print/item-overrides")
+async def shopping_print_save_item_override(request: Request, db: Session = Depends(get_db)):
+    body = await request.json()
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
+    list_id = str(body.get("list_id") or "").strip()
+    if not _valid_list_id(list_id):
+        return JSONResponse({"error": "Shopping list not found"}, status_code=404)
+    try:
+        saved = save_item_override(
+            db,
+            list_id,
+            str(body.get("key") or ""),
+            str(body.get("name_alias") or ""),
+            str(body.get("quantity_alias") or ""),
+            str(body.get("source_name") or ""),
+            str(body.get("source_quantity_text") or ""),
+        )
+        payload = _full_payload(db, list_id)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    return {"ok": True, "saved": saved, "item_overrides": payload.get("item_overrides", [])}
+
+
+@router.post("/api/shopping-print/item-overrides/delete")
+async def shopping_print_delete_item_override(request: Request, db: Session = Depends(get_db)):
+    body = await request.json()
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
+    list_id = str(body.get("list_id") or "").strip()
+    if not _valid_list_id(list_id):
+        return JSONResponse({"error": "Shopping list not found"}, status_code=404)
+    try:
+        delete_item_override(db, list_id, str(body.get("key") or ""))
+        payload = _full_payload(db, list_id)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    return {"ok": True, "item_overrides": payload.get("item_overrides", [])}
 
 
 @router.post("/api/shopping-print/print")
