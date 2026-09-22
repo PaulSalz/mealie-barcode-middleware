@@ -8,6 +8,8 @@
     data: null,
     order: [],
     aliases: {},
+    localComment: '',
+    localEntries: [],
     printer: {},
     canPrint: false,
   };
@@ -25,6 +27,15 @@
     orderStatus: $('shopping-print-order-status'),
     saveSettings: $('shopping-print-save-settings'),
     settingsStatus: $('shopping-print-settings-status'),
+    localComment: $('shopping-print-local-comment'),
+    localName: $('shopping-print-local-name'),
+    localQty: $('shopping-print-local-qty'),
+    localCategory: $('shopping-print-local-category'),
+    localCategoryOptions: $('shopping-print-category-options'),
+    localAdd: $('shopping-print-local-add'),
+    localEntries: $('shopping-print-local-entries'),
+    saveLocal: $('shopping-print-save-local'),
+    localStatus: $('shopping-print-local-status'),
     canvas: $('shopping-print-canvas'),
     shell: document.querySelector('.shopping-print-paper-shell'),
     empty: $('shopping-print-empty'),
@@ -65,7 +76,7 @@
       dpi: Number($('sp-dpi').value),
       label_type: Number($('sp-label-type').value),
       show_checkboxes: $('sp-show-checkboxes').checked,
-      show_item_names: $('sp-show-item-names').checked,
+      show_items: $('sp-show-items').checked,
       show_quantities: $('sp-show-quantities').checked,
       show_item_dividers: $('sp-show-item-dividers').checked,
       show_category_dividers: $('sp-show-category-dividers').checked,
@@ -74,7 +85,11 @@
   }
 
   function syncConditionalSettings() {
+    var showItems = $('sp-show-items').checked;
     $('sp-category-divider-style').disabled = !$('sp-show-category-dividers').checked;
+    $('sp-show-checkboxes').disabled = !showItems;
+    $('sp-show-quantities').disabled = !showItems;
+    $('sp-show-item-dividers').disabled = !showItems;
   }
 
   function populateSettings(settings) {
@@ -90,7 +105,7 @@
     $('sp-dpi').value = state.settings.dpi == null ? 300 : state.settings.dpi;
     $('sp-label-type').value = state.settings.label_type == null ? 3 : state.settings.label_type;
     $('sp-show-checkboxes').checked = state.settings.show_checkboxes !== false;
-    $('sp-show-item-names').checked = state.settings.show_item_names !== false;
+    $('sp-show-items').checked = state.settings.show_items !== false;
     $('sp-show-quantities').checked = state.settings.show_quantities !== false;
     $('sp-show-item-dividers').checked = state.settings.show_item_dividers === true;
     $('sp-show-category-dividers').checked = state.settings.show_category_dividers !== false;
@@ -111,11 +126,20 @@
     updateButtons();
   }
 
+  function hasPrintableContent() {
+    return !!(state.data && (
+      (state.data.items && state.data.items.length) ||
+      state.localEntries.length ||
+      String(state.localComment || '').trim()
+    ));
+  }
+
   function updateButtons() {
-    var hasItems = !!(state.data && state.data.items && state.data.items.length);
-    els.print.disabled = !(state.canPrint && hasItems && state.printer && state.printer.connected);
+    els.print.disabled = !(state.canPrint && hasPrintableContent() && state.printer && state.printer.connected);
     els.saveOrder.disabled = !(state.canPrint && state.data && state.order.length);
     els.saveSettings.disabled = !state.canPrint;
+    if (els.saveLocal) els.saveLocal.disabled = !(state.canPrint && state.data);
+    if (els.localAdd) els.localAdd.disabled = !(state.canPrint && state.data);
   }
 
   function populateLists(rows, defaultId) {
@@ -139,14 +163,64 @@
     return alias || name;
   }
 
+  function allCategories() {
+    var result = [];
+    var seen = {};
+    function add(name) {
+      name = String(name || '').trim();
+      var key = name.toLowerCase();
+      if (!name || seen[key]) return;
+      seen[key] = true;
+      result.push(name);
+    }
+    state.order.forEach(add);
+    ((state.data && state.data.categories) || []).forEach(add);
+    state.localEntries.forEach(function (entry) { add(entry.category || 'Extra'); });
+    return result;
+  }
+
+  function ensureLocalCategoriesInOrder() {
+    var known = {};
+    state.order.forEach(function (name) { known[String(name).toLowerCase()] = true; });
+    state.localEntries.forEach(function (entry) {
+      var category = String(entry.category || 'Extra').trim() || 'Extra';
+      var key = category.toLowerCase();
+      if (!known[key]) {
+        state.order.push(category);
+        known[key] = true;
+      }
+    });
+  }
+
+  function renderCategoryOptions() {
+    if (!els.localCategoryOptions) return;
+    els.localCategoryOptions.innerHTML = allCategories().map(function (name) {
+      return '<option value="' + esc(name) + '"></option>';
+    }).join('');
+  }
+
+  function updateSummary() {
+    if (!state.data) {
+      els.summary.textContent = '—';
+      return;
+    }
+    var mealieCount = Number(state.data.mealie_count == null ? (state.data.items || []).length : state.data.mealie_count) || 0;
+    var localCount = state.localEntries.length;
+    els.summary.textContent = mealieCount + ' Mealie item' + (mealieCount === 1 ? '' : 's') +
+      (localCount ? ' · ' + localCount + ' print-only' : '') +
+      ' · ' + state.order.length + ' categor' + (state.order.length === 1 ? 'y' : 'ies');
+  }
+
   function renderOrder() {
     if (!state.data) {
       els.order.innerHTML = '<div class="list-group-item text-secondary">Choose a shopping list first.</div>';
       updateButtons();
       return;
     }
+    ensureLocalCategoriesInOrder();
     if (!state.order.length) {
-      els.order.innerHTML = '<div class="list-group-item text-secondary">This list has no categorized open items.</div>';
+      els.order.innerHTML = '<div class="list-group-item text-secondary">This list has no categorized items.</div>';
+      renderCategoryOptions();
       updateButtons();
       return;
     }
@@ -163,14 +237,49 @@
           '<button type="button" class="btn btn-sm btn-icon btn-outline-secondary" data-move="down" title="Move down"' + (index === state.order.length - 1 ? ' disabled' : '') + '><i class="ti ti-chevron-down"></i></button>' +
         '</div></div>';
     }).join('');
+    renderCategoryOptions();
+    updateSummary();
     updateButtons();
+  }
+
+  function renderLocalEntries() {
+    if (!els.localEntries) return;
+    if (!state.localEntries.length) {
+      els.localEntries.innerHTML = '<div class="list-group-item text-secondary">No print-only entries.</div>';
+    } else {
+      els.localEntries.innerHTML = state.localEntries.map(function (entry, index) {
+        var meta = [entry.quantity_text, entry.category || 'Extra'].filter(Boolean).join(' · ');
+        return '<div class="list-group-item shopping-print-local-entry" data-local-index="' + index + '">' +
+          '<div class="shopping-print-local-entry-main"><div class="fw-medium shopping-print-local-entry-title">' + esc(entry.name) + '</div>' +
+          '<div class="text-secondary shopping-print-local-entry-meta">' + esc(meta) + '</div></div>' +
+          '<button type="button" class="btn btn-sm btn-icon btn-outline-danger" data-local-remove title="Remove"><i class="ti ti-trash"></i></button></div>';
+      }).join('');
+    }
+    if (els.localComment && els.localComment.value !== state.localComment) els.localComment.value = state.localComment;
+    renderCategoryOptions();
+    updateSummary();
+    updateButtons();
+  }
+
+  function combinedItems() {
+    var items = ((state.data && state.data.items) || []).slice();
+    state.localEntries.forEach(function (entry) {
+      items.push({
+        id: 'local:' + entry.id,
+        name: entry.name,
+        quantity_text: entry.quantity_text || '',
+        category: entry.category || 'Extra',
+        local_only: true,
+      });
+    });
+    return items;
   }
 
   function orderedItems() {
     if (!state.data) return [];
     var pos = {};
     state.order.forEach(function (name, index) { pos[String(name).toLowerCase()] = index; });
-    return (state.data.items || []).slice().sort(function (a, b) {
+    return combinedItems().sort(function (a, b) {
       var ai = pos[String(a.category || 'Other').toLowerCase()];
       var bi = pos[String(b.category || 'Other').toLowerCase()];
       if (ai == null) ai = 9999;
@@ -239,6 +348,7 @@
     var body = mmToPx(cfg.body_font_mm, dpi);
     var titleSize = Math.round(body * 1.58);
     var dateSize = Math.max(8, Math.round(body * .82));
+    var noteSize = Math.max(8, Math.round(body * .9));
     var categorySize = Math.round(body * 1.08);
     var lineGap = mmToPx(cfg.line_gap_mm, dpi);
     var categoryGap = mmToPx(cfg.category_gap_mm, dpi);
@@ -268,7 +378,23 @@
       font(dateSize, 400);
       var date = receiptDate();
       if (draw) ctx.fillText(date, margin + (contentWidth - ctx.measureText(date).width) / 2, y);
-      y += Math.round(dateSize * 1.7);
+      y += Math.round(dateSize * 1.55);
+
+      var comment = String(state.localComment || '').trim();
+      if (comment) {
+        font(noteSize, 400);
+        var commentLines = [];
+        comment.split(/\n+/).forEach(function (paragraph) {
+          var wrapped = wrapText(ctx, paragraph, contentWidth);
+          if (wrapped.length) commentLines = commentLines.concat(wrapped);
+        });
+        commentLines.forEach(function (line) {
+          if (draw) ctx.fillText(line, margin, y);
+          y += Math.round(noteSize * 1.22);
+        });
+        y += Math.round(lineGap * .55);
+      }
+
       if (draw) drawHorizontalRule(ctx, margin, widthPx - margin, y, dpi, 'solid');
       y += Math.round(body * .65);
 
@@ -314,6 +440,7 @@
           y += Math.round(lineGap * .4);
         }
 
+        if (!cfg.show_items) return;
         rows.forEach(function (item, rowIndex) {
           font(body, 400);
           var box = cfg.show_checkboxes ? Math.max(8, Math.round(body * .72)) : 0;
@@ -323,20 +450,17 @@
           var qtyGap = qty ? Math.round(body * .35) : 0;
           var textX = margin + box + boxGap;
           var nameWidth = Math.max(body * 3, contentWidth - box - boxGap - qtyWidth - qtyGap);
-          var lines = cfg.show_item_names ? wrapText(ctx, item.name || 'Item', nameWidth) : [];
+          var lines = wrapText(ctx, item.name || 'Item', nameWidth);
           var lineHeight = Math.round(body * 1.18);
-          var contentHeight = lines.length ? lines.length * lineHeight : body;
-          var rowHeight = Math.max(box || 0, contentHeight);
+          var rowHeight = Math.max(box || 0, lines.length * lineHeight || body);
 
           if (draw) {
             ctx.lineWidth = Math.max(1, Math.round(dpi / 200));
             ctx.strokeStyle = '#000';
             if (cfg.show_checkboxes) ctx.strokeRect(margin, y + Math.round((body - box) / 3), box, box);
-            if (cfg.show_item_names) {
-              lines.forEach(function (line, lineIndex) {
-                ctx.fillText(line, textX, y + lineIndex * lineHeight);
-              });
-            }
+            lines.forEach(function (line, lineIndex) {
+              ctx.fillText(line, textX, y + lineIndex * lineHeight);
+            });
             if (qty) {
               var measured = ctx.measureText(qty).width;
               ctx.fillText(qty, widthPx - margin - measured, y);
@@ -369,9 +493,13 @@
     els.empty.classList.add('d-none');
   }
 
-  function mergeLocalRoute(data, oldOrder, oldAliases) {
+  function mergeLocalRoute(data, oldOrder, oldAliases, oldEntries) {
     var available = {};
     (data.categories || []).forEach(function (name) { available[String(name).toLowerCase()] = name; });
+    (oldEntries || []).forEach(function (entry) {
+      var name = String(entry.category || 'Extra').trim() || 'Extra';
+      available[name.toLowerCase()] = name;
+    });
     var merged = [];
     var used = {};
     oldOrder.concat(data.category_order || []).forEach(function (name) {
@@ -379,6 +507,12 @@
       if (!actual || used[String(actual).toLowerCase()]) return;
       merged.push(actual);
       used[String(actual).toLowerCase()] = true;
+    });
+    Object.keys(available).forEach(function (key) {
+      if (!used[key]) {
+        merged.push(available[key]);
+        used[key] = true;
+      }
     });
     state.order = merged;
     state.aliases = Object.assign({}, data.category_aliases || {}, oldAliases || {});
@@ -392,32 +526,44 @@
     var sameList = !!(state.data && String(state.data.id) === listId);
     var oldOrder = sameList ? state.order.slice() : [];
     var oldAliases = sameList ? Object.assign({}, state.aliases) : {};
+    var oldComment = sameList ? state.localComment : '';
+    var oldEntries = sameList ? state.localEntries.map(function (entry) { return Object.assign({}, entry); }) : [];
     if (!options.silent) setStatus(els.status, 'Loading open items…', 'secondary');
     els.list.disabled = true;
     try {
       var data = await fetchJson('/api/shopping-print/lists/' + encodeURIComponent(listId), {cache: 'no-store'});
       state.data = data;
-      if (options.preserveLocal && sameList) mergeLocalRoute(data, oldOrder, oldAliases);
-      else {
+      if (options.preserveLocal && sameList) {
+        state.localComment = oldComment;
+        state.localEntries = oldEntries;
+        mergeLocalRoute(data, oldOrder, oldAliases, oldEntries);
+      } else {
         state.order = (data.category_order || []).slice();
         state.aliases = Object.assign({}, data.category_aliases || {});
+        state.localComment = data.local_comment || '';
+        state.localEntries = (data.local_entries || []).map(function (entry) { return Object.assign({}, entry); });
       }
-      els.summary.textContent = data.count + ' open item' + (data.count === 1 ? '' : 's') + ' · ' + state.order.length + ' categor' + (state.order.length === 1 ? 'y' : 'ies');
+      ensureLocalCategoriesInOrder();
       if (!options.silent) {
-        setStatus(els.status, data.count ? 'Preview uses the current unchecked items from Mealie.' : 'This shopping list currently has no unchecked items.', data.count ? 'secondary' : 'yellow');
+        setStatus(els.status, data.mealie_count ? 'Preview uses the current unchecked items from Mealie.' : 'This shopping list currently has no unchecked Mealie items.', data.mealie_count ? 'secondary' : 'yellow');
         setStatus(els.orderStatus, '', '');
+        setStatus(els.localStatus, '', '');
       } else {
         setStatus(els.status, 'Shopping list updated after scan.', 'success');
       }
       renderOrder();
+      renderLocalEntries();
       renderReceipt();
     } catch (error) {
       if (!options.silent) {
         state.data = null;
         state.order = [];
         state.aliases = {};
+        state.localComment = '';
+        state.localEntries = [];
         els.summary.textContent = 'Could not load list';
         renderOrder();
+        renderLocalEntries();
         renderReceipt();
       }
       setStatus(els.status, error.message, 'danger');
@@ -451,6 +597,7 @@
       updatePrinterStatus(data.printer || {});
       if (!state.canPrint) {
         setStatus(els.settingsStatus, 'Preview only: your account does not have printer permission.', 'secondary');
+        setStatus(els.localStatus, 'Preview only: printer permission is required to save local content.', 'secondary');
       }
       if (els.list.value) await loadList(els.list.value);
       else setStatus(els.status, 'No shopping lists are available.', 'yellow');
@@ -515,7 +662,92 @@
     }
   });
 
-  document.querySelectorAll('#sp-width,#sp-margin,#sp-font,#sp-line-gap,#sp-category-gap,#sp-bottom-margin,#sp-density,#sp-threshold,#sp-dpi,#sp-label-type,#sp-show-checkboxes,#sp-show-item-names,#sp-show-quantities,#sp-show-item-dividers,#sp-show-category-dividers,#sp-category-divider-style').forEach(function (input) {
+  if (els.localComment) {
+    els.localComment.addEventListener('input', function () {
+      state.localComment = els.localComment.value;
+      renderReceipt();
+      setStatus(els.localStatus, 'Comment changed — save to keep it for this list.', 'yellow');
+      updateButtons();
+    });
+  }
+
+  if (els.localAdd) {
+    els.localAdd.addEventListener('click', function () {
+      if (!state.data || !state.canPrint) return;
+      var name = String(els.localName.value || '').trim();
+      if (!name) {
+        setStatus(els.localStatus, 'Enter a name for the print-only entry.', 'danger');
+        els.localName.focus();
+        return;
+      }
+      var category = String(els.localCategory.value || '').trim() || 'Extra';
+      state.localEntries.push({
+        id: 'local-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+        name: name,
+        quantity_text: String(els.localQty.value || '').trim(),
+        category: category,
+      });
+      els.localName.value = '';
+      els.localQty.value = '';
+      els.localCategory.value = '';
+      ensureLocalCategoriesInOrder();
+      renderOrder();
+      renderLocalEntries();
+      renderReceipt();
+      setStatus(els.localStatus, 'Entry added — save to keep it for this list.', 'yellow');
+      els.localName.focus();
+    });
+  }
+
+  if (els.localName) {
+    els.localName.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        els.localAdd.click();
+      }
+    });
+  }
+
+  if (els.localEntries) {
+    els.localEntries.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-local-remove]');
+      var row = event.target.closest('[data-local-index]');
+      if (!button || !row) return;
+      var index = Number(row.dataset.localIndex);
+      if (index < 0 || index >= state.localEntries.length) return;
+      state.localEntries.splice(index, 1);
+      renderLocalEntries();
+      renderReceipt();
+      setStatus(els.localStatus, 'Entry removed — save to keep the change.', 'yellow');
+    });
+  }
+
+  if (els.saveLocal) {
+    els.saveLocal.addEventListener('click', async function () {
+      if (!state.data) return;
+      els.saveLocal.disabled = true;
+      setStatus(els.localStatus, 'Saving print-only content…', 'secondary');
+      try {
+        var data = await fetchJson('/api/shopping-print/local-content', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+          body: JSON.stringify({list_id: state.data.id, comment: state.localComment, entries: state.localEntries}),
+        });
+        state.localComment = data.comment || '';
+        state.localEntries = (data.entries || []).map(function (entry) { return Object.assign({}, entry); });
+        renderOrder();
+        renderLocalEntries();
+        renderReceipt();
+        setStatus(els.localStatus, 'Print-only content saved for this list.', 'success');
+      } catch (error) {
+        setStatus(els.localStatus, error.message, 'danger');
+      } finally {
+        updateButtons();
+      }
+    });
+  }
+
+  document.querySelectorAll('#sp-width,#sp-margin,#sp-font,#sp-line-gap,#sp-category-gap,#sp-bottom-margin,#sp-density,#sp-threshold,#sp-dpi,#sp-label-type,#sp-show-checkboxes,#sp-show-items,#sp-show-quantities,#sp-show-item-dividers,#sp-show-category-dividers,#sp-category-divider-style').forEach(function (input) {
     input.addEventListener('input', function () {
       syncConditionalSettings();
       if (state.data) renderReceipt();
@@ -564,7 +796,7 @@
   });
 
   els.print.addEventListener('click', async function () {
-    if (!state.data || !(state.data.items || []).length) return;
+    if (!state.data || !hasPrintableContent()) return;
     renderReceipt();
     els.print.disabled = true;
     var original = els.print.innerHTML;
