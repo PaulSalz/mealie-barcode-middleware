@@ -42,6 +42,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+.shopping-print-category-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.shopping-print-category-original {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shopping-print-category-alias {
+  margin-top: .35rem;
+}
+
 .shopping-print-category-actions {
   flex: 0 0 auto;
 }
@@ -50,6 +65,35 @@
   width: 2rem;
   height: 2rem;
   padding: 0;
+}
+
+.shopping-print-content-switches .form-check {
+  min-height: 1.5rem;
+}
+
+.shopping-print-local-entry {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.shopping-print-local-entry-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.shopping-print-local-entry-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shopping-print-local-entry-meta {
+  font-size: .8rem;
+}
+
+.shopping-print-local-entry .btn {
+  flex: 0 0 auto;
 }
 
 html.b2m-epaper #shopping-print-canvas,

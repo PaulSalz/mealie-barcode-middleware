@@ -172,6 +172,7 @@ def dashboard_api(db: Session = Depends(get_db)):
         "shopping_lists": get_shopping_list_counts(),
         "recent_items": [{
             "barcode": row["barcode"],
+            "product_name": row["title"] or "—",
             "item_name": row["target_name"] if row["target_type"] == "food" else None,
             "item_id": row["target_id"] if row["target_type"] == "food" else None,
             "target_type": row["target_type"], "target_id": row["target_id"], "target_name": row["target_name"],
