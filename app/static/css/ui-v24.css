@@ -138,6 +138,21 @@ html.b2m-rainbow-active.b2m-rainbow-buttons-green { animation:none!important;--t
 html.b2m-rainbow-active.b2m-rainbow-buttons-teal { animation:none!important;--tblr-primary:#0ca678!important;--tblr-primary-rgb:12,166,120!important; }
 html.b2m-rainbow-active.b2m-rainbow-buttons-cyan { animation:none!important;--tblr-primary:#17a2b8!important;--tblr-primary-rgb:23,162,184!important; }
 
+/* Switching away from Rainbow (including live e-paper toggling) must stop
+   the global and logo animations immediately, before any page reload. */
+html.b2m-rainbow-disabled {
+  animation: none !important;
+}
+html.b2m-rainbow-disabled .b2m-brand-text {
+  animation: none !important;
+  background: none !important;
+  color: inherit !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+html.b2m-rainbow-disabled .btn-primary {
+  animation: none !important;
+}
+
 /* E-paper should never spend work on rainbow animations. */
 html.b2m-epaper-v9,
 html.b2m-epaper-v9.b2m-rainbow-active {
