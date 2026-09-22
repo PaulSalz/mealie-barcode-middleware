@@ -71,6 +71,31 @@
   min-height: 1.5rem;
 }
 
+.shopping-print-local-entry {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.shopping-print-local-entry-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.shopping-print-local-entry-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shopping-print-local-entry-meta {
+  font-size: .8rem;
+}
+
+.shopping-print-local-entry .btn {
+  flex: 0 0 auto;
+}
+
 html.b2m-epaper #shopping-print-canvas,
 html.b2m-epaper-v9 #shopping-print-canvas {
   box-shadow: none;
