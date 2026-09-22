@@ -1,4 +1,4 @@
-/* v2026.09.22.2 — action identity + Home Assistant UX. */
+/* v2026.09.22.4 — action identity + Home Assistant UX. */
 (function(){
   'use strict';
   if(!(window.location.pathname==='/actions/new'||/^\/actions\/[^/]+$/.test(window.location.pathname)))return;
@@ -69,11 +69,11 @@
     note.classList.remove('d-none');clearTimeout(flashTimer);flashTimer=setTimeout(function(){note.classList.add('d-none');},1800);
   }
 
-  const presetNames={light:'Light',tts:'TTS',timer:'Timer',automation:'Automation',data:'Data'};
-  function applyPresetIdentity(key){
-    const name=field('name'),type=field('action_type'),method=field('method'),execution=field('execution_mode');
-    if(name){programmatic=true;name.value=presetNames[key]||'Action';dispatch(name);programmatic=false;}
-    idOverridden=false;urlOverridden=false;syncGeneratedIdentity(true);
+  function applyPresetIdentity(){
+    const type=field('action_type'),method=field('method'),execution=field('execution_mode');
+    // Examples configure request semantics only. They must not rename the Action
+    // or erase a manually overridden ID/webhook URL.
+    syncGeneratedIdentity(false);
     if(type){type.value='homeassistant';dispatch(type);}
     if(method){method.value='POST';dispatch(method);}
     if(execution){execution.value='async';dispatch(execution);}
@@ -101,7 +101,7 @@
     improveBuilderCopy();
 
     document.querySelectorAll('.b2m-action-preset[data-preset]').forEach(function(button){
-      button.addEventListener('click',function(){setTimeout(function(){applyPresetIdentity(button.dataset.preset);},0);});
+      button.addEventListener('click',function(){setTimeout(applyPresetIdentity,0);});
     });
 
     // The permanent introductory message is useful before the first click; after
