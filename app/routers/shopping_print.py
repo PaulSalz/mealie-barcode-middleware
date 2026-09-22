@@ -9,6 +9,7 @@ from app.services.niimblue import is_configured as niim_is_configured, print_ima
 from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
 from app.services.shopping_print import (
     load_print_settings,
+    save_category_aliases,
     save_category_order,
     save_print_settings,
     shopping_list_payload,
@@ -67,16 +68,25 @@ async def shopping_print_save_category_order(request: Request, db: Session = Dep
         return JSONResponse({"error": "JSON object required"}, status_code=400)
     list_id = str(body.get("list_id") or "").strip()
     order = body.get("category_order")
+    aliases = body.get("category_aliases", {})
     if not isinstance(order, list):
         return JSONResponse({"error": "category_order array required"}, status_code=400)
+    if not isinstance(aliases, dict):
+        return JSONResponse({"error": "category_aliases object required"}, status_code=400)
     available = {str(row.get("id")) for row in get_shopping_lists(force=False)}
     if not list_id or list_id not in available:
         return JSONResponse({"error": "Shopping list not found"}, status_code=404)
     try:
-        saved = save_category_order(db, list_id, order)
+        saved_order = save_category_order(db, list_id, order)
+        saved_aliases = save_category_aliases(db, list_id, aliases)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
-    return {"ok": True, "list_id": list_id, "category_order": saved}
+    return {
+        "ok": True,
+        "list_id": list_id,
+        "category_order": saved_order,
+        "category_aliases": saved_aliases,
+    }
 
 
 @router.post("/api/shopping-print/print")
