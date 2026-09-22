@@ -68,7 +68,7 @@
     }
 
     if (filterForm) {
-        filterForm.addEventListener('submit', function() {
+        function persistServerFilters() {
             var data = new FormData(filterForm);
             saveState({server: {
                 filter: String(data.get('filter') || 'all'),
@@ -76,6 +76,20 @@
                 sort: String(data.get('sort') || 'name'),
                 order: String(data.get('order') || 'asc')
             }});
+        }
+        filterForm.addEventListener('submit', persistServerFilters);
+
+        // The template historically used inline onchange handlers. The strict
+        // CSP correctly blocks inline JavaScript, so bind the filters here.
+        // requestSubmit() keeps one canonical GET form path and also runs the
+        // persistence handler above before navigation.
+        filterForm.querySelectorAll('select[name="filter"],select[name="label"],select[name="sort"],select[name="order"]').forEach(function(select) {
+            select.removeAttribute('onchange');
+            select.addEventListener('change', function() {
+                persistServerFilters();
+                if (typeof filterForm.requestSubmit === 'function') filterForm.requestSubmit();
+                else filterForm.submit();
+            });
         });
     }
 

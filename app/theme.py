@@ -21,7 +21,7 @@ THEME_DEFAULTS = {
 
 THEME_CHOICES = {
     "mode": ["light", "dark"],
-    "color": ["blue", "azure", "indigo", "purple", "pink", "red", "orange", "yellow", "lime", "green", "teal", "cyan"],
+    "color": ["blue", "azure", "indigo", "purple", "pink", "red", "orange", "yellow", "lime", "green", "teal", "cyan", "rainbow"],
     "font": ["sans-serif", "serif", "monospace", "comic", "dyslexia"],
     "base": ["slate", "gray", "zinc", "neutral", "stone"],
     "radius": ["0", "0.5", "1", "1.5", "2"],
@@ -103,7 +103,16 @@ def build_theme_css(theme: dict[str, str]) -> str:
     extra_rules: list[str] = []
 
     color = theme.get("color", THEME_DEFAULTS["color"])
-    if color != THEME_DEFAULTS["color"] and color in COLOR_CSS:
+    if color == "rainbow":
+        # Custom properties switch between six strong accent colors. The brand
+        # itself uses a continuously moving gradient for a smooth rainbow pass.
+        extra_rules.extend([
+            "@keyframes b2m-rainbow-accent{0%,100%{--tblr-primary:#d63939;--tblr-primary-rgb:214,57,57}16%{--tblr-primary:#f76707;--tblr-primary-rgb:247,103,7}33%{--tblr-primary:#f59f00;--tblr-primary-rgb:245,159,0}50%{--tblr-primary:#2fb344;--tblr-primary-rgb:47,179,68}66%{--tblr-primary:#17a2b8;--tblr-primary-rgb:23,162,184}83%{--tblr-primary:#ae3ec9;--tblr-primary-rgb:174,62,201}}",
+            ":root{animation:b2m-rainbow-accent 14s linear infinite}",
+            "@keyframes b2m-rainbow-brand-move{0%{background-position:0% 50%}100%{background-position:200% 50%}}",
+            ".b2m-brand-text{background:linear-gradient(90deg,#d63939,#f76707,#f59f00,#2fb344,#17a2b8,#4263eb,#ae3ec9,#d63939);background-size:200% 100%;background-clip:text;-webkit-background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent;animation:b2m-rainbow-brand-move 12s linear infinite}",
+        ])
+    elif color != THEME_DEFAULTS["color"] and color in COLOR_CSS:
         c = COLOR_CSS[color]
         props.extend([f"--tblr-primary:{c['hex']}", f"--tblr-primary-rgb:{c['rgb']}"])
 

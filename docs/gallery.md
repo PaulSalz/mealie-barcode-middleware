@@ -1,42 +1,10 @@
-# Screenshots & Photos
+# Screenshots
 
----
+This page is reserved for current UI screenshots and annotated workflow examples. The old hardware-build photo section has been removed together with the obsolete hardware build guide.
 
-## The Scanner
+## Current screenshots
 
-<p align="center">
-  <img src="images/case-mounted-booting.jpg" width="48%" alt="Scanner mounted under cabinet — booting">
-  &nbsp;
-  <img src="images/case-mounted-scanned.jpg" width="48%" alt="Scanner mounted — after a scan">
-</p>
-
-<p align="center">
-  <img src="images/case-detail-top-view.jpg" width="48%" alt="Case closed — top view">
-  &nbsp;
-  <img src="images/case-open-detail-top-view.jpg" width="48%" alt="Case open — top view">
-</p>
-
-<p align="center">
-  <img src="images/case-open-detail-bottom-view.jpg" width="48%" alt="Case open — bottom view">
-  &nbsp;
-  <img src="images/case-button-perfboard-detail-top-view.jpg" width="48%" alt="Button perfboard detail">
-</p>
-
-### Fusion 360 Design
-
-<p align="center">
-  <img src="images/fusion360-case-complete.jpg" width="32%" alt="Fusion 360 — complete case">
-  &nbsp;
-  <img src="images/fusion360-inset-and-button.jpg" width="32%" alt="Fusion 360 — inset and button">
-  &nbsp;
-  <img src="images/fusion360-inset-only.jpg" width="32%" alt="Fusion 360 — inset only">
-</p>
-
----
-
-## Web Dashboard
-
-> Screenshots adapt to your GitHub theme (light/dark).
+The existing dashboard, barcode, notification and label-generator screenshots remain useful as general orientation, but some controls have changed since they were captured.
 
 <p align="center">
   <picture>
@@ -78,10 +46,17 @@
   </picture>
 </p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="images/middleware-docs-dark.jpg">
-    <source media="(prefers-color-scheme: light)" srcset="images/middleware-docs-light.jpg">
-    <img src="images/middleware-docs-light.jpg" width="80%" alt="Built-in documentation">
-  </picture>
-</p>
+## Screenshots wanted
+
+The most useful next screenshots are:
+
+1. Dashboard with the current shopping-list and frequent-target cards.
+2. Barcode detail showing multiple Food/Recipe/Action targets.
+3. Action Request Builder with one Home Assistant example loaded.
+4. B21 editor with a selected text field and Typography controls.
+5. B21 roll/profile and calibration settings.
+6. Users page with granular Permissions.
+7. Personal appearance page, including Rainbow mode.
+8. Database/System data storage overview.
+
+Screenshots can be added later without changing the surrounding guides. Prefer matching light/dark pairs where practical and crop out tokens, webhook URLs and other secrets.

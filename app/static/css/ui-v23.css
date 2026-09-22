@@ -1,0 +1,45 @@
+/* v2026.09.22.2 — permissions, personal appearance and rainbow mode. */
+.b2m-rainbow-swatch,
+.bg-rainbow {
+  background: linear-gradient(135deg,#d63939 0%,#f76707 17%,#f59f00 33%,#2fb344 50%,#17a2b8 67%,#4263eb 83%,#ae3ec9 100%) !important;
+}
+.b2m-permission-list {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: .6rem;
+}
+.b2m-permission-option {
+  display: flex;
+  gap: .65rem;
+  align-items: flex-start;
+  padding: .75rem;
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  background: var(--tblr-bg-surface-secondary);
+}
+.b2m-permission-option .form-check-input { flex: 0 0 auto; margin-top: .2rem; }
+.b2m-permission-option strong,.b2m-permission-option small { display:block; }
+.b2m-permission-option small { color:var(--tblr-secondary-color); line-height:1.25; margin-top:.15rem; }
+.b2m-storage-breakdown {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:.75rem;
+}
+.b2m-storage-breakdown > div {
+  padding:.75rem;
+  border:1px solid var(--tblr-border-color);
+  border-radius:var(--tblr-border-radius);
+  background:var(--tblr-bg-surface-secondary);
+}
+.b2m-storage-breakdown small,.b2m-storage-breakdown strong {display:block;}
+.b2m-storage-breakdown strong {font-size:1.15rem;margin-top:.15rem;}
+
+/* The v4 wrapper becomes empty after v22 moves Frame and Threshold out. */
+#b21-v4-label-appearance:empty { display:none!important; }
+
+@media (max-width:767.98px){
+  .b2m-permission-list,.b2m-storage-breakdown{grid-template-columns:1fr;}
+}
+@media (prefers-reduced-motion: reduce){
+  .b2m-brand-text,:root{animation-duration:0.001ms!important;animation-iteration-count:1!important;}
+}
