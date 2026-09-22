@@ -90,7 +90,7 @@
   }
   function installLayerInspector(){
     const inspector=$('b21-v2-inspector'),select=$('b21-v2-element-select');if(!inspector||!select)return;
-    const header=inspector.firstElementChild;
+    const header=$('b21-v2-reset-all')?.parentElement||Array.from(inspector.children).find(node=>node.querySelector?.('#b21-v2-reset-all'));
     if(header){const title=header.querySelector('.fw-semibold'),subtitle=header.querySelector('.text-secondary.small');if(title)title.textContent='Layers';if(subtitle)subtitle.textContent='Visibility and stacking order. Select a layer to edit it below.';}
     select.classList.add('d-none');
     if(!$('b21-v24-layer-list')){
