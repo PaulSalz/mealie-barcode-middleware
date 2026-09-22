@@ -9,7 +9,8 @@ from app.admin_write_guard import AdminWriteGuardMiddleware
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
-from app.routers import actions, appearance_v3, barcodes, cache_recovery_v15, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scan_fast_v11, scanner, settings as settings_router, target_editor_v6, theme_preview_v2, version_api
+from app.permission_guard_v23 import PermissionGuardV23Middleware
+from app.routers import access_v23, actions, appearance_v3, barcodes, cache_recovery_v15, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scan_fast_v11, scanner, settings as settings_router, target_editor_v6, theme_preview_v2, version_api
 from app.scan_timing_v6 import ScanTimingMiddleware
 from app.services.scheduler import start_scheduler, stop_scheduler
 
@@ -77,6 +78,7 @@ app = FastAPI(title="Mealie Barcode Middleware", lifespan=lifespan, docs_url="/a
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CSRFOriginMiddleware)
 app.add_middleware(AdminWriteGuardMiddleware)
+app.add_middleware(PermissionGuardV23Middleware)
 app.add_middleware(LoginRequiredMiddleware)
 app.add_middleware(RememberMeSessionMiddleware, secret_key=get_session_secret(), max_age=settings.session_max_age_days * 24 * 3600)
 app.add_middleware(ScanTimingMiddleware)
@@ -109,4 +111,7 @@ app.include_router(labels.router, tags=["labels"])
 app.include_router(label_printer.router, tags=["labels", "printer"])
 app.include_router(actions.router, tags=["actions"])
 app.include_router(notifications.router, tags=["notifications"])
+# Personal appearance and granular permission APIs deliberately precede the
+# legacy settings router so /api/theme and /api/theme/mode are per-user.
+app.include_router(access_v23.router, tags=["access", "theme", "database"])
 app.include_router(settings_router.router, tags=["settings"])
