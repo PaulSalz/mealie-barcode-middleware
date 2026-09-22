@@ -106,6 +106,16 @@
   background: var(--tblr-primary) !important;
   box-shadow: 0 0 0 2px var(--tblr-bg-surface), 0 0 0 3px rgba(var(--tblr-primary-rgb), .5);
 }
+/* Threshold belongs to the print profile now. The legacy v4 preview used an
+   inline CSS filter which made the layout preview look different from the
+   actual vector/text editor. Keep the canvas clean; threshold is applied when
+   the raster print job is submitted. */
+#b21-label-stage .b21-element,
+#b21-label-stage .b21-v2-free-text,
+#b21-label-stage .b21-v2-line,
+#b21-label-stage .b21-label-frame {
+  filter: none !important;
+}
 #b21-v22-element-align .btn-group,
 #b21-v22-typography .btn-group {
   flex-wrap: nowrap;
