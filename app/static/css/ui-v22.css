@@ -1,0 +1,186 @@
+/* v2026.09.22.1 — Action request builder + B21 editor polish. */
+
+/* Action detail: keep all six summary cards aligned even when a label wraps. */
+.b2m-action-stat-row > [class*="col-"] {
+  display: flex;
+}
+.b2m-action-stat-row .card {
+  width: 100%;
+  height: 100%;
+}
+.b2m-action-stat-row .card-body {
+  width: 100%;
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+}
+.b2m-action-stat-row .card-body > .d-flex {
+  width: 100%;
+}
+
+.b2m-action-builder {
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius-lg, var(--tblr-border-radius));
+  background: var(--tblr-bg-surface-secondary);
+  padding: 1rem;
+}
+.b2m-action-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: .65rem;
+}
+.b2m-action-preset {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  min-width: 0;
+  padding: .7rem;
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  background: var(--tblr-bg-surface);
+  color: var(--tblr-body-color);
+  text-align: left;
+  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+.b2m-action-preset:hover,
+.b2m-action-preset:focus-visible {
+  border-color: rgba(var(--tblr-primary-rgb), .45);
+  background: var(--tblr-primary-lt);
+  outline: 0;
+}
+.b2m-action-preset.active {
+  border-color: var(--tblr-primary);
+  background: var(--tblr-primary-lt);
+  box-shadow: inset 0 0 0 1px rgba(var(--tblr-primary-rgb), .15);
+}
+.b2m-action-preset > span:last-child {
+  min-width: 0;
+}
+.b2m-action-preset strong,
+.b2m-action-preset small {
+  display: block;
+}
+.b2m-action-preset small {
+  margin-top: .1rem;
+  color: var(--tblr-secondary-color);
+  line-height: 1.25;
+}
+.b2m-action-builder .accordion-item {
+  background: var(--tblr-bg-surface);
+}
+.b2m-kv-editor {
+  display: grid;
+  gap: .45rem;
+}
+.b2m-kv-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, .9fr) 8rem minmax(12rem, 1.5fr) auto;
+  gap: .4rem;
+  align-items: center;
+}
+.b2m-action-json-preview {
+  max-height: 16rem;
+  overflow: auto;
+  padding: .75rem;
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  background: var(--tblr-bg-surface-secondary);
+  color: var(--tblr-body-color);
+  font-size: .78rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.b2m-v22-field-help {
+  margin-top: .35rem;
+}
+
+/* B21: selected object gets the same accent language as the resize handle. */
+#b21-label-stage [data-element-id].b21-v22-selected,
+#b21-label-stage [data-element-id].b21-v2-element-selected {
+  outline: 2px solid var(--tblr-primary) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 2px rgba(var(--tblr-primary-rgb), .10);
+}
+#b21-label-stage .b21-v2-resize-handle {
+  border-color: var(--tblr-primary) !important;
+  background: var(--tblr-primary) !important;
+  box-shadow: 0 0 0 2px var(--tblr-bg-surface), 0 0 0 3px rgba(var(--tblr-primary-rgb), .5);
+}
+/* Threshold belongs to the print profile now. The legacy v4 preview used an
+   inline CSS filter which made the layout preview look different from the
+   actual vector/text editor. Keep the canvas clean; threshold is applied when
+   the raster print job is submitted. */
+#b21-label-stage .b21-element,
+#b21-label-stage .b21-v2-free-text,
+#b21-label-stage .b21-v2-line,
+#b21-label-stage .b21-label-frame {
+  filter: none !important;
+}
+#b21-v22-element-align .btn-group,
+#b21-v22-typography .btn-group {
+  flex-wrap: nowrap;
+}
+#b21-v22-element-align .btn,
+#b21-v22-typography .btn {
+  min-width: 0;
+  flex: 1 1 0;
+}
+#b21-v22-typography .btn.active {
+  border-color: var(--tblr-primary);
+  background: var(--tblr-primary-lt);
+  color: var(--tblr-primary);
+}
+.b21-v22-frame-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .85rem;
+  border: 1px solid rgba(var(--tblr-primary-rgb), .25);
+  border-radius: var(--tblr-border-radius);
+  background: var(--tblr-primary-lt);
+}
+.b21-v22-frame-section .form-check {
+  margin: 0;
+  white-space: nowrap;
+}
+.b21-v22-profile-threshold {
+  margin-top: .25rem;
+  padding-top: .75rem;
+  border-top: 1px solid var(--tblr-border-color);
+}
+#b21-v2-inspector .b21-v2-range-wrap strong,
+#b21-v22-letter-spacing-value,
+#b21-v22-profile-threshold-value {
+  font-variant-numeric: tabular-nums;
+}
+#b21-v22-typography {
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  padding: .85rem;
+  background: var(--tblr-bg-surface-secondary);
+}
+
+@media (max-width: 991.98px) {
+  .b2m-action-preset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 767.98px) {
+  .b2m-kv-row {
+    grid-template-columns: 1fr 7rem auto;
+  }
+  .b2m-kv-row .b2m-kv-value {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .b2m-kv-row .b2m-kv-remove {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+@media (max-width: 479.98px) {
+  .b2m-action-preset-grid {
+    grid-template-columns: 1fr;
+  }
+}
