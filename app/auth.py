@@ -42,11 +42,15 @@ def _update_scanner_telemetry(request: Request, token: ApiToken, db: Session) ->
     if last_seen is not None and last_seen.tzinfo is not None:
         last_seen = last_seen.replace(tzinfo=None)
 
-    # A physical scan is the latency-sensitive path. The bridge heartbeat already
-    # writes full telemetry every minute, so repeated scans only need to refresh
-    # it occasionally instead of opening another SQLite writer transaction for
-    # every barcode.
+    # Physical scans are latency-sensitive. Keep the heavier heartbeat metadata
+    # throttled, but always copy the bridge's cumulative scan counter into the
+    # shared request session. The scan pipeline already commits an Activity for
+    # the scan, so this counter is persisted in that same transaction instead of
+    # opening another SQLite writer transaction just for telemetry.
     if request.url.path == "/scan" and last_seen and now - last_seen < timedelta(seconds=15):
+        scan_count = _header_int(request, "X-B2M-Scanner-Scans")
+        if scan_count is not None:
+            token.scanner_total_scans = scan_count
         return
 
     token.scanner_version = version[:64]
