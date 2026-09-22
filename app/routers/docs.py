@@ -14,88 +14,103 @@ router = APIRouter()
 
 DOCS_DIR = Path(__file__).resolve().parent.parent.parent / "docs"
 
-# Ordered list of docs with metadata for the index page
+# Ordered list of docs with metadata for the index page.
 DOCS_CATALOG = [
     {
         "slug": "middleware-setup",
         "title": "Middleware Setup",
-        "description": "Install, configure, and run the Mealie Barcode Middleware.",
+        "description": "Deploy B2M, connect Mealie, configure lookup sources, Home Assistant and runtime settings.",
         "icon": "ti-server",
         "group": "Getting Started",
     },
     {
         "slug": "using-the-app",
         "title": "Using the App",
-        "description": "First login, scanning, linking barcodes, Scan & Link mode, and daily use.",
+        "description": "Daily scanning, mappings, multi-target routing, Actions, labels and notifications.",
         "icon": "ti-player-play",
         "group": "Getting Started",
     },
     {
         "slug": "web-dashboard",
         "title": "Web Dashboard",
-        "description": "Navigate the UI: barcodes, items, settings, and activity.",
+        "description": "Reference for Dashboard, Barcodes, Items, Actions, Labels, Activity and Settings.",
         "icon": "ti-browser",
-        "group": "Scanning",
+        "group": "Getting Started",
     },
     {
         "slug": "barcode-workflow",
         "title": "How Barcode Scanning Works",
-        "description": "End-to-end flow from scan to shopping list.",
+        "description": "End-to-end scan pipeline, lookup/cache behavior, targets, shopping routes and retries.",
         "icon": "ti-arrows-right-left",
         "group": "Scanning",
     },
     {
         "slug": "mobile-apps",
         "title": "Mobile App Scanning",
-        "description": "Use BinaryEye (Android) or iOS Shortcuts as scanners.",
+        "description": "Use BinaryEye, iOS Shortcuts or another HTTP scanner client with B2M tokens.",
         "icon": "ti-device-mobile",
         "group": "Scanning",
     },
     {
-        "slug": "hardware-build",
-        "title": "Hardware Build Guide",
-        "description": "Assemble the ESP32 + GM67 barcode scanner.",
-        "icon": "ti-cpu",
-        "group": "Hardware",
+        "slug": "actions",
+        "title": "Actions & Home Assistant",
+        "description": "Create ACTION codes with the request builder and generated Home Assistant automations.",
+        "icon": "ti-bolt",
+        "group": "Automation & Labels",
+    },
+    {
+        "slug": "label-printing",
+        "title": "Labels & B21 Printing",
+        "description": "Generate codes, design B21 labels, manage rolls, typography, calibration and print jobs.",
+        "icon": "ti-printer",
+        "group": "Automation & Labels",
     },
     {
         "slug": "esphome-firmware",
         "title": "ESPHome Firmware",
-        "description": "Flash and configure the ESP32 firmware via ESPHome.",
+        "description": "Configure an ESPHome-based scanner client for B2M.",
         "icon": "ti-bolt",
-        "group": "Hardware",
+        "group": "Scanner Hardware",
     },
     {
         "slug": "scanner-configuration",
         "title": "Scanner Configuration (GM67)",
-        "description": "Program the GM67 module with setup barcodes.",
+        "description": "Program a GM67 module and verify the scanner data path.",
         "icon": "ti-qrcode",
-        "group": "Hardware",
+        "group": "Scanner Hardware",
+    },
+    {
+        "slug": "permissions",
+        "title": "Users, Permissions & Administration",
+        "description": "Per-user Appearance, printer access, Scan & Link control, database permissions and storage monitoring.",
+        "icon": "ti-shield-lock",
+        "group": "Administration",
     },
     {
         "slug": "troubleshooting",
         "title": "Troubleshooting",
-        "description": "Common issues, diagnostics, and fixes.",
+        "description": "Diagnostics for scanning, Mealie, Actions, B21 printing, permissions and UI behavior.",
         "icon": "ti-lifebuoy",
         "group": "Reference",
     },
     {
         "slug": "gallery",
         "title": "Screenshots & Photos",
-        "description": "Photos of the hardware build and web dashboard screenshots.",
+        "description": "Current screenshots and photos. UI screenshots can be replaced independently as the interface evolves.",
         "icon": "ti-photo",
         "group": "Reference",
     },
 ]
 
-# Build grouped structure for the index template
-_DOCS_GROUP_ORDER = ["Getting Started", "Scanning", "Hardware", "Reference"]
+_DOCS_GROUP_ORDER = ["Getting Started", "Scanning", "Automation & Labels", "Scanner Hardware", "Administration", "Reference"]
+
 
 def _build_docs_groups():
     groups = {g: [] for g in _DOCS_GROUP_ORDER}
     for doc in DOCS_CATALOG:
         groups[doc["group"]].append(doc)
     return [(g, groups[g]) for g in _DOCS_GROUP_ORDER if groups[g]]
+
 
 _slug_to_meta = {d["slug"]: d for d in DOCS_CATALOG}
 
@@ -108,18 +123,15 @@ _DOC_LINK_RE = re.compile(r'href="([a-z0-9_-]+)\.md(#[^"]*)?"')
 
 def _slugify(text: str) -> str:
     """Turn heading text into a URL-friendly anchor ID."""
-    text = _TAG_RE.sub("", text)  # strip inline HTML/tags
+    text = _TAG_RE.sub("", text)
     text = text.lower().strip()
-    text = re.sub(r"[^\w\s-]", "", text)  # remove punctuation
-    text = re.sub(r"[\s_]+", "-", text)   # spaces/underscores → hyphens
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
     return text.strip("-")
 
 
 def _render_with_toc(raw: str) -> tuple[str, list[dict]]:
-    """Render markdown and inject id attrs into h2 headings.
-
-    Returns (html, toc) where toc is a list of {id, text} for h2s only.
-    """
+    """Render markdown and inject id attrs into h2 headings."""
     html = _md(raw)
     toc: list[dict] = []
     seen: dict[str, int] = {}
@@ -128,29 +140,21 @@ def _render_with_toc(raw: str) -> tuple[str, list[dict]]:
         level = int(m.group(1))
         attrs = m.group(2)
         inner = m.group(3)
-
         if level != 2:
-            return m.group(0)  # leave non-h2 headings unchanged
-
+            return m.group(0)
         slug = _slugify(inner)
-        # Handle duplicate slugs
         if slug in seen:
             seen[slug] += 1
             slug = f"{slug}-{seen[slug]}"
         else:
             seen[slug] = 0
-
         toc.append({"id": slug, "text": _TAG_RE.sub("", inner).strip()})
         return f'<h2 id="{slug}"{attrs}>{inner}</h2>'
 
     html = _HEADING_RE.sub(_replace_heading, html)
-
-    # Rewrite inter-doc links: href="slug.md" → href="/docs/slug"
-    # Keeps .md links working on GitHub while resolving in the web UI.
     html = _DOC_LINK_RE.sub(
         lambda m: f'href="/docs/{m.group(1)}{m.group(2) or ""}"', html
     )
-
     return html, toc
 
 
@@ -172,8 +176,6 @@ def docs_detail(request: Request, slug: str):
         return templates.TemplateResponse(request, "404.html", status_code=404)
 
     raw = md_path.read_text(encoding="utf-8")
-
-    # Strip the first H1 heading — we render the title separately
     lines = raw.split("\n", 1)
     if lines[0].startswith("# "):
         raw = lines[1] if len(lines) > 1 else ""
