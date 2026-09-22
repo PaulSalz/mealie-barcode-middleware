@@ -1,11 +1,11 @@
-/* v2026.09.22.4 — examples keep the user's action name and mirror it into payload. */
+/* v2026.09.22.4 — example payloads mirror the user's action name. */
 (function(){
   'use strict';
   if(!(location.pathname==='/actions/new'||/^\/actions\/[^/]+$/.test(location.pathname))||window.__b2mActionV24Loaded)return;
   window.__b2mActionV24Loaded=true;
   const $=id=>document.getElementById(id);
   const field=name=>document.querySelector('[name="'+name+'"]');
-  let exampleActive=false;
+  let exampleActive=false,installed=false;
 
   function payloadRow(key){
     const root=$('action-v22-payload');
@@ -27,18 +27,16 @@
   }
 
   function install(){
-    const name=field('name');if(!name){setTimeout(install,80);return;}
+    const name=field('name'),buttons=Array.from(document.querySelectorAll('.b2m-action-preset[data-preset]'));
+    if(!name||!buttons.length){setTimeout(install,80);return;}
+    if(installed)return;installed=true;
     name.addEventListener('input',updatePayloadName);
-    document.querySelectorAll('.b2m-action-preset[data-preset]').forEach(button=>{
-      button.addEventListener('click',function(){
-        const keepName=name.value;
-        exampleActive=true;
-        setTimeout(function(){
-          if(name.value!==keepName){name.value=keepName;name.dispatchEvent(new Event('input',{bubbles:true}));name.dispatchEvent(new Event('change',{bubbles:true}));}
-          updatePayloadName();
-        },0);
-      });
-    });
+    buttons.forEach(button=>button.addEventListener('click',function(){
+      exampleActive=true;
+      // v22 first loads the example into the object editor. Add/update the
+      // human-readable Action name after that synchronous preset write.
+      setTimeout(updatePayloadName,0);
+    }));
     if(payloadRow('action_name'))exampleActive=true;
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,40),{once:true});else setTimeout(install,40);
