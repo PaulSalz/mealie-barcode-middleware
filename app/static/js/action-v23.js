@@ -10,7 +10,7 @@
     return String(value||'').trim().toLowerCase()
       .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
       .normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
-      .replace(/[^a-z0-9._-]+/g,'_').replace(/^[_-.]+|[_-.]+$/g,'').replace(/_+/g,'_');
+      .replace(/[^a-z0-9._-]+/g,'_').replace(/^[-_.]+|[-_.]+$/g,'').replace(/_+/g,'_');
   }
   function generatedId(name){const clean=slug(name);return clean?'action_'+clean:'action_';}
   function webhookPrefix(value){
