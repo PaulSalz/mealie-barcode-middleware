@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 _SETTINGS_KEY = "shopping_print.settings"
 _CATEGORY_ORDERS_KEY = "shopping_print.category_orders"
+_CATEGORY_ALIASES_KEY = "shopping_print.category_aliases"
 
 DEFAULT_PRINT_SETTINGS = {
     "paper_width_mm": 50.0,
@@ -29,6 +30,12 @@ DEFAULT_PRINT_SETTINGS = {
     "threshold": 145,
     # NIIMBOT paper type 3 = continuous stock (1 = gap/die-cut labels).
     "label_type": 3,
+    "show_checkboxes": True,
+    "show_item_names": True,
+    "show_quantities": True,
+    "show_item_dividers": False,
+    "show_category_dividers": True,
+    "category_divider_style": "solid",
 }
 
 _http = httpx.Client(
@@ -89,6 +96,13 @@ def _save_state_json(db: Session, key: str, value) -> None:
     db.commit()
 
 
+def _boolean(values: dict, name: str) -> bool:
+    value = values.get(name, DEFAULT_PRINT_SETTINGS[name])
+    if isinstance(value, str):
+        return value.strip().casefold() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 def load_print_settings(db: Session) -> dict:
     raw = _state_json(db, _SETTINGS_KEY, DEFAULT_PRINT_SETTINGS)
     if not isinstance(raw, dict):
@@ -117,6 +131,10 @@ def validate_print_settings(values: dict) -> dict:
             raise ValueError(f"{name} must be between {minimum} and {maximum}")
         return value
 
+    divider_style = str(values.get("category_divider_style") or DEFAULT_PRINT_SETTINGS["category_divider_style"]).strip().lower()
+    if divider_style not in {"solid", "dashed"}:
+        raise ValueError("category_divider_style must be solid or dashed")
+
     return {
         "paper_width_mm": round(number("paper_width_mm", 20, 80), 1),
         "margin_mm": round(number("margin_mm", 0, 8), 1),
@@ -128,6 +146,12 @@ def validate_print_settings(values: dict) -> dict:
         "density": integer("density", 1, 5),
         "threshold": integer("threshold", 1, 255),
         "label_type": integer("label_type", 1, 20),
+        "show_checkboxes": _boolean(values, "show_checkboxes"),
+        "show_item_names": _boolean(values, "show_item_names"),
+        "show_quantities": _boolean(values, "show_quantities"),
+        "show_item_dividers": _boolean(values, "show_item_dividers"),
+        "show_category_dividers": _boolean(values, "show_category_dividers"),
+        "category_divider_style": divider_style,
     }
 
 
@@ -172,6 +196,46 @@ def save_category_order(db: Session, list_id: str, order: list[str]) -> list[str
     rows = load_category_orders(db)
     rows[list_id] = clean
     _save_state_json(db, _CATEGORY_ORDERS_KEY, rows)
+    return clean
+
+
+def load_category_aliases(db: Session) -> dict[str, dict[str, str]]:
+    raw = _state_json(db, _CATEGORY_ALIASES_KEY, {})
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, dict[str, str]] = {}
+    for list_id, aliases in raw.items():
+        if not isinstance(aliases, dict):
+            continue
+        clean: dict[str, str] = {}
+        for source, alias in aliases.items():
+            source_name = str(source or "").strip()
+            alias_name = str(alias or "").strip()
+            if source_name and alias_name and alias_name.casefold() != source_name.casefold():
+                clean[source_name] = alias_name[:120]
+        result[str(list_id)] = clean
+    return result
+
+
+def save_category_aliases(db: Session, list_id: str, aliases: dict[str, str]) -> dict[str, str]:
+    list_id = str(list_id or "").strip()
+    if not list_id:
+        raise ValueError("Shopping list id is required")
+    if not isinstance(aliases, dict):
+        raise ValueError("category_aliases object required")
+    clean: dict[str, str] = {}
+    for source, alias in aliases.items():
+        source_name = str(source or "").strip()
+        alias_name = str(alias or "").strip()
+        if not source_name:
+            continue
+        if len(source_name) > 120 or len(alias_name) > 120:
+            raise ValueError("Category aliases may be at most 120 characters")
+        if alias_name and alias_name.casefold() != source_name.casefold():
+            clean[source_name] = alias_name
+    rows = load_category_aliases(db)
+    rows[list_id] = clean
+    _save_state_json(db, _CATEGORY_ALIASES_KEY, rows)
     return clean
 
 
@@ -310,6 +374,7 @@ def shopping_list_payload(db: Session, list_id: str) -> dict:
     items = get_open_shopping_items(str(list_id))
     categories = sorted({item["category"] for item in items}, key=str.casefold)
     configured = load_category_orders(db).get(str(list_id), [])
+    aliases = load_category_aliases(db).get(str(list_id), {})
     order = ordered_categories(categories, configured)
     index = {name.casefold(): position for position, name in enumerate(order)}
     items.sort(key=lambda item: (index.get(item["category"].casefold(), 9999), item["name"].casefold()))
@@ -320,4 +385,5 @@ def shopping_list_payload(db: Session, list_id: str) -> dict:
         "count": len(items),
         "categories": categories,
         "category_order": order,
+        "category_aliases": aliases,
     }
