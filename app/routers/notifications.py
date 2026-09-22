@@ -68,8 +68,10 @@ def activity_page(request: Request, result: str = Query("all"), db: Session = De
 
 @router.get("/api/activities")
 def get_activities(result: str = Query("all"), db: Session = Depends(get_db)):
-    activities = _activity_query(db, result).limit(200).all()
-    return {"items": [{
+    query = _activity_query(db, result)
+    count = query.count()
+    activities = query.limit(200).all()
+    return {"count": count, "items": [{
         "id": a.id, "barcode": a.barcode, "title": a.title, "message": a.message,
         "result": a.result, "is_read": a.is_read,
         "created_at": _relative_time(a.created_at), "created_at_absolute": _localtime(a.created_at),
