@@ -1,5 +1,11 @@
 /* v2026.09.22.2 — capability UI, storage metrics and small editor polish. */
 
+@property --tblr-primary {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #066fd1;
+}
+
 .bg-rainbow,
 .form-colorinput-color.bg-rainbow {
   background: linear-gradient(90deg,#e03131,#f08c00,#f2c037,#2fb344,#17a2b8,#4263eb,#ae3ec9,#d6336c,#e03131) !important;
@@ -10,6 +16,11 @@
   from { background-position: 0% 50%; }
   to { background-position: 260% 50%; }
 }
+
+/* v4 can recreate the old wrapper after v23's DOM cleanup because the label
+   editor is assembled asynchronously. Frame and Threshold both live elsewhere
+   now, so the legacy appearance wrapper is always obsolete. */
+#b21-v4-label-appearance { display: none !important; }
 
 /* ui-v9 re-normalizes the Printer nav several times after page load. This CSS
    keeps the navigation truthful even if that legacy normalizer runs after the
