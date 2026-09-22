@@ -4,6 +4,7 @@
   if(window.__b2mUiV24Loaded)return;window.__b2mUiV24Loaded=true;
   const $=id=>document.getElementById(id);
   const COLORS=['blue','azure','indigo','purple','pink','red','orange','yellow','lime','green','teal','cyan'];
+  const ITEMS_STATE_KEY='b2m-items-list-v2';
 
   async function json(url,options){const response=await fetch(url,Object.assign({headers:{Accept:'application/json'}},options||{}));const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||data.detail||('HTTP '+response.status));return data;}
 
@@ -39,11 +40,16 @@
     wrap.innerHTML='<label class="form-label">Buttons when Accent is Rainbow</label><select class="form-select" id="b2m-v24-rainbow-buttons-select"><option value="smooth">Smooth rainbow</option>'+COLORS.map(color=>'<option value="'+color+'">Fixed '+color[0].toUpperCase()+color.slice(1)+'</option>').join('')+'</select><div class="form-hint">The logo stays rainbow. E-paper mode disables rainbow animation completely.</div>';
     accent.appendChild(wrap);
     const select=$('b2m-v24-rainbow-buttons-select');select.value=value;
+    function syncControl(){
+      const current=currentProfileTheme(theme),disabled=current.epaper==='true';
+      select.disabled=disabled;wrap.classList.toggle('opacity-50',disabled);applyRainbow(current,select.value);
+    }
     select.addEventListener('change',async function(){
-      applyRainbow(currentProfileTheme(theme),this.value);
+      syncControl();
       try{await json('/api/appearance-v24',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({rainbow_buttons:this.value})});}catch(e){}
     });
-    document.querySelectorAll('input[name="theme_color"],input[name="theme_epaper"]').forEach(input=>input.addEventListener('change',()=>applyRainbow(currentProfileTheme(theme),select.value)));
+    document.querySelectorAll('input[name="theme_color"],input[name="theme_epaper"]').forEach(input=>input.addEventListener('change',syncControl));
+    syncControl();
   }
 
   function radiusClass(value){return 'b2m-radius-'+String(value).replace('.','_');}
@@ -82,18 +88,30 @@
     while(guard++<3&&(!button.classList.contains('active')||!button.classList.contains(order==='desc'?'desc':'asc')))button.click();
   }
 
+  function persistItemFilters(form){
+    try{
+      const state=JSON.parse(localStorage.getItem(ITEMS_STATE_KEY)||'{}')||{},data=new FormData(form);
+      state.server={
+        filter:String(data.get('filter')||'all'),label:String(data.get('label')||''),
+        sort:String(data.get('sort')||'name'),order:String(data.get('order')||'asc')
+      };
+      localStorage.setItem(ITEMS_STATE_KEY,JSON.stringify(state));
+    }catch(e){}
+  }
+
   function installAsyncItems(){
     if(location.pathname!=='/items')return;
     const form=$('items-filter-form');if(!form||form.dataset.b2mV24==='1')return;form.dataset.b2mV24='1';
     let requestId=0;
     async function load(){
+      persistItemFilters(form);
       const id=++requestId,params=new URLSearchParams(new FormData(form));
       const url='/items?'+params.toString();
       form.querySelectorAll('select').forEach(select=>select.disabled=true);
       try{
         const response=await fetch(url,{headers:{Accept:'text/html','X-B2M-Live':'1'}});if(!response.ok)throw new Error('HTTP '+response.status);
         const fresh=new DOMParser().parseFromString(await response.text(),'text/html');if(id!==requestId)return;
-        [['items-table-body','innerHTML'],['items-count','innerHTML'],['items-last-sync','innerHTML']].forEach(([target])=>{const from=fresh.getElementById(target),to=$(target);if(from&&to)to.innerHTML=from.innerHTML;});
+        ['items-table-body','items-count','items-last-sync'].forEach(target=>{const from=fresh.getElementById(target),to=$(target);if(from&&to)to.innerHTML=from.innerHTML;});
         const freshCfg=fresh.getElementById('items-page-config'),cfg=$('items-page-config');if(freshCfg&&cfg)Array.from(freshCfg.attributes).filter(a=>a.name.startsWith('data-')).forEach(a=>cfg.setAttribute(a.name,a.value));
         history.replaceState(null,'',url);
         if(window._itemsTable)window._itemsTable.reload();
@@ -114,6 +132,17 @@
       const grid=backup?.querySelector('.datagrid');if(!grid)return;
       const oldPath=Array.from(grid.querySelectorAll('.datagrid-title')).find(node=>node.textContent.trim()==='Path');if(oldPath)oldPath.textContent='Database path';
       const item=document.createElement('div');item.className='datagrid-item';item.id='b2m-v24-data-root';item.innerHTML='<div class="datagrid-title">Data root</div><div class="datagrid-content"><code class="text-break"></code></div>';item.querySelector('code').textContent=data.data_root||'—';grid.appendChild(item);
+      function normalizeBreakdown(){
+        const other=backup.querySelector('.b2m-storage-breakdown > div:nth-child(3) span');if(!other)return false;
+        if(other.textContent.trim()===String(data.data_root||'').trim()){
+          other.textContent='Persisted files outside SQLite';other.classList.remove('text-break');
+        }
+        return true;
+      }
+      if(!normalizeBreakdown()){
+        const observer=new MutationObserver(()=>{if(normalizeBreakdown())observer.disconnect();});observer.observe(backup,{childList:true,subtree:true});
+        setTimeout(()=>observer.disconnect(),3000);
+      }
     }catch(e){}
   }
 
