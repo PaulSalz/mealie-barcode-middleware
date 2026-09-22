@@ -15,9 +15,36 @@
 
     var draft = {key: '', name: '', qty: '', dirty: false};
     var restoring = false;
+    var valueDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
 
     function selectedKey() {
       return String(itemSelect.value || '');
+    }
+
+    function guardProgrammaticValue(input, field) {
+      if (!valueDescriptor || !valueDescriptor.get || !valueDescriptor.set) return;
+      Object.defineProperty(input, 'value', {
+        configurable: true,
+        enumerable: valueDescriptor.enumerable,
+        get: function () { return valueDescriptor.get.call(this); },
+        set: function (value) {
+          if (!restoring && draft.dirty && draft.key && selectedKey() === draft.key) {
+            return;
+          }
+          valueDescriptor.set.call(this, value);
+        }
+      });
+    }
+
+    guardProgrammaticValue(nameInput, 'name');
+    guardProgrammaticValue(qtyInput, 'qty');
+
+    function rawSet(input, value) {
+      if (!valueDescriptor || !valueDescriptor.set) {
+        input.value = value;
+        return;
+      }
+      valueDescriptor.set.call(input, value);
     }
 
     function captureDraft() {
@@ -38,8 +65,8 @@
     function restoreDraft() {
       if (!draft.dirty || !draft.key || selectedKey() !== draft.key) return;
       restoring = true;
-      if (nameInput.value !== draft.name) nameInput.value = draft.name;
-      if (qtyInput.value !== draft.qty) qtyInput.value = draft.qty;
+      if (nameInput.value !== draft.name) rawSet(nameInput, draft.name);
+      if (qtyInput.value !== draft.qty) rawSet(qtyInput, draft.qty);
       restoring = false;
     }
 
@@ -56,9 +83,9 @@
       }, true);
     }
 
-    /* The main page refreshes from Mealie every 2.5 s and rewrites the input
-       values from the saved override. Keep an unsaved draft authoritative while
-       its item remains selected. */
+    /* The main page refreshes from Mealie every 2.5 s and rewrites the editor.
+       The instance-level value guards above reject those writes while dirty; the
+       timer is a fallback for browsers that bypass the property setter. */
     window.setInterval(restoreDraft, 80);
 
     if (status) {
