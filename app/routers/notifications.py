@@ -78,6 +78,16 @@ def get_activities(result: str = Query("all"), db: Session = Depends(get_db)):
     } for a in activities]}
 
 
+@router.get("/api/dashboard/frequent")
+def dashboard_frequent(db: Session = Depends(get_db)):
+    # Reuse the dashboard's canonical aggregation so the live client and initial
+    # server render always rank targets identically.
+    from app.routers.dashboard import _frequent_targets
+
+    foods, recipes, actions = _frequent_targets(db)
+    return {"foods": foods, "recipes": recipes, "actions": actions}
+
+
 @router.post("/activities/mark-all-read")
 def activity_mark_all_read(db: Session = Depends(get_db)):
     db.query(Activity).filter(Activity.is_read == False).update({"is_read": True}); db.commit()
