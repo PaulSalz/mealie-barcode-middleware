@@ -1,214 +1,118 @@
 # Web Dashboard
 
-The middleware includes a full web UI built with [Tabler](https://tabler.io/) (vendored locally — no CDN calls). All pages are server-rendered with Jinja2 templates and enhanced with JavaScript for live updates.
-
-The web UI is protected by username/password login. On first run, you'll be prompted to create an admin account. Check **"Stay signed in"** on the login page to keep your session across browser restarts (duration controlled by `SESSION_MAX_AGE_DAYS`, default 7 days).
-
----
+B2M's web UI is server-rendered with Jinja2 and enhanced with JavaScript for live scan updates, interactive tables, label design, and settings. Static assets are bundled locally.
 
 ## Dashboard (`/`)
 
-The home page shows an at-a-glance overview of the system:
+The Dashboard combines operational status and scan history:
 
-- **Stats cards:** Total barcodes, linked, pending, unknown, retry queue depth
-- **Mealie status:** Connectivity check + last item sync time
-- **Recent scans:** The last 10 scanned barcodes with status badges
+- Mealie connectivity and last catalog sync
+- Scanner online/known counts
+- Retry queue depth
+- Barcode totals: all, linked, pending, and unknown
+- Current Mealie shopping-list item counts
+- Frequently used Foods, recipes, and Actions when enough history exists
+- Recent scan events including multi-target scans
 
-The dashboard auto-refreshes via AJAX. When a barcode is scanned, a **live toast notification** appears in the bottom-right corner via Server-Sent Events (SSE) — no page reload needed.
+The notification bell reacts as soon as a physical scanner request is received, before slower Mealie routing finishes. Scan results and other live UI changes are delivered with Server-Sent Events.
 
----
+When a user selects the **Rainbow** appearance mode, the Dashboard's `Mealie Barcode Middleware` brand uses a slow moving rainbow gradient and the primary accent cycles through the spectrum.
 
 ## Barcodes (`/barcodes`)
 
-The barcode list shows all known barcodes with filtering tabs:
+The barcode list is the identity/routing view for physical codes. Filters separate mapped, pending, unknown, and other states.
 
-| Tab     | Shows                                               |
-| ------- | --------------------------------------------------- |
-| All     | Every barcode the system has seen                   |
-| Linked  | Barcodes linked to a Mealie item                    |
-| Pending | Barcodes with a product title but no item link      |
-| Unknown | Barcodes not found in any external product database |
+A barcode detail page can contain more than one target. Targets may be:
 
-### Barcode Detail (`/barcodes/{barcode}`)
+- Food / Mealie item
+- Recipe
+- Action
 
-Each barcode has a detail page showing:
+Each target can have its own route, shopping-list destinations, quantity/unit information, recipe scale, ordering, and enabled state. Legacy single mappings are mirrored for compatibility, but the target list is the current routing model.
 
-- **Product info:** Title, brand, quantity, product type, lookup source
-- **Linked item:** The Mealie item this barcode maps to (if any)
-- **Fuzzy match candidates:** Top scoring Mealie items with match scores — useful for manual linking
-- **Item search:** Search Mealie items by name to find the right match
-
-**Actions available:**
-
-| Action        | Description                                                                |
-| ------------- | -------------------------------------------------------------------------- |
-| Link to item  | Link this barcode to an existing Mealie item                               |
-| Create & link | Create a new manual item and link it in one step                           |
-| Unlink        | Remove the barcode→item link                                               |
-| Retry lookup  | Re-query OpenFoodFacts/UPCDatabase (useful if TTL expired or API was down) |
-| Delete        | Remove the barcode, its link, and any retry queue entries                  |
-
----
+The detail page also exposes cached product metadata, lookup/retry controls, manual linking, and target editing.
 
 ## Items (`/items`)
 
-The items page shows all food items — both synced from Mealie and manually created.
+Items are synchronized Mealie Foods or local/manual entries. The table includes category, source, barcode count, scan count, last scan, and update time.
 
-- **Search** by name or aliases
-- **Barcode count** per item (how many barcodes are linked to it)
-- **Last sync** timestamp
-- **Manual sync** button to trigger an immediate Mealie catalog refresh
+The server filters support:
 
-### Item Detail (`/items/{item_id}`)
+- All items
+- With / without barcode
+- Scanned / never scanned
+- Mealie / custom source
+- Category
+- Sort field and ascending/descending order
 
-Shows all barcodes linked to this item, with the ability to unlink individual barcodes.
+The search field then filters the currently returned rows in the browser. Filter dropdowns use CSP-safe JavaScript listeners; no inline JavaScript is required.
 
-- **Mealie items** (`source=mealie`) cannot be deleted — they're managed by Mealie
-- **Manual items** (`source=manual`) can be deleted, which also removes their barcode links
+Item detail pages show barcode mappings, scan statistics, Food metadata, category/unit information, and shopping routing. Routing can use Mealie, Home Assistant, both, none, or the global/default behavior.
 
-### Adding Manual Items
+## Actions (`/actions`)
 
-Click "Add Item" on the items page. Manual items are useful for products that exist in external databases but not in your Mealie food catalog.
+Actions turn `ACTION:<id>` codes into configurable HTTP requests. The detail page contains execution statistics, a guided request builder, generated Home Assistant automation YAML, testing, cooldown/retry controls, and request history.
 
----
+New Actions default to Home Assistant webhook behavior. A display name can automatically produce an ID such as `action_kitchen_timer` and a matching webhook URL, while both fields remain manually overrideable.
+
+See [Actions & Home Assistant](actions.md) for the request-builder model and examples.
 
 ## Labels (`/labels`)
 
-The QR Label Generator creates printable `GENERIC:<text>` QR code labels for items that don’t have a barcode — produce, bulk goods, homemade items, etc.
+The generator supports generic codes, Foods, recipes, Actions, and raw custom codes. Output can be sent to the browser print layout or to a configured B21 Pro.
 
-**How it works:**
+The B21 editor provides:
 
-1. **Search** for an existing Mealie item by name, or type custom text (e.g. “Milk”, “Rice”)
-2. **Add** items to the label sheet — each gets a QR code preview
-3. Click **Register & Print** — the middleware registers all `GENERIC:` barcodes in the database (linking them to items if matched), then opens the browser print dialog
-4. **Stick** the printed labels on containers or shelves
+- Physical roll profiles and RFID/profile association
+- Drag/resize with live X/Y/Width/Height readout
+- Element alignment independent from text alignment
+- Font family, bold, italic, underline, invert, text alignment, vertical alignment, and letter spacing
+- Label frame control
+- Per-profile print threshold and calibration offsets
+- Snapshot-based queued print jobs
 
-When scanned, `GENERIC:Milk` is treated like any other barcode — it fuzzy-matches against your Mealie catalog and adds the item to the shopping list.
+See [Labels & B21 Printing](label-printing.md).
 
-> **Tip:** Labels linked to a Mealie item at creation time skip fuzzy matching entirely — they go straight to the shopping list on scan.
+## Activity and Notifications
 
----
+**Activity** is the chronological audit trail. It includes scan events, result status, barcode, target snapshots, and timestamps.
 
-## Activity Log (`/activities`)
-
-A chronological log of all scan events and system activity. Unlike the notification bell (which only shows unread items), the activity log shows everything.
-
-Filter tabs:
-
-| Tab      | Shows                 |
-| -------- | --------------------- |
-| All      | Everything            |
-| Added    | Successful additions  |
-| Unknown  | Unrecognized barcodes |
-| (others) | Filter by result type |
-
-**Actions:**
-
-- Mark all as read
-- Purge activity log (admin only, via Settings → Admin tab)
-
----
-
-## Notifications (Bell Icon)
-
-The navigation bar has a bell icon showing the count of unread notifications. Clicking it opens a dropdown with the most recent unread items.
-
-Notifications are created for events that may need your attention:
-
-| Type           | When                                                       |
-| -------------- | ---------------------------------------------------------- |
-| Unknown        | Barcode not found in any product database                  |
-| Auto-linked    | Fuzzy matching linked a barcode automatically — review     |
-| Not linked     | Product found but no Mealie item matched                   |
-| Retry failed   | Shopping list addition failed after all retries            |
-| Broken mapping | A Mealie item was deleted but barcodes still pointed to it |
-
-Each notification links to the barcode detail page where you can take action.
-
-Notifications are **deduplicated per barcode** — scanning the same unknown barcode 5 times creates only one notification, not five.
-
----
+The **notification bell** focuses on events that need attention. Notifications can be marked read or archived, while the Activity page retains the historical event stream until data is purged.
 
 ## Settings (`/settings`)
 
-### Configuration Tab
+Settings are capability-aware rather than globally admin-only.
 
-Displays all current configuration values, grouped into:
+### Appearance
 
-- Mealie Connection — read-only (set via environment variables)
-- Barcode Lookup Sources — source toggles are editable live
-- Matching & Sync — thresholds, intervals, and unknown barcode behavior are editable live
-- Scanning — unknown barcode handling and Scan & Link mode controls
-- System — timezone and log level are editable live
+Every user can manage personal Appearance settings. They are stored per user and include mode, accent, font, neutral palette, radius, accessibility/contrast settings, date presentation, and UI font size.
 
-Settings marked as editable can be changed directly in the UI without restarting the container. They’re saved to the database and override the env var value. A reset button next to each restores the env/default value. Read-only settings (Mealie URL, API key, DB path, port) can only be changed by editing `.env` and restarting.
+### Printer
 
-### Tokens Tab
+The Printer tab is visible when the account has the **Printer settings** capability. Normal users receive this capability by default; an administrator can disable it per user.
 
-Manage API tokens for scanner authentication:
+The page combines connection status, printer/model information, RFID data, and `niimblue-node` runtime configuration.
 
-- **Create:** Enter a name, click Create. The raw token is shown **once** — copy it immediately. It's stored as a bcrypt hash and cannot be recovered.
-- **Delete:** Revoke a token. The scanner using it will immediately stop being able to submit scans.
+### Configuration
 
-### Users Tab _(admin only)_
+Global integration/system configuration remains an administrative function. It contains Mealie, Home Assistant, lookup, matching, scanning, and system settings. Editable runtime values override environment defaults without rewriting the deployment file.
 
-Manage user accounts for the web dashboard:
+### Users
 
-- **Add user:** Set username (min 3 chars), password (min 8 chars), and admin flag.
-- **Change password:** Inline password field per user row. Admins can change any user’s password; non-admins can only change their own.
-- **Delete:** Remove a user. Admins cannot delete themselves.
+Administrators create users, change passwords, and edit normal-user capabilities in the **Access control** panel. Admin remains the unrestricted superuser.
 
-### Roles & Permissions
+### Database
 
-| Capability                                | Admin | User |
-| ----------------------------------------- | ----- | ---- |
-| View Dashboard, Barcodes, Items, Activity | ✓     | ✓    |
-| Link/unlink barcodes, create items        | ✓     | ✓    |
-| Access Settings page                      | ✓     | ✗    |
-| Create/delete API tokens                  | ✓     | ✗    |
-| Manage users                              | ✓     | ✗    |
-| Backup/purge/reset database               | ✓     | ✗    |
-| Change own password                       | ✓     | ✓    |
+Accounts with **Database administration** can view the Database tab. It now shows total persistent system-data usage in addition to the main SQLite file, including WAL/SHM and other files beside the database. Backup, selective purge, reset, and factory reset are protected by the same server-side capability.
 
-If an admin deletes a user or revokes their admin privileges, the change takes effect on the user’s next request — their active session is revalidated from the database.
+See [Users, Permissions & Administration](permissions.md).
 
-### Database Tab _(admin only)_
+## Real-Time Updates
 
-Backup, purge individual tables, or factory-reset the application data.
+The browser subscribes to B2M's SSE event stream. Live events power the scan receipt flash, toast/notification updates, pause-state changes, and selected table/dashboard refreshes.
 
----
+The UI should not be treated as the authorization boundary: destructive or capability-sensitive endpoints perform their own server-side checks.
 
-## Real-Time Updates (SSE)
+## Screenshots
 
-The web UI subscribes to a Server-Sent Events stream at `/events`. When a barcode is scanned anywhere, all open browser tabs receive:
-
-```
-event: scan
-data: {"barcode": "4088600550862", "result": "added", "item": "Oat Milk"}
-```
-
-This powers:
-
-- **Toast notifications** — "✓ Added: Oat Milk" appears briefly in the corner
-- **Live table refresh** — The dashboard's recent scans table updates automatically
-- **Notification bell update** — The unread count increments in real time
-
-No polling, no page reloads.
-
----
-
-## API Endpoints
-
-For integration with other tools or custom scripts:
-
-| Endpoint                 | Method | Auth    | Returns            |
-| ------------------------ | ------ | ------- | ------------------ |
-| `POST /scan`             | POST   | Bearer  | Scan result (JSON) |
-| `GET /health`            | GET    | None    | Health status      |
-| `GET /api/dashboard`     | GET    | Session | Dashboard stats    |
-| `GET /api/barcodes`      | GET    | Session | Barcode list       |
-| `GET /api/notifications` | GET    | Session | Unread alerts      |
-| `GET /api/activities`    | GET    | Session | Activity log       |
-| `GET /events`            | GET    | Session | SSE stream         |
-
-> **Session** = requires a logged-in browser session (cookie). These are not open APIs — calling them with `curl` without a session cookie will redirect to `/login`. Use `POST /scan` with a Bearer token for programmatic access.
+Screenshots in the documentation are illustrative and may lag a UI release. They can be replaced independently without changing the workflow documentation; current field names and behavior in the text are the reference when a screenshot differs.
