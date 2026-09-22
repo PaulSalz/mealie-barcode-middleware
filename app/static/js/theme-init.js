@@ -2,7 +2,7 @@
 (function() {
     'use strict';
 
-    var version = '2026.09.22.4';
+    var version = '2026.09.22.5';
     var override = localStorage.getItem('theme-mode-override');
     if (override) document.documentElement.setAttribute('data-bs-theme', override);
 
@@ -28,12 +28,8 @@
     stylesheet('/static/css/ui-v23.css');
     stylesheet('/static/css/ui-v24.css');
 
-    // Global theme.css is the deployment default; this user-scoped layer wins
-    // afterwards without changing another account's appearance.
-    var personalTheme = document.createElement('link');
-    personalTheme.rel = 'stylesheet';
-    personalTheme.href = '/user-theme.css?v=' + version;
-    document.head.appendChild(personalTheme);
+    // /user-theme.css is linked directly from base.html so it participates in
+    // render blocking and the first painted frame already uses the user's accent.
     fetch('/api/theme', {headers:{Accept:'application/json'}})
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(theme){ if(theme && (theme.mode === 'light' || theme.mode === 'dark')) document.documentElement.setAttribute('data-bs-theme', theme.mode); })
