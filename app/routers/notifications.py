@@ -8,6 +8,10 @@ from app.templating import _localtime, _relative_time, templates
 
 router = APIRouter()
 
+# Scan outcomes that represent an actual failed/degraded scan. Keep this shared
+# semantic for the Activity Errors tab and scanner-health error-scan count.
+ERROR_SCAN_RESULTS = ("error", "partial", "broken", "retry_failed", "action_disabled")
+
 
 @router.get("/api/notifications")
 def get_notifications(db: Session = Depends(get_db)):
@@ -52,6 +56,7 @@ def _activity_query(db: Session, result: str):
     query = db.query(Activity).order_by(Activity.created_at.desc())
     if result == "unread": query = query.filter(Activity.is_read == False)
     elif result == "added": query = query.filter(Activity.result.in_(["added", "added_as_note", "queued"]))
+    elif result == "errors": query = query.filter(Activity.is_scan_event == True, Activity.result.in_(ERROR_SCAN_RESULTS))
     elif result != "all": query = query.filter(Activity.result == result)
     return query
 
