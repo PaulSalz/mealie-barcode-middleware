@@ -19,10 +19,9 @@
     }
 
     var saved = loadState();
-    var params = new URLSearchParams(window.location.search);
     if (cfg && !window.location.search && saved.server) {
         var server = saved.server;
-        var differs = server.filter && server.filter !== 'all' || server.label || server.sort && server.sort !== 'name' || server.order && server.order !== 'asc';
+        var differs = (server.filter && server.filter !== 'all') || server.label || (server.sort && server.sort !== 'name') || (server.order && server.order !== 'asc');
         if (differs) {
             var restore = new URLSearchParams();
             restore.set('filter', server.filter || 'all');
@@ -68,7 +67,7 @@
     }
 
     if (filterForm) {
-        filterForm.addEventListener('submit', function() {
+        function rememberServerFilters() {
             var data = new FormData(filterForm);
             saveState({server: {
                 filter: String(data.get('filter') || 'all'),
@@ -76,6 +75,19 @@
                 sort: String(data.get('sort') || 'name'),
                 order: String(data.get('order') || 'asc')
             }});
+        }
+        filterForm.addEventListener('submit', rememberServerFilters);
+
+        // Inline onchange handlers are intentionally blocked by the app CSP.
+        // Bind the four server filters here so changing any select performs the
+        // same GET navigation without requiring unsafe-inline JavaScript.
+        filterForm.querySelectorAll('select[name="filter"],select[name="label"],select[name="sort"],select[name="order"]').forEach(function(select) {
+            select.removeAttribute('onchange');
+            select.addEventListener('change', function() {
+                rememberServerFilters();
+                if (typeof filterForm.requestSubmit === 'function') filterForm.requestSubmit();
+                else filterForm.submit();
+            });
         });
     }
 
