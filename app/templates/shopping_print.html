@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Shopping list print — Mealie Barcode Middleware{% endblock %}
+{% block content %}
+<div class="page-header d-print-none mb-3">
+  <div class="row g-2 align-items-center">
+    <div class="col">
+      <div class="page-pretitle">Shopping</div>
+      <h2 class="page-title">Print shopping list</h2>
+    </div>
+    <div class="col-auto btn-list">
+      <button type="button" class="btn btn-outline-secondary" id="shopping-print-refresh">
+        <i class="ti ti-refresh icon"></i> Refresh
+      </button>
+      <button type="button" class="btn btn-primary" id="shopping-print-button" disabled>
+        <i class="ti ti-printer icon"></i> Print list
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="row row-cards">
+  <div class="col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Shopping list</h3>
+          <p class="card-subtitle">Only unchecked Mealie items are printed.</p>
+        </div>
+        <div class="card-actions"><span id="shopping-print-printer-status" class="badge bg-secondary-lt">Checking printer…</span></div>
+      </div>
+      <div class="card-body">
+        <label class="form-label" for="shopping-print-list">List</label>
+        <select class="form-select" id="shopping-print-list" disabled>
+          <option>Loading shopping lists…</option>
+        </select>
+        <div class="d-flex align-items-center gap-2 mt-3 flex-wrap">
+          <span class="text-secondary" id="shopping-print-item-summary">—</span>
+          <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="shopping-print-connect">
+            <i class="ti ti-plug-connected icon"></i> Connect printer
+          </button>
+        </div>
+        <div class="form-hint mt-2" id="shopping-print-status"></div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Supermarket route</h3>
+          <p class="card-subtitle">Saved globally per shopping list. Move categories into the order you walk through the store.</p>
+        </div>
+      </div>
+      <div class="list-group list-group-flush" id="shopping-print-category-order">
+        <div class="list-group-item text-secondary">Choose a shopping list first.</div>
+      </div>
+      <div class="card-footer d-flex align-items-center gap-2">
+        <button type="button" class="btn btn-outline-primary" id="shopping-print-save-order" disabled>
+          <i class="ti ti-device-floppy icon"></i> Save route
+        </button>
+        <span class="form-hint" id="shopping-print-order-status"></span>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Global receipt settings</h3>
+          <p class="card-subtitle">Shared by all shopping lists. The paper height is calculated automatically from the content.</p>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label">Paper width</label>
+            <div class="input-group"><input class="form-control" type="number" min="20" max="80" step="0.5" id="sp-width"><span class="input-group-text">mm</span></div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Side margin</label>
+            <div class="input-group"><input class="form-control" type="number" min="0" max="8" step="0.1" id="sp-margin"><span class="input-group-text">mm</span></div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Text size</label>
+            <div class="input-group"><input class="form-control" type="number" min="2" max="5" step="0.1" id="sp-font"><span class="input-group-text">mm</span></div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Line gap</label>
+            <div class="input-group"><input class="form-control" type="number" min="0" max="3" step="0.1" id="sp-line-gap"><span class="input-group-text">mm</span></div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Category gap</label>
+            <div class="input-group"><input class="form-control" type="number" min="0" max="5" step="0.1" id="sp-category-gap"><span class="input-group-text">mm</span></div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Bottom margin</label>
+            <div class="input-group"><input class="form-control" type="number" min="0" max="10" step="0.1" id="sp-bottom-margin"><span class="input-group-text">mm</span></div>
+          </div>
+          <div class="col-4">
+            <label class="form-label">Density</label>
+            <input class="form-control" type="number" min="1" max="5" step="1" id="sp-density">
+          </div>
+          <div class="col-4">
+            <label class="form-label">Threshold</label>
+            <input class="form-control" type="number" min="1" max="255" step="1" id="sp-threshold">
+          </div>
+          <div class="col-4">
+            <label class="form-label">DPI</label>
+            <input class="form-control" type="number" min="100" max="1200" step="1" id="sp-dpi">
+          </div>
+          <div class="col-6">
+            <label class="form-label">NIIM label type</label>
+            <input class="form-control" type="number" min="1" max="20" step="1" id="sp-label-type">
+            <div class="form-hint">Set this once for the continuous-paper mode used by the printer.</div>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer d-flex align-items-center gap-2">
+        <button type="button" class="btn btn-outline-primary" id="shopping-print-save-settings">
+          <i class="ti ti-device-floppy icon"></i> Save global settings
+        </button>
+        <span class="form-hint" id="shopping-print-settings-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card sticky-lg-top shopping-print-preview-card">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Print preview</h3>
+          <p class="card-subtitle">Actual width follows the global paper setting; height grows with the list.</p>
+        </div>
+        <div class="card-actions"><span class="badge bg-blue-lt" id="shopping-print-paper-size">50 mm × —</span></div>
+      </div>
+      <div class="card-body shopping-print-preview-wrap">
+        <div class="shopping-print-paper-shell">
+          <canvas id="shopping-print-canvas" aria-label="Shopping list print preview"></canvas>
+        </div>
+        <div class="empty py-5" id="shopping-print-empty">
+          <div class="empty-icon"><i class="ti ti-shopping-cart icon icon-lg"></i></div>
+          <p class="empty-title">Select a shopping list</p>
+          <p class="empty-subtitle text-secondary">The receipt preview will appear here.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<link rel="stylesheet" href="/static/css/shopping-print.css?v={{ v }}">
+<script src="/static/js/shopping-print.js?v={{ v }}"></script>
+{% endblock %}

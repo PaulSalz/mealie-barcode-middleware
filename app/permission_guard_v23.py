@@ -13,6 +13,7 @@ _SAFE = {"GET", "HEAD", "OPTIONS"}
 # part of this guard; it protects session-authenticated UI mutations only.
 _RULES = [
     ("/labels/b21/", "printer"),
+    ("/api/shopping-print/", "printer"),
     ("/actions", "actions"),
     ("/api/actions/", "actions"),
     ("/items", "items"),
