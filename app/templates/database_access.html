@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Database — Mealie Barcode Middleware{% endblock %}
+{% block content %}
+<div class="page-header d-print-none mb-3"><div class="row g-2 align-items-center"><div class="col"><div class="page-pretitle">Administration</div><h2 class="page-title">Database & system data</h2><div class="text-secondary mt-1">Storage overview and destructive maintenance actions. Access is controlled by the Database administration permission.</div></div><div class="col-auto"><form method="post" action="/database/backup"><button class="btn btn-primary"><i class="ti ti-download icon"></i> Download database backup</button></form></div></div></div>
+
+<div class="row row-cards mb-3">
+  <div class="col-sm-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="subheader">System data</div><div class="h2 mb-1">{{ (admin_info.system_data_bytes / 1024 / 1024)|round(2) }} MB</div><div class="text-secondary small">{{ admin_info.file_count }} files under data directory</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="subheader">SQLite database</div><div class="h2 mb-1">{{ (admin_info.database_bytes / 1024 / 1024)|round(2) }} MB</div><div class="text-secondary small">Primary application database</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="subheader">Other system data</div><div class="h2 mb-1">{{ (admin_info.other_bytes / 1024 / 1024)|round(2) }} MB</div><div class="text-secondary small">Session secret and other persisted files</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="subheader">Data root</div><code class="small text-break">{{ admin_info.data_root }}</code></div></div></div>
+</div>
+
+<div class="card"><div class="card-header"><div><h3 class="card-title">Table usage</h3><p class="card-subtitle">Row counts and selective purge. Purging cannot be undone.</p></div></div><div class="table-responsive"><table class="table card-table table-vcenter"><thead><tr><th>Table</th><th>Rows</th><th class="w-1"></th></tr></thead><tbody>{% set rows=[('barcode_cache','Barcode cache'),('barcode_mappings','Barcode mappings'),('items','Items'),('activities','Activity log'),('retry_queue','Retry queue')] %}{% for key,label in rows %}<tr><td>{{ label }}<div class="text-secondary small"><code>{{ key }}</code></div></td><td><span class="badge bg-secondary-lt">{{ admin_info.tables[key] }}</span></td><td><form method="post" action="/database/purge/{{ key }}" data-confirm="Purge {{ label }}?" data-confirm-detail="All rows in this table will be removed."><button class="btn btn-sm btn-outline-warning" type="submit"><i class="ti ti-trash icon"></i> Purge</button></form></td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}
