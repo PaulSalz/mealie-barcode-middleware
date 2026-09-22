@@ -2,7 +2,7 @@
 (function() {
     'use strict';
 
-    var version = '2026.09.22.5';
+    var version = '2026.09.22.6';
     var override = localStorage.getItem('theme-mode-override');
     if (override) document.documentElement.setAttribute('data-bs-theme', override);
 
@@ -27,6 +27,7 @@
     stylesheet('/static/css/ui-v22.css');
     stylesheet('/static/css/ui-v23.css');
     stylesheet('/static/css/ui-v24.css');
+    stylesheet('/static/css/ui-v25.css');
 
     // /user-theme.css is linked directly from base.html so it participates in
     // render blocking and the first painted frame already uses the user's accent.
@@ -40,6 +41,7 @@
     script('/static/js/ui-v9.js');
     script('/static/js/ui-v23.js');
     script('/static/js/ui-v24.js');
+    script('/static/js/ui-v25.js');
 
     // Physical scanner receipt timing remains the early /scanner/received event.
     script('/static/js/ui-v12-bell.js');

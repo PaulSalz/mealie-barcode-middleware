@@ -1,0 +1,36 @@
+/* v25: scanner/status readability and lightweight operational controls. */
+
+.b2m-scan-link-card {
+  background: color-mix(in srgb, var(--tblr-orange, #f76707) 8%, var(--tblr-bg-surface, #fff));
+  border-color: color-mix(in srgb, var(--tblr-orange, #f76707) 34%, var(--tblr-border-color, #d9dbde));
+}
+
+.b2m-scan-link-card > .card-header,
+.b2m-scan-link-card > .card-body,
+.b2m-scan-link-card > .card-footer {
+  background: transparent !important;
+}
+
+.b2m-scan-link-card > .card-header {
+  border-bottom-color: color-mix(in srgb, var(--tblr-orange, #f76707) 22%, var(--tblr-border-color, #d9dbde));
+}
+
+#scanner-health-body-v4 a[data-b2m-error-scans],
+#scanner-health-body a[data-b2m-error-scans] {
+  text-decoration: none;
+}
+
+#scanner-health-body-v4 a[data-b2m-error-scans]:hover,
+#scanner-health-body a[data-b2m-error-scans]:hover {
+  text-decoration: underline;
+}
+
+#b2m-dashboard-mealie-sync {
+  flex: 0 0 auto;
+}
+
+html.b2m-epaper-v9 .b2m-scan-link-card,
+html.b2m-epaper .b2m-scan-link-card {
+  background: #fff !important;
+  border-color: #000 !important;
+}

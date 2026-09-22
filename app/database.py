@@ -150,12 +150,14 @@ def _migrate():
 
 
 def _backfill_barcode_targets() -> None:
-    """Copy each legacy mapping once into the additive multi-target table."""
+    """Keep legacy primary mappings and additive targets mutually recoverable."""
     insp = inspect(engine)
     tables = set(insp.get_table_names())
     if not {"barcode_mappings", "barcode_targets"}.issubset(tables):
         return
     with engine.begin() as conn:
+        # Forward compatibility for databases that still only contain a legacy
+        # mapping: materialize it as the first additive target.
         conn.execute(text("""
             INSERT INTO barcode_targets (
                 barcode, target_type, target_id, target_name, route,
@@ -172,5 +174,50 @@ def _backfill_barcode_targets() -> None:
             WHERE NOT EXISTS (
                 SELECT 1 FROM barcode_targets t WHERE t.barcode = m.barcode
             )
+        """))
+
+        # Older multi-target states can contain a valid enabled target but no
+        # BarcodeMapping mirror. Most current code routes by BarcodeTarget while
+        # some list/dashboard views still consume the legacy primary mapping.
+        # Recreate only a missing mirror from the first enabled target so both
+        # representations agree after startup.
+        conn.execute(text("""
+            INSERT INTO barcode_mappings (
+                barcode, target_type, target_id, target_name,
+                quantity, unit_id, recipe_scale, shopping_list_id,
+                mapped_by, created_at
+            )
+            SELECT
+                t.barcode,
+                t.target_type,
+                t.target_id,
+                t.target_name,
+                CASE
+                    WHEN t.target_type = 'food' AND (t.quantity IS NULL OR t.quantity <= 0.001) THEN 0.001
+                    ELSE COALESCE(t.quantity, 1.0)
+                END,
+                t.unit_id,
+                COALESCE(t.recipe_scale, 1.0),
+                NULL,
+                COALESCE(t.mapped_by, 'manual'),
+                COALESCE(t.created_at, CURRENT_TIMESTAMP)
+            FROM barcode_targets t
+            WHERE COALESCE(t.enabled, 1) = 1
+              AND NOT EXISTS (
+                  SELECT 1 FROM barcode_mappings m WHERE m.barcode = t.barcode
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM barcode_targets earlier
+                  WHERE earlier.barcode = t.barcode
+                    AND COALESCE(earlier.enabled, 1) = 1
+                    AND (
+                        COALESCE(earlier.position, 0) < COALESCE(t.position, 0)
+                        OR (
+                            COALESCE(earlier.position, 0) = COALESCE(t.position, 0)
+                            AND earlier.id < t.id
+                        )
+                    )
+              )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_barcode_targets_barcode ON barcode_targets (barcode)"))
