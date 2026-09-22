@@ -54,9 +54,11 @@
       var uptime = cells[4];
       var raw = uptime.dataset.b2mUptimeSeconds || uptime.textContent.trim();
       if (/^\d+$/.test(raw)) {
-        uptime.dataset.b2mUptimeSeconds = raw;
-        uptime.textContent = formatUptime(Number(raw));
-        uptime.title = Number(raw).toLocaleString() + ' seconds';
+        var formatted = formatUptime(Number(raw));
+        var title = Number(raw).toLocaleString() + ' seconds';
+        if (uptime.dataset.b2mUptimeSeconds !== raw) uptime.dataset.b2mUptimeSeconds = raw;
+        if (uptime.textContent.trim() !== formatted) uptime.textContent = formatted;
+        if (uptime.title !== title) uptime.title = title;
       }
     });
   }
