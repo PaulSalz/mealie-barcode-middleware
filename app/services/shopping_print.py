@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from copy import deepcopy
+from uuid import uuid4
 
 import httpx
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 _SETTINGS_KEY = "shopping_print.settings"
 _CATEGORY_ORDERS_KEY = "shopping_print.category_orders"
 _CATEGORY_ALIASES_KEY = "shopping_print.category_aliases"
+_LOCAL_CONTENT_KEY = "shopping_print.local_content"
 
 DEFAULT_PRINT_SETTINGS = {
     "paper_width_mm": 50.0,
@@ -31,7 +33,7 @@ DEFAULT_PRINT_SETTINGS = {
     # NIIMBOT paper type 3 = continuous stock (1 = gap/die-cut labels).
     "label_type": 3,
     "show_checkboxes": True,
-    "show_item_names": True,
+    "show_items": True,
     "show_quantities": True,
     "show_item_dividers": False,
     "show_category_dividers": True,
@@ -147,7 +149,7 @@ def validate_print_settings(values: dict) -> dict:
         "threshold": integer("threshold", 1, 255),
         "label_type": integer("label_type", 1, 20),
         "show_checkboxes": _boolean(values, "show_checkboxes"),
-        "show_item_names": _boolean(values, "show_item_names"),
+        "show_items": _boolean(values, "show_items"),
         "show_quantities": _boolean(values, "show_quantities"),
         "show_item_dividers": _boolean(values, "show_item_dividers"),
         "show_category_dividers": _boolean(values, "show_category_dividers"),
@@ -239,6 +241,70 @@ def save_category_aliases(db: Session, list_id: str, aliases: dict[str, str]) ->
     return clean
 
 
+def load_local_content(db: Session) -> dict[str, dict]:
+    raw = _state_json(db, _LOCAL_CONTENT_KEY, {})
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, dict] = {}
+    for list_id, content in raw.items():
+        if not isinstance(content, dict):
+            continue
+        comment = str(content.get("comment") or "").strip()[:2000]
+        entries = []
+        for row in content.get("entries") or []:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()[:160]
+            if not name:
+                continue
+            entries.append({
+                "id": str(row.get("id") or uuid4().hex)[:64],
+                "name": name,
+                "quantity_text": str(row.get("quantity_text") or "").strip()[:60],
+                "category": str(row.get("category") or "Extra").strip()[:120] or "Extra",
+            })
+            if len(entries) >= 100:
+                break
+        result[str(list_id)] = {"comment": comment, "entries": entries}
+    return result
+
+
+def save_local_content(db: Session, list_id: str, comment: str, entries: list[dict]) -> dict:
+    list_id = str(list_id or "").strip()
+    if not list_id:
+        raise ValueError("Shopping list id is required")
+    comment = str(comment or "").strip()
+    if len(comment) > 2000:
+        raise ValueError("List comment may be at most 2000 characters")
+    if not isinstance(entries, list):
+        raise ValueError("entries array required")
+    if len(entries) > 100:
+        raise ValueError("At most 100 print-only entries are supported per list")
+
+    clean_entries = []
+    for row in entries:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        quantity_text = str(row.get("quantity_text") or "").strip()
+        category = str(row.get("category") or "Extra").strip() or "Extra"
+        if not name:
+            continue
+        if len(name) > 160 or len(quantity_text) > 60 or len(category) > 120:
+            raise ValueError("Print-only entry is too long")
+        clean_entries.append({
+            "id": str(row.get("id") or uuid4().hex)[:64],
+            "name": name,
+            "quantity_text": quantity_text,
+            "category": category,
+        })
+
+    rows = load_local_content(db)
+    rows[list_id] = {"comment": comment, "entries": clean_entries}
+    _save_state_json(db, _LOCAL_CONTENT_KEY, rows)
+    return rows[list_id]
+
+
 def _category_name(row: dict, label_names: dict[str, str]) -> str:
     food = row.get("food") if isinstance(row.get("food"), dict) else {}
     candidates = [
@@ -311,6 +377,7 @@ def _normalized_item(row: dict, label_names: dict[str, str]) -> dict:
         "quantity_text": _quantity_text(row),
         "category": _category_name(row, label_names),
         "food_id": str(row.get("foodId") or ((row.get("food") or {}).get("id") if isinstance(row.get("food"), dict) else "") or ""),
+        "local_only": False,
     }
 
 
@@ -371,19 +438,30 @@ def shopping_list_payload(db: Session, list_id: str) -> dict:
     if not selected:
         raise ValueError("Shopping list not found")
 
-    items = get_open_shopping_items(str(list_id))
-    categories = sorted({item["category"] for item in items}, key=str.casefold)
-    configured = load_category_orders(db).get(str(list_id), [])
-    aliases = load_category_aliases(db).get(str(list_id), {})
+    list_id = str(list_id)
+    items = get_open_shopping_items(list_id)
+    local = load_local_content(db).get(list_id, {"comment": "", "entries": []})
+    local_entries = local.get("entries") or []
+    categories = sorted(
+        {item["category"] for item in items}
+        | {str(row.get("category") or "Extra") for row in local_entries},
+        key=str.casefold,
+    )
+    configured = load_category_orders(db).get(list_id, [])
+    aliases = load_category_aliases(db).get(list_id, {})
     order = ordered_categories(categories, configured)
     index = {name.casefold(): position for position, name in enumerate(order)}
     items.sort(key=lambda item: (index.get(item["category"].casefold(), 9999), item["name"].casefold()))
     return {
-        "id": str(list_id),
+        "id": list_id,
         "name": selected.get("name") or "Shopping list",
         "items": items,
-        "count": len(items),
+        "mealie_count": len(items),
+        "local_count": len(local_entries),
+        "count": len(items) + len(local_entries),
         "categories": categories,
         "category_order": order,
         "category_aliases": aliases,
+        "local_comment": local.get("comment") or "",
+        "local_entries": local_entries,
     }
