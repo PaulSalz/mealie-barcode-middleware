@@ -27,7 +27,8 @@ DEFAULT_PRINT_SETTINGS = {
     "dpi": 300,
     "density": 3,
     "threshold": 145,
-    "label_type": 1,
+    # NIIMBOT paper type 3 = continuous stock (1 = gap/die-cut labels).
+    "label_type": 3,
 }
 
 _http = httpx.Client(
@@ -267,12 +268,13 @@ def get_open_shopping_items(list_id: str) -> list[dict]:
             timeout=15,
         )
         response.raise_for_status()
+        payload = response.json()
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("Could not load Mealie shopping list %s for printing: %s", list_id, exc)
         raise RuntimeError(f"Could not load shopping list from Mealie: {exc}") from exc
 
     result = []
-    for row in _items(response.json()):
+    for row in _items(payload):
         if not isinstance(row, dict) or _checked(row):
             continue
         row_list_id = _row_list_id(row)
