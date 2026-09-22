@@ -11,6 +11,14 @@
   to { background-position: 260% 50%; }
 }
 
+/* ui-v9 re-normalizes the Printer nav several times after page load. This CSS
+   keeps the navigation truthful even if that legacy normalizer runs after the
+   capability-aware server navigation has rendered. */
+body:not([data-b2m-permissions*="printer_settings"]) a[href="/settings?tab=printing"],
+body:not([data-b2m-permissions*="printer_settings"]) a[href="/settings?tab=printer"] {
+  display: none !important;
+}
+
 .b2m-access-user {
   border: 1px solid var(--tblr-border-color);
   border-radius: var(--tblr-border-radius);
