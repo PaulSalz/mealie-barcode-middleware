@@ -4,13 +4,13 @@
 <div class="page-header d-print-none mb-3"><div class="row g-2 align-items-center"><div class="col"><h2 class="page-title">Activity</h2></div><div class="col-auto"><form method="post" action="/activities/mark-all-read" class="d-inline"><button type="submit" class="btn btn-secondary"><i class="ti ti-checks icon"></i>Mark all read</button></form></div></div></div>
 <div class="card-tabs">
 <ul class="nav nav-tabs" role="tablist">
-{% for value, label in [('all','All'),('unread','Unread'),('added','Added'),('needs_mapping','Not Linked'),('auto_mapped','Auto-linked'),('unknown','Unknown'),('broken','Broken'),('retry_failed','Failed')] %}<li class="nav-item"><a class="nav-link {{ 'active' if current_filter == value }}" href="/activities?result={{ value }}">{{ label }}</a></li>{% endfor %}
+{% for value, label in [('all','All'),('unread','Unread'),('added','Added'),('needs_mapping','Not Linked'),('auto_mapped','Auto-linked'),('unknown','Unknown'),('errors','Errors')] %}<li class="nav-item"><a class="nav-link {{ 'active' if current_filter == value }}" href="/activities?result={{ value }}">{{ label }}</a></li>{% endfor %}
 </ul>
 <div class="tab-content"><div class="card active show" role="tabpanel">
 <div class="card-header"><div class="row w-100"><div class="col"><h3 class="card-title mb-0">{{ activities|length }} event{{ 's' if activities|length != 1 }}</h3><p class="text-secondary small mb-0 mt-1">All scan events and notifications, newest first.</p></div><div class="col-md-auto col-sm-12"><div class="input-group input-group-flat w-auto"><span class="input-group-text"><i class="ti ti-search icon icon-1"></i></span><input id="activity-table-search" type="text" class="form-control" placeholder="Filter…" autocomplete="off"></div></div></div></div>
 <div class="table-responsive"><table class="table table-vcenter card-table table-hover" id="activity-table"><thead><tr><th><button class="table-sort" data-sort="sort-status">Status</button></th><th><button class="table-sort" data-sort="sort-barcode">Barcode</button></th><th><button class="table-sort" data-sort="sort-title">Title</button></th><th><button class="table-sort" data-sort="sort-message">Message</button></th><th><button class="table-sort active desc" data-sort="sort-time">Time</button></th></tr></thead>
 <tbody class="table-tbody" id="activity-tbody">
-{% for n in activities %}<tr class="cursor-pointer {{ '' if n.is_read else 'table-active' }}" data-href="/barcodes/{{ n.barcode|urlencode }}" data-bulk-id="{{ n.id }}">
+{% for n in activities %}<tr class="cursor-pointer" data-href="/barcodes/{{ n.barcode|urlencode }}" data-bulk-id="{{ n.id }}">
 <td class="sort-status">
 {% if n.result in ('retry_failed','broken','error','action_disabled') %}<span class="badge bg-red text-red-fg">{{ {'retry_failed':'Retry failed','broken':'Broken','error':'Error','action_disabled':'Action disabled'}.get(n.result, n.result) }}</span>
 {% elif n.result in ('unknown','unknown_action') %}<span class="badge bg-red text-red-fg">{{ 'Unknown action' if n.result == 'unknown_action' else 'Unknown' }}</span>
