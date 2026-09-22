@@ -47,7 +47,7 @@
       <div class="card-header">
         <div>
           <h3 class="card-title">Supermarket route</h3>
-          <p class="card-subtitle">Saved globally per shopping list. Move categories into the order you walk through the store.</p>
+          <p class="card-subtitle">Saved globally per shopping list. Reorder categories and optionally give them shorter print aliases.</p>
         </div>
       </div>
       <div class="list-group list-group-flush" id="shopping-print-category-order">
@@ -55,7 +55,7 @@
       </div>
       <div class="card-footer d-flex align-items-center gap-2">
         <button type="button" class="btn btn-outline-primary" id="shopping-print-save-order" disabled>
-          <i class="ti ti-device-floppy icon"></i> Save route
+          <i class="ti ti-device-floppy icon"></i> Save route & aliases
         </button>
         <span class="form-hint" id="shopping-print-order-status"></span>
       </div>
@@ -65,11 +65,53 @@
       <div class="card-header">
         <div>
           <h3 class="card-title">Global receipt settings</h3>
-          <p class="card-subtitle">Shared by all shopping lists. The paper height is calculated automatically from the content.</p>
+          <p class="card-subtitle">Shared by all shopping lists. Changes update the preview immediately.</p>
         </div>
       </div>
       <div class="card-body">
+        <div class="row g-3 mb-4">
+          <div class="col-12"><div class="subheader">Receipt contents</div></div>
+          <div class="col-sm-6">
+            <label class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="sp-show-checkboxes">
+              <span class="form-check-label">Checkboxes</span>
+            </label>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="sp-show-item-names">
+              <span class="form-check-label">Item names</span>
+            </label>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="sp-show-quantities">
+              <span class="form-check-label">Item quantities</span>
+            </label>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="sp-show-item-dividers">
+              <span class="form-check-label">Item separators</span>
+            </label>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="sp-show-category-dividers">
+              <span class="form-check-label">Category divider lines</span>
+            </label>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label mb-1" for="sp-category-divider-style">Category divider style</label>
+            <select class="form-select form-select-sm" id="sp-category-divider-style">
+              <option value="solid">Solid</option>
+              <option value="dashed">Dashed</option>
+            </select>
+          </div>
+        </div>
+
         <div class="row g-3">
+          <div class="col-12"><div class="subheader">Paper & typography</div></div>
           <div class="col-6">
             <label class="form-label">Paper width</label>
             <div class="input-group"><input class="form-control" type="number" min="20" max="80" step="0.5" id="sp-width"><span class="input-group-text">mm</span></div>
@@ -109,7 +151,7 @@
           <div class="col-6">
             <label class="form-label">NIIM label type</label>
             <input class="form-control" type="number" min="1" max="20" step="1" id="sp-label-type">
-            <div class="form-hint">Set this once for the continuous-paper mode used by the printer.</div>
+            <div class="form-hint">Continuous-paper mode defaults to type 3.</div>
           </div>
         </div>
       </div>
@@ -146,6 +188,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<link rel="stylesheet" href="/static/css/shopping-print.css?v={{ v }}">
-<script src="/static/js/shopping-print.js?v={{ v }}"></script>
+<link rel="stylesheet" href="/static/css/shopping-print.css?v={{ v }}&rev=2">
+<script src="/static/js/shopping-print.js?v={{ v }}&rev=2"></script>
 {% endblock %}
