@@ -10,7 +10,7 @@ from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
 from app.permission_guard_v23 import PermissionGuardV23Middleware
-from app.routers import access_v23, actions, appearance_v3, appearance_v24, barcodes, cache_recovery_v15, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scan_fast_v11, scanner, settings as settings_router, target_editor_v6, theme_preview_v2, version_api
+from app.routers import access_v23, actions, appearance_v3, appearance_v24, barcodes, cache_recovery_v15, dashboard, docs, health, integrations, items, label_printer, labels, login, notifications, recipes, runtime_features, scan, scan_fast_v11, scanner, settings as settings_router, shopping_print, target_editor_v6, theme_preview_v2, version_api
 from app.scan_timing_v6 import ScanTimingMiddleware
 from app.services.scheduler import start_scheduler, stop_scheduler
 
@@ -110,6 +110,7 @@ app.include_router(items.router, tags=["items"])
 app.include_router(recipes.router, tags=["recipes"])
 app.include_router(labels.router, tags=["labels"])
 app.include_router(label_printer.router, tags=["labels", "printer"])
+app.include_router(shopping_print.router, tags=["shopping", "printer"])
 app.include_router(actions.router, tags=["actions"])
 app.include_router(notifications.router, tags=["notifications"])
 # Personal appearance and granular permission APIs deliberately precede the
