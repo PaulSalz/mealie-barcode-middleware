@@ -79,6 +79,11 @@ class CapabilitySessionMiddleware(BaseHTTPMiddleware):
     """Keep signed-session capabilities synchronized with the current User row."""
 
     async def dispatch(self, request: Request, call_next):
+        # Static files neither render user data nor authorize mutations. Avoid a
+        # database lookup for every JS/CSS/icon request during page load.
+        if request.url.path.startswith("/static/"):
+            return await call_next(request)
+
         user_id = request.session.get("user_id")
         if user_id:
             db = SessionLocal()
