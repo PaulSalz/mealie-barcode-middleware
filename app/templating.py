@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from jinja2 import pass_context
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
@@ -32,7 +33,8 @@ _mtimes += "".join(
 )
 ASSET_VERSION = hashlib.md5(_mtimes.encode()).hexdigest()[:8]
 
-# Global theme cache — loaded once at startup, updated on save
+# Legacy/global theme cache remains as the inheritance source for users that
+# have not saved personal Appearance settings yet.
 _current_theme: dict[str, str] = dict(THEME_DEFAULTS)
 _current_theme_css: str = ""
 
@@ -59,20 +61,34 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
-def _localtime(value, fmt=None):
-    """Convert a UTC datetime to local time using the configured full-date style."""
+def _format_localtime(value, fmt=None, style: str | None = None):
     value = _as_utc(value)
     if not value:
         return "—"
     local = value.astimezone(_tz)
     if fmt:
         return local.strftime(fmt)
-    style = _current_theme.get("date_style", THEME_DEFAULTS["date_style"])
+    style = style or _current_theme.get("date_style", THEME_DEFAULTS["date_style"])
     if style == "short":
         return local.strftime("%d.%m.%y %H:%M")
     if style == "long":
         return f"{local.day}. {_GERMAN_MONTHS[local.month]} {local.year}, {local:%H:%M}"
     return local.strftime("%d.%m.%Y %H:%M")
+
+
+def _localtime(value, fmt=None):
+    """Python-side formatter used by routers and helpers."""
+    return _format_localtime(value, fmt)
+
+
+@pass_context
+def _localtime_filter(context, value, fmt=None):
+    """Jinja formatter using the signed session's per-user date preference."""
+    request = context.get("request")
+    style = None
+    if request is not None:
+        style = request.session.get("theme_date_style")
+    return _format_localtime(value, fmt, style)
 
 
 def _relative_time(value):
@@ -115,8 +131,15 @@ def _fromjson(value):
         return []
 
 
-templates.env.filters["localtime"] = _localtime
+def _get_user_theme(request):
+    from app.user_theme import theme_for_request
+
+    return theme_for_request(request)
+
+
+templates.env.filters["localtime"] = _localtime_filter
 templates.env.filters["relative_time"] = _relative_time
 templates.env.filters["fromjson"] = _fromjson
 templates.env.globals["v"] = ASSET_VERSION
 templates.env.globals["get_theme"] = get_cached_theme
+templates.env.globals["get_user_theme"] = _get_user_theme
