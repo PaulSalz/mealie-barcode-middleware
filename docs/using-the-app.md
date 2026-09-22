@@ -1,169 +1,86 @@
 # Using the App
 
-This guide walks you through the middleware from first login to daily use. It's written for someone who has already [deployed the middleware](middleware-setup.md) and wants to start scanning.
+This guide covers normal B2M use after deployment: scanner authentication, routing, Actions, labels and the parts of the UI you will use regularly.
 
----
+## First login and scanner token
 
-## First Login
+On a new installation create the initial administrator account, then configure at least one scanner token. Tokens authenticate scan clients with a Bearer token and can be revoked independently of web users.
 
-Open the middleware in your browser (default: `http://<host>:9930`). On first run you'll be prompted to create an admin account — pick a username and password, then log in.
+Administrators can create tokens under Settings. A token is shown in raw form once; store it in the scanner configuration rather than in a printed barcode.
 
-The **Dashboard** shows your system at a glance:
+## What happens when you scan
 
-- **Stats cards** — total barcodes, linked items, unknowns, retry queue
-- **Mealie status** — green means connected; if it's red, check your `MEALIE_URL` and `MEALIE_API_KEY` in the [configuration](middleware-setup.md#configuration)
-- **Recent scans** — the last 10 barcodes with status badges
+B2M first identifies the scanned code, then resolves its configured targets. A barcode can have one target or several enabled targets.
 
-If the Mealie status shows connected but the item count is zero, the middleware will sync on first startup. You can also trigger a manual sync from the [Items page](web-dashboard.md#items-items).
+Typical targets are:
 
----
+- **Food** — add a Mealie food/item to one or more shopping lists.
+- **Recipe** — add the selected Mealie recipe to the configured shopping-list destination.
+- **Action** — execute a reusable webhook Action such as a Home Assistant command.
 
-## Creating a Scan Token
+The notification bell gives immediate scanner-receipt feedback before slow Mealie or webhook work has finished. Final routing results appear later as scan toasts/activity entries.
 
-Before your scanner (ESP32, phone app, or shortcut) can submit barcodes, it needs an API token.
+## Unknown and unlinked barcodes
 
-1. Go to **Settings → Tokens**
-2. Enter a name (e.g. "Kitchen Scanner") and click **Create**
-3. Copy the token immediately — it's shown once and stored as a hash
+If a product cannot be resolved automatically, open its barcode detail page from the notification or barcode list. From there you can inspect lookup data, search items and create or change targets.
 
-Use this token as a Bearer token in your scanner's HTTP configuration. See [ESPHome Firmware](esphome-firmware.md) or [Mobile App Scanning](mobile-apps.md) for scanner-specific setup.
+Once a mapping/target is stored, future scans use the local identity first instead of repeating the full external lookup path.
 
----
+## Items
 
-## Your First Scan
+The Items page represents the local view of the Mealie food catalog plus any manually created items. Use the server-side Filter, Category, Sort and Order controls to narrow the data set; the search box filters the returned table rows immediately in the browser.
 
-Scan any barcode — a product from your kitchen works well. Here's what can happen:
+Item detail pages show linked barcodes and scan history. Users need the **Items** permission for write/sync operations.
 
-| What you see                  | What it means                                                                                                                     | What to do                                                                                                   |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **Green "Added" toast**       | The barcode was already linked to a Mealie item, or was auto-linked via fuzzy matching. The item was added to your shopping list. | Nothing — it worked! If it was auto-linked, review the match (see below).                                    |
-| **Yellow "Not Linked" toast** | The product was found in an external database (OpenFoodFacts, etc.) but couldn't be matched to a Mealie item.                     | Go to the barcode detail page and link it manually.                                                          |
-| **Red "Unknown" toast**       | The barcode wasn't found in any product database.                                                                                 | Go to the barcode detail page — you can retry the lookup, search for a Mealie item, or create a manual item. |
+## Scan & Link mode
 
-Live toast notifications appear in the corner of any page via Server-Sent Events — no page reload needed.
+Scan & Link mode is useful when registering a large number of physical products without adding them to shopping lists at the same time. Lookup, target resolution and activity logging continue, while shopping-list delivery is suppressed where the route respects the pause state.
 
----
+Access to pause/resume is controlled by the **Scanning controls** permission rather than being implicitly tied to every normal user.
 
-## Linking a Barcode to a Mealie Item
+## Generic and reusable labels
 
-When a barcode isn't linked, you'll see a notification in the **bell icon** (top-right). Click it to go to the barcode's detail page.
+For products or workflows without a manufacturer barcode, use the Label Generator. Generic labels can represent text identities, while Food, Recipe and Action entries create stable codes tied to the selected target.
 
-On the detail page you have several options:
+The queue can be printed through the browser or sent directly to a configured B21 Pro. See [Labels & B21 Pro Printing](b21-printing.md) for physical-label editing and printer settings.
 
-- **Fuzzy match candidates** — the middleware shows the top-scoring Mealie items. If one matches, click it to link.
-- **Item search** — search your Mealie catalog by name. Type "milk" and pick the right item.
-- **Create & link** — if the item doesn't exist in Mealie, create a manual item and link it in one step.
+## Actions
 
-Once linked, any future scan of that barcode goes straight to the shopping list — no lookup needed.
+Actions are useful when a scan should do something other than, or in addition to, shopping-list routing. The printed code is stable while the remote request remains editable.
 
-> **Tip:** The bell icon shows only items that need attention. Visiting a barcode's detail page automatically marks its notification as read.
+Common examples include a Home Assistant light command, TTS message, timer, automation trigger or generic structured data. See [Actions & Home Assistant](actions.md).
 
----
+## Notifications and Activity
 
-## Reviewing Auto-Linked Items
+The bell contains recent attention items; Activity is the longer-term audit trail. Repeated equivalent browser toasts are grouped within the configured grouping window.
 
-When fuzzy matching links a barcode automatically, it creates a notification flagged **"Auto-linked — review"**. The match might be wrong (e.g. "Organic Whole Milk" matched to "Coconut Milk").
+For troubleshooting, Activity is usually more useful than relying only on a phone notification because it records the middleware result and timing context.
 
-To review:
+## Personal appearance
 
-1. Click the notification in the bell dropdown
-2. Check the linked item on the detail page
-3. If correct — you're done, the notification is already cleared
-4. If wrong — click **Unlink**, then search for the right item and link it
+Every signed-in account can open **Personal appearance** from the tools/settings menu. Appearance is stored per user, so changing dark mode, accent or font does not change another user's UI.
 
-You can also check auto-linked items from the **Activity** page (filter by "Auto-linked" tab).
+Rainbow accent mode cycles the primary accent and applies a slow moving rainbow gradient to the Mealie Barcode Middleware brand. See [Users, Permissions & Appearance](permissions-appearance.md).
 
----
+## Permissions
 
-## Scan & Link Mode
+Ordinary accounts can be granted individual write capabilities. Printer access is intentionally separate from database/system administration, so a household user can work with labels and the B21 without receiving destructive database controls.
 
-### What it's for
+The UI hides or disables unavailable controls, but the write routes also enforce permissions server-side.
 
-When you first set up the system, you probably want to scan everything in your kitchen to build up barcode mappings. But normally every scan adds an item to your Mealie shopping list — that's the point. During initial setup, this floods your list with dozens of items you don't actually need to buy.
+## Recommended daily workflow
 
-**Scan & Link mode** solves this. It temporarily suspends all shopping list additions while keeping everything else running:
+1. Scan a product or workflow label.
+2. Check the immediate bell flash to confirm scanner delivery.
+3. For a normal mapped scan, no browser action is required.
+4. If a notification says the barcode needs mapping, open its detail page and assign the correct target.
+5. Use Activity when you need to verify what happened after routing.
+6. Use the Items, Actions and Labels pages for maintenance rather than changing printed codes unnecessarily.
 
-- Barcode lookups and caching still happen
-- Auto-linking still creates mappings
-- Notifications and HA webhooks still fire
-- The activity log records every scan
+## Next steps
 
-The only thing skipped is the shopping list POST to Mealie.
-
-### How to use it
-
-1. Open the **three-dot menu** (top-right) and click **Scan & Link Mode**
-2. Pick a duration: 5 min, 20 min, 1 hour, or 4 hours
-3. A **yellow banner** appears at the top of every page showing the countdown
-4. Start scanning — all your products get looked up and linked without touching the shopping list
-5. When you're done, click **Stop** in the banner or menu, or let the timer expire
-
-When the mode ends, a toast confirms: _"Scan & link ended — scans will now add to your list."_
-
-### When to use it
-
-- **Initial setup** — scan your entire pantry, fridge, and pantry staples
-- **Reorganizing** — scanning shelf labels without buying anything
-- **Testing** — trying out new barcode types or products
-
-### What happens to barcodes scanned during Scan & Link?
-
-They're fully processed. Check the **Barcodes** page afterward — you'll see all the products you scanned, with status badges showing which are linked, which need attention, and which are unknown. The activity log shows every scan with a "(scan & link)" label so you know it was during Scan & Link mode.
-
-> **Admin only:** Scan & Link mode can only be started by admin users. Non-admin users see the banner (so they understand why scans aren't adding to the list) but can't toggle it.
-
----
-
-## Making Labels for Unlabeled Items
-
-Some things don't have barcodes — produce, bulk bin items, homemade stock, spice jars. The **Labels** page lets you create QR code labels for these.
-
-1. Go to **Labels** (`/labels`)
-2. Search for a Mealie item (e.g. "Bananas") or type custom text
-3. Add items to the label sheet — each gets a QR code preview
-4. Click **Register & Print** — the middleware registers the barcodes and opens the browser print dialog
-5. Cut and stick the labels on containers or shelves
-
-Each label encodes a `GENERIC:<text>` barcode. When scanned, it fuzzy-matches against your Mealie catalog just like a regular barcode. Labels linked to a specific item at creation time skip fuzzy matching entirely.
-
-> **Tip:** Print on adhesive label paper for a clean result. Standard printer paper and tape works too.
-
----
-
-## Daily Use
-
-Once your barcodes are linked, the daily workflow is simple:
-
-1. **Run out of something** → scan the barcode (or QR label)
-2. The item appears on your **Mealie shopping list** within seconds
-3. Check the list when you're at the store
-
-### The Bell
-
-The bell icon in the navbar shows notifications for scans that need your attention. Typical reasons:
-
-- A new barcode was scanned that isn't linked yet
-- An auto-link happened that you should review
-- A retry failed after the middleware couldn't reach Mealie
-
-Click a notification to go to the barcode detail page and take action. Notifications are deduplicated — scanning the same unknown barcode repeatedly creates only one notification.
-
-### Activity Log
-
-The **Activity** page (`/activities`) shows a full chronological log of every scan event. Use the filter tabs to focus on specific result types (Added, Unknown, Auto-linked, etc.). This is your audit trail — useful for verifying that scans went through, especially after a bulk scanning session.
-
-### Push Notifications (Optional)
-
-If you've configured a Home Assistant webhook (`HA_WEBHOOK_URL`), you'll also get push notifications on your phone for scans that need attention. Tap the notification to open the barcode detail page in the middleware.
-
-When you resolve the issue — linking an unknown barcode, confirming an auto-link, or creating & linking a new item — the corresponding phone notification is automatically cleared.
-
-See [Middleware Setup — Push Notifications](middleware-setup.md#push-notifications-via-home-assistant) for configuration.
-
----
-
-## Next Steps
-
-- **[How Barcode Scanning Works](barcode-workflow.md)** — deep dive into the scan pipeline, lookup strategies, and fuzzy matching
-- **[Web Dashboard](web-dashboard.md)** — full reference for every page and setting
-- **[Troubleshooting](troubleshooting.md)** — common issues and fixes
+- [Barcode & Routing Workflow](barcode-workflow.md)
+- [Actions & Home Assistant](actions.md)
+- [Labels & B21 Pro Printing](b21-printing.md)
+- [Web Dashboard](web-dashboard.md)
+- [Troubleshooting](troubleshooting.md)
