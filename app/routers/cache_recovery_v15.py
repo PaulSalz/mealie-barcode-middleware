@@ -37,6 +37,18 @@ def _has_routable_barcode_state(barcode: str, db: Session) -> bool:
     return db.query(BarcodeTarget.id).filter(BarcodeTarget.barcode == barcode).first() is not None
 
 
+def _drop_stale_lookup_shell(barcode: str, db: Session) -> None:
+    """Remove old recovery shells that never represented a provider lookup."""
+    if not barcode.isdigit() or _has_routable_barcode_state(barcode, db):
+        return
+    cached = db.get(BarcodeCache, barcode)
+    if not cached:
+        return
+    if cached.source == "scan" and not cached.found and cached.lookup_attempted_at is None:
+        db.delete(cached)
+        db.commit()
+
+
 def _ensure_cache_shell(barcode: str, db: Session, *, only_if_known: bool = False) -> BarcodeCache | None:
     """Restore the local cache identity without doing any external product lookup.
 
@@ -95,8 +107,9 @@ def scan_with_cache_recovery(
     barcode = body.barcode.strip()
     if not barcode:
         raise HTTPException(status_code=422, detail="Barcode cannot be empty")
-    # Do not manufacture a cache miss for a genuinely new product barcode.
-    # legacy_scan._process_scan() interprets a missing cache row as "lookup now".
+    # Heal shells produced by the older recovery wrapper. Once removed, the
+    # legacy scan code sees cache=None and performs the configured provider lookup.
+    _drop_stale_lookup_shell(barcode, db)
     if _has_routable_barcode_state(barcode, db):
         _ensure_cache_shell(barcode, db)
     return scan_fast_v11.fast_scan_barcode(
