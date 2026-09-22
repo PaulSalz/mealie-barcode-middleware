@@ -1,5 +1,7 @@
 <!doctype html>
-{% set t = get_theme() %}
+{% set t = get_user_theme(request) %}
+{% set user_permissions = request.session.get('permissions') or [] %}
+{% set can_pause = request.session.get('is_admin') or 'pause_control' in user_permissions %}
 <html lang="en" data-bs-theme="{{ t.mode }}">
 <head>
     <meta charset="utf-8"/>
@@ -14,7 +16,7 @@
     <link rel="stylesheet" href="/static/css/app.css?v={{ v }}">
     <script src="/static/js/theme-init.js?v={{ v }}"></script>
 </head>
-<body>
+<body data-b2m-permissions="{{ user_permissions|join(',') }}">
     <div class="page">
         <!-- Pause banner (hidden by default, shown via JS when paused) -->
         <div class="system-banner bg-warning-lt d-none" id="pause-banner">
@@ -23,7 +25,7 @@
                 Scan & link mode — items won't be added to your Mealie shopping list. Resumes in
                 <strong id="pause-countdown"></strong>.
             </span>
-            {% if request.session.get('is_admin') %}
+            {% if can_pause %}
             <a href="#" class="badge bg-yellow-lt" id="pause-resume-btn">
                 <i class="ti ti-player-stop"></i> Stop
             </a>
@@ -36,7 +38,7 @@
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <div class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
-                    <a href="/" class="text-decoration-none d-inline-flex align-items-center">
+                    <a href="/" class="text-decoration-none d-inline-flex align-items-center{{ ' b2m-dashboard-brand' if request.url.path == '/' else '' }}">
                         <i class="ti ti-scan icon icon-md me-1"></i>
                         <span class="d-none d-md-inline">Mealie&nbsp;</span>Barcode Middleware
                     </a>
@@ -68,13 +70,14 @@
                                 <a class="dropdown-item{{ ' active' if request.url.path.startswith('/docs') }}" href="/docs">
                                     <i class="ti ti-book icon dropdown-item-icon"></i> Documentation
                                 </a>
-                                {% if request.session.get('is_admin') %}
+                                {% if request.session.get('username') %}
                                 <a class="dropdown-item{{ ' active' if request.url.path.startswith('/settings') }}" href="/settings">
                                     <i class="ti ti-settings icon dropdown-item-icon"></i> Settings
                                 </a>
+                                {% endif %}
+                                {% if can_pause %}
                                 <div class="dropdown-divider"></div>
-                                <a class="dropdown-item" href="#" id="pause-menu-item"
-                                   data-action="pause">
+                                <a class="dropdown-item" href="#" id="pause-menu-item" data-action="pause">
                                     <i class="ti ti-link-plus icon dropdown-item-icon"></i>
                                     <span id="pause-menu-text">Scan & Link Mode</span>
                                 </a>
@@ -158,7 +161,7 @@
                                 <span class="nav-link-title">Activity</span>
                             </a>
                         </li>
-                        {% if request.session.get('is_admin') %}
+                        {% if request.session.get('username') %}
                         <li class="nav-item d-md-none{{ ' active' if request.url.path.startswith('/settings') }}">
                             <a class="nav-link" href="/settings">
                                 <span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-settings icon icon-1"></i></span>
@@ -182,7 +185,7 @@
                                 <span class="nav-link-title">Light mode</span>
                             </a>
                         </li>
-                        {% if request.session.get('is_admin') %}
+                        {% if can_pause %}
                         <li class="nav-item d-md-none">
                             <a href="#" class="nav-link" id="pause-menu-item-mobile" data-action="pause">
                                 <span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-link-plus icon icon-1"></i></span>
@@ -244,8 +247,8 @@
         </div>
     </div>
 
-    <!-- Pause duration modal (admin-only, opened from three-dot menu) -->
-    {% if request.session.get('is_admin') %}
+    <!-- Pause duration modal, available only with Scan & Link capability. -->
+    {% if can_pause %}
     <div class="modal modal-blur fade" id="modal-pause" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
             <div class="modal-content">
