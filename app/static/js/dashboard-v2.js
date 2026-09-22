@@ -4,6 +4,7 @@
 
   var refreshTimer = null;
   var refreshing = false;
+  var pollTimer = null;
 
   function esc(value) {
     return String(value == null ? '' : value)
@@ -56,9 +57,12 @@
   }
 
   function refresh() {
-    if (refreshing) return;
+    if (refreshing || document.hidden) return;
     refreshing = true;
-    fetch('/api/dashboard', {headers: {Accept: 'application/json'}, cache: 'no-store'})
+    fetch('/api/dashboard?_=' + Date.now(), {
+      headers: {Accept: 'application/json', 'Cache-Control': 'no-cache'},
+      cache: 'no-store'
+    })
       .then(function (response) { return response.ok ? response.json() : null; })
       .then(function (data) {
         if (!data) return;
@@ -74,7 +78,16 @@
     refreshTimer = window.setTimeout(refresh, delay == null ? 650 : delay);
   }
 
-  window.addEventListener('b2m:scan', function () { scheduleRefresh(650); });
+  window.addEventListener('b2m:scan', function () { scheduleRefresh(350); });
+  window.addEventListener('focus', function () { scheduleRefresh(0); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) scheduleRefresh(0); });
+
+  function startPolling() {
+    clearInterval(pollTimer);
+    pollTimer = window.setInterval(function () {
+      if (!document.hidden) refresh();
+    }, 3000);
+  }
 
   function installRecentTableGuard() {
     var tbody = document.getElementById('recent-scans-body');
@@ -85,9 +98,11 @@
     }).observe(tbody, {childList: true});
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', installRecentTableGuard, {once: true});
-  } else {
+  function boot() {
     installRecentTableGuard();
+    startPolling();
   }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once: true});
+  else boot();
 })();
