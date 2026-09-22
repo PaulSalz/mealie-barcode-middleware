@@ -112,6 +112,17 @@ def _migrate():
         _add_column_if_missing("barcode_cache", "shopping_item_id", "VARCHAR", columns)
         _add_column_if_missing("barcode_cache", "custom_title", "VARCHAR", columns)
         _add_column_if_missing("barcode_cache", "custom_brand", "VARCHAR", columns)
+        # Older versions stored custom metadata without promoting an API-miss to
+        # a locally known product. Backfill those rows so they immediately become
+        # pending mappings after upgrade, without requiring another manual save.
+        with engine.begin() as conn:
+            conn.execute(text("""
+                UPDATE barcode_cache
+                SET found = 1
+                WHERE found = 0
+                  AND custom_title IS NOT NULL
+                  AND trim(custom_title) <> ''
+            """))
 
     if "items" in tables:
         columns = {c["name"] for c in insp.get_columns("items")}
