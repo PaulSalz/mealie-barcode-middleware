@@ -11,8 +11,8 @@
       <button type="button" class="btn btn-outline-secondary" id="shopping-print-refresh">
         <i class="ti ti-refresh icon"></i> Refresh
       </button>
-      <button type="button" class="btn btn-primary" id="shopping-print-button" disabled>
-        <i class="ti ti-printer icon"></i> Print list
+      <button type="button" class="btn btn-primary btn-lg px-4" id="shopping-print-button" disabled>
+        <i class="ti ti-printer icon"></i> Print shopping list
       </button>
     </div>
   </div>
@@ -24,7 +24,7 @@
       <div class="card-header">
         <div>
           <h3 class="card-title">Shopping list</h3>
-          <p class="card-subtitle">Only unchecked Mealie items are printed.</p>
+          <p class="card-subtitle">Open Mealie items plus optional print-only entries.</p>
         </div>
         <div class="card-actions"><span id="shopping-print-printer-status" class="badge bg-secondary-lt">Checking printer…</span></div>
       </div>
@@ -64,11 +64,53 @@
     <div class="card mb-3">
       <div class="card-header">
         <div>
+          <h3 class="card-title">Print-only content</h3>
+          <p class="card-subtitle">Stored only in B2M for this shopping list. Mealie is not changed.</p>
+        </div>
+      </div>
+      <div class="card-body">
+        <label class="form-label" for="shopping-print-local-comment">List comment</label>
+        <textarea class="form-control mb-3" rows="3" maxlength="2000" id="shopping-print-local-comment" placeholder="e.g. Remember reusable bags"></textarea>
+
+        <div class="subheader mb-2">Extra entries</div>
+        <div class="row g-2 align-items-end mb-3">
+          <div class="col-sm-5">
+            <label class="form-label">Name</label>
+            <input class="form-control" id="shopping-print-local-name" maxlength="160" placeholder="e.g. Flowers">
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label">Quantity</label>
+            <input class="form-control" id="shopping-print-local-qty" maxlength="60" placeholder="e.g. 2">
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label">Category</label>
+            <input class="form-control" id="shopping-print-local-category" maxlength="120" list="shopping-print-category-options" placeholder="Extra">
+            <datalist id="shopping-print-category-options"></datalist>
+          </div>
+          <div class="col-12">
+            <button type="button" class="btn btn-outline-secondary w-100" id="shopping-print-local-add"><i class="ti ti-plus icon"></i> Add print-only entry</button>
+          </div>
+        </div>
+        <div class="list-group mb-3" id="shopping-print-local-entries">
+          <div class="list-group-item text-secondary">No print-only entries.</div>
+        </div>
+      </div>
+      <div class="card-footer d-flex align-items-center gap-2">
+        <button type="button" class="btn btn-outline-primary" id="shopping-print-save-local" disabled>
+          <i class="ti ti-device-floppy icon"></i> Save print-only content
+        </button>
+        <span class="form-hint" id="shopping-print-local-status"></span>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header">
+        <div>
           <h3 class="card-title">Global receipt settings</h3>
           <p class="card-subtitle">Shared by all shopping lists. Changes update the preview immediately.</p>
         </div>
       </div>
-      <div class="card-body">
+      <div class="card-body shopping-print-content-switches">
         <div class="row g-3 mb-4">
           <div class="col-12"><div class="subheader">Receipt contents</div></div>
           <div class="col-sm-6">
@@ -79,8 +121,8 @@
           </div>
           <div class="col-sm-6">
             <label class="form-check form-switch mb-0">
-              <input class="form-check-input" type="checkbox" id="sp-show-item-names">
-              <span class="form-check-label">Item names</span>
+              <input class="form-check-input" type="checkbox" id="sp-show-items">
+              <span class="form-check-label">Items</span>
             </label>
           </div>
           <div class="col-sm-6">
@@ -92,7 +134,7 @@
           <div class="col-sm-6">
             <label class="form-check form-switch mb-0">
               <input class="form-check-input" type="checkbox" id="sp-show-item-dividers">
-              <span class="form-check-label">Item separators</span>
+              <span class="form-check-label">Item separator lines</span>
             </label>
           </div>
           <div class="col-sm-6">
@@ -188,6 +230,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<link rel="stylesheet" href="/static/css/shopping-print.css?v={{ v }}&rev=2">
-<script src="/static/js/shopping-print.js?v={{ v }}&rev=2"></script>
+<link rel="stylesheet" href="/static/css/shopping-print.css?v={{ v }}&rev=3">
+<script src="/static/js/shopping-print.js?v={{ v }}&rev=3"></script>
 {% endblock %}
