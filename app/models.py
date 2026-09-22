@@ -202,6 +202,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    permissions_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    appearance_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
