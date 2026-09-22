@@ -2,7 +2,7 @@
 (function() {
     'use strict';
 
-    var version = '2026.09.22.1';
+    var version = '2026.09.22.2';
     var override = localStorage.getItem('theme-mode-override');
     if (override) document.documentElement.setAttribute('data-bs-theme', override);
 
@@ -25,10 +25,12 @@
     stylesheet('/static/css/ui-v9.css');
     stylesheet('/static/css/ui-v17.css');
     stylesheet('/static/css/ui-v22.css');
+    stylesheet('/static/css/ui-v23.css');
 
     script('/static/js/ui-v4.js');
     script('/static/js/ui-v6.js');
     script('/static/js/ui-v9.js');
+    script('/static/js/ui-v23.js');
 
     // Physical scanner receipt timing remains the early /scanner/received event.
     script('/static/js/ui-v12-bell.js');
@@ -39,6 +41,7 @@
 
     if (window.location.pathname === '/actions/new' || /^\/actions\/[^/]+$/.test(window.location.pathname)) {
         script('/static/js/action-v22.js');
+        script('/static/js/action-v23.js');
     }
 
     if (window.location.pathname === '/labels') {
