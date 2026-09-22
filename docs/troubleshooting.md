@@ -1,251 +1,123 @@
 # Troubleshooting
 
-Common issues and their solutions, organized by component.
+Start with the component that actually failed: scanner receipt, B2M routing, Mealie, an Action/webhook, the B21 printer, or the browser UI. A successful scanner receipt does not imply that every downstream target has finished.
 
-| What’s happening?                                  | Jump to                                    |
-| -------------------------------------------------- | ------------------------------------------ |
-| ESP32 reboots, no scan data, hardware issues       | [Hardware / ESP32](#hardware--esp32)       |
-| Scans work but items don’t appear on shopping list | [Middleware](#middleware)                  |
-| Web UI blank, pages not loading, login issues      | [Web UI](#web-ui)                          |
-| ESPHome compile or flash errors                    | [ESPHome](#esphome)                        |
-| Phone scanning not working                         | [Mobile Apps](#mobile-apps-binaryeye--ios) |
+## Scan received but result is slow
 
----
+The notification bell flashes when B2M receives the physical scanner request. Food, recipe and webhook routing can finish later.
 
-## Hardware / ESP32
+Check Activity and the application logs to separate the phases. For recipe targets, Mealie's shopping-list recipe endpoint can dominate the total runtime even when Home Assistant delivery is already complete.
 
-| Symptom                            | Likely Cause                     | Fix                                                      |
-| ---------------------------------- | -------------------------------- | -------------------------------------------------------- |
-| ESP reboots when scanner fires     | 5 V rail sag → brownout          | Add/increase the 470 µF bulk cap; use a better USB cable |
-| Random reboots / won't boot        | Weak EN pull-up (knockoff board) | Add 10 kΩ pull-up + 100 nF cap on EN pin                 |
-| No barcode data received           | TX/RX wires swapped              | Swap the wires on GPIO16 ↔ GPIO17                        |
-| Garbage characters from scanner    | Baud rate mismatch               | Verify GM67 is set to 9600 baud                          |
-| WiFi keeps disconnecting           | Shared 5 V rail sag              | Bigger bulk cap; better USB power source                 |
-| Scanner LED doesn't turn on        | Insufficient USB current         | Use a phone charger (2 A+), not a PC USB port            |
-| Enters download mode randomly      | GPIO0 pulled LOW or EN glitch    | Check EN pin; don't connect anything to GPIO0            |
-| Works on bench, fails in enclosure | Overheating                      | Add ventilation holes to 3D-printed case                 |
-| Boot loops after flash             | GPIO12 pulled HIGH at boot       | Don't connect anything to GPIO12                         |
+If an Action is slow, inspect its recent execution duration and HTTP status. Increase **Read timeout** only when the remote endpoint really needs more time to return response data.
 
-### Watchdog Timer (WDT) Reboot
+## Mealie routing problems
 
-If the ESPHome log shows a WDT reset, the HTTP request to the middleware took too long. Check:
+If Mealie is unreachable, verify the URL from the Docker host/container network rather than from your browser. `localhost` inside the B2M container refers to B2M itself, not another container or host service.
 
-1. **Is the middleware running?** Open `http://your-middleware-ip:9930/health` in a browser
-2. **Are the external APIs slow?** The middleware has 5 s timeouts for OpenFoodFacts and UPCDatabase. In `failover` mode (default), at most two sequential API calls are made if the primary returns nothing — total up to 10 s plus Mealie time. In `complement` mode with `LOOKUP_ENRICH_IN_BACKGROUND=true` (default), only one API call blocks the response — the secondary call runs after the response is sent. If you set `LOOKUP_ENRICH_IN_BACKGROUND=false`, both calls are sequential and total time can approach 13 s. The ESP's HTTP timeout is 14 s, and the WDT is 15 s.
-3. **Is WiFi reception weak?** Check the RSSI value on the status screen (long-press button). Below -80 dBm is unreliable.
+Check the configured API key and shopping-list IDs. A 404/422 from Mealie usually indicates an invalid destination or payload rather than a scanner problem.
 
-### "Fault — Unknown" Crash
+For recipe scans, compare one destination list with multiple destination lists. Parallel requests can still contend inside Mealie or its database, so more concurrency is not automatically faster.
 
-If you see `Fault - Unknown` in the ESPHome log with a backtrace pointing to `esp_cpu_wait_for_intr`:
+## Item filters do not react
 
-- This is a memory corruption or exhaustion crash, not a clean timeout
-- Ensure `web_server:` is **not** in your config — it uses ~40–60 KB RAM under ESP-IDF
-- The config includes `sram1_as_iram: true` and `minimum_chip_revision: "3.0"` to optimize memory — make sure these are present
+The application uses a strict Content Security Policy and therefore must not depend on inline `onchange` JavaScript. Current versions bind Filter, Category, Sort and Order from `items-page.js`.
 
----
+If the controls appear dead after an update, hard-refresh once to remove an old cached script. The URL should then change to include the selected GET parameters.
 
-## Middleware
+## Action does not run
 
-### HTTP 500 on Re-Scan
+Check, in order:
 
-**Symptom:** First scan of a barcode works. Scanning the same barcode again returns HTTP 500.
+1. The account has the **Actions** permission for write/test operations.
+2. The Action is enabled.
+3. The webhook URL points at the intended endpoint.
+4. Home Assistant `webhook_id` matches the ID in the URL.
+5. Method and execution mode under Advanced are appropriate.
+6. The scan is not inside the Action cooldown window.
+7. The retry policy is safe for the action type.
 
-**Cause:** Timezone-aware vs timezone-naive datetime comparison in the TTL check. Fixed in commit `8709859`.
+The Action page's Test button bypasses normal scan cooldown/disabled handling where appropriate and reports HTTP status/duration.
 
-**Fix:** Update to the latest code and rebuild Docker.
+### Home Assistant example payload
 
-### Retry Queue Not Working
+The Request Builder examples are data contracts between B2M and your Home Assistant webhook automation. If you change field names in the builder, adjust the Home Assistant automation to read the same `trigger.json` keys.
 
-**Symptom:** Failed Mealie requests are never retried. Docker logs show:
+Do not expose Home Assistant webhook URLs in screenshots or public logs.
 
-```
-NameError: name 'utcnow' is not defined
-```
+## B21 printer problems
 
-**Cause:** Missing import in `scheduler.py`. Fixed in commit `8709859`.
+### Connect button does nothing
 
-**Fix:** Update to the latest code and rebuild Docker.
+Confirm the signed-in account has **Printer & labels** permission. Then check the niimblue-node service and Bluetooth adapter on the server.
 
-### Can't Reach Mealie
+Only one owner should control the printer at a time. Disconnect B2M/niimblue-node before opening a direct Web Bluetooth connection from niim.blue.
 
-**Symptom:** Health check shows `mealie_reachable: false`. Scans result in "queued".
+### Preview looks right but print is shifted
 
-Check:
+Use profile calibration offsets for whole-label physical alignment. Do not compensate for printer/media offset by moving every design element.
 
-1. Is `MEALIE_URL` correct? It should be the URL accessible from the Docker container (e.g. `http://your-mealie-ip:9925`, not `localhost`)
-2. Is the Mealie API key valid? Test with curl:
-   ```bash
-   curl -H "Authorization: Bearer YOUR_KEY" http://your-mealie-ip:9925/api/app/about
-   ```
-3. Are Mealie and the middleware on the same Docker network? If using Docker Compose, they need to be able to reach each other.
+### Text formatting differs from preview
 
-### Shopping List ID Not Found
+Current B21 printing rasterizes the selected typography settings before submitting the job. Hard-refresh after updating if the browser still has an old label script cached.
 
-**Symptom:** Scans succeed (HTTP 200) but nothing appears on the shopping list. Docker logs show Mealie returning 404 or 422.
+### Threshold appears to do nothing in the editor
 
-**Fix:** Double-check `MEALIE_SHOPPING_LIST_ID`. Open the shopping list in Mealie's web UI — the UUID is in the browser URL bar.
+That is expected. Threshold is a roll/profile raster setting and no longer alters the WYSIWYG layout preview. It is applied to the final B21 print job.
 
-### Fuzzy Matching Too Aggressive
+## Permission denied
 
-**Symptom:** Barcodes are auto-linked to the wrong Mealie items.
+Granular write permissions are enforced server-side. The browser also hides/disables common controls, but a stale page can still display a button that later receives HTTP 403.
 
-**Fix:** Increase `FUZZY_MATCH_THRESHOLD` (default 85) and/or `FUZZY_AMBIGUITY_GAP` (default 10). Setting the threshold to 90+ and gap to 15+ will make auto-linking more conservative. You can always manually link from the barcode detail page.
+Administrators can adjust permissions on the Users page. New ordinary users default to Printer & labels, Actions and Items; sensitive administration permissions are off.
 
-### Fuzzy Matching Too Conservative
+Database administration is independent of general system configuration.
 
-**Symptom:** Products are never auto-linked even when the correct Mealie item exists.
+## Appearance looks different between users
 
-**Fix:** Lower `FUZZY_MATCH_THRESHOLD` (try 75) and/or add **aliases** to your Mealie items. The fuzzy matcher checks both the item name and its aliases. For example, if your Mealie item is "Hafermilch" but the external database returns "Oat Milk", add "Oat Milk" as an alias.
+That is intentional. Appearance settings are stored per account. The global theme is only the fallback.
 
----
+If switching accounts in the same browser briefly shows the previous/global mode during load, the personal theme stylesheet and `/api/theme` response should correct it immediately. A hard refresh clears stale asset versions if necessary.
 
-## Web UI
+### Rainbow mode not animated
 
-### Dashboard Shows "Mealie: Unreachable"
+Check whether the operating system/browser has **Reduce motion** enabled. B2M respects `prefers-reduced-motion` and suppresses continuous rainbow animation in that case.
 
-Same as "Can't Reach Mealie" above. The dashboard polls `/health` which checks Mealie connectivity.
+## Database/storage growth
 
-### No Live Toast Notifications
+Open the Database page with an account that has **Database administration** permission. Compare total System data with the SQLite database size. The difference represents other files persisted in the B2M data directory.
 
-**Symptom:** Scanning a barcode doesn't show a toast in the browser.
+Use row counts to determine whether Activity, barcode cache or another table is growing. Purge operations are destructive and should be preceded by a database backup when the data matters.
 
-Check:
+## No live browser feedback
 
-1. Is the browser tab open? SSE only works with an active connection
-2. Open browser dev tools → Network → filter by "events". You should see an active SSE connection to `/events`
-3. If the connection keeps dropping, check if a reverse proxy is timing out idle connections
+Open browser developer tools and verify there is a long-lived `/events` Server-Sent Events request. Reverse proxies must allow streaming responses and should not aggressively buffer or terminate idle SSE connections.
 
-### Notifications Not Clearing
+The early bell receipt and final `scan` result are separate events. Seeing one but not the other narrows the problem considerably.
 
-**Symptom:** Bell icon shows a count but clicking "Mark all read" doesn't clear it.
+## Mobile scanner returns 401
 
-**Fix:** Hard-refresh the page (Ctrl+Shift+R). The notification count is updated via AJAX — a stale JavaScript cache can cause display issues.
+The scanner must send the raw API token, not its display name or token prefix. Tokens are shown in full only when created.
 
----
+If uncertain, create a new scanner token and update the client. Removing a token revokes it immediately.
 
-## ESPHome Build Errors
+## Mobile scanner returns 422
 
-### "CONFIG_ESP_TASK_WDT_TIMEOUT_S redefinition"
+Verify the endpoint and request format expected by the scanner integration. For JSON clients, ensure the decoded barcode/content field is present and the request uses the expected content type.
 
-**Cause:** Using `build_flags: -D CONFIG_ESP_TASK_WDT_TIMEOUT_S=15` with the Arduino framework. The flag conflicts with `sdkconfig.h`.
+## Docker/container does not start
 
-**Fix:** The config uses ESP-IDF framework with `sdkconfig_options` instead. Make sure your `esp32:` section has:
+Check the current container logs first. Common causes are malformed environment configuration, an unwritable persistent data directory, a port conflict or an unavailable dependency.
 
-```yaml
-esp32:
-  board: esp32dev
-  framework:
-    type: esp-idf
-    sdkconfig_options:
-      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "15"
-```
+The SQLite database and session data need a writable persistent directory. Avoid fixing permissions with broad world-writable access when normal UID/GID ownership can be used instead.
 
-### Font Download Failures
+## After updating
 
-**Symptom:** Build fails trying to download Google Fonts or the MDI icon font.
+For UI-heavy releases:
 
-**Fix:** These are downloaded once and cached by ESPHome. If your HA instance doesn't have internet access, download the fonts manually and use `file: type: local` instead of `type: web` or `gfonts://`.
+1. redeploy/restart the B2M container,
+2. load the new version,
+3. hard-refresh the browser once (`Ctrl+Shift+R`),
+4. confirm the version shown/API version matches the deployed release,
+5. reproduce the issue while watching Activity and container logs.
 
----
-
-## Mobile Apps
-
-### BinaryEye: 401 Unauthorized
-
-**Symptom:** Docker logs show `401 Unauthorized` for POST `/scan/app`.
-
-**Cause:** The Scanner ID in BinaryEye doesn't match any valid token.
-
-**Fix:**
-
-1. Make sure you're using the **raw token** (the long string shown once when you created it), not the token name
-2. Check for leading/trailing spaces — copy-paste carefully
-3. Verify the token still exists: middleware web UI → Settings → Tokens tab
-4. If in doubt, create a fresh token and re-paste it
-
-### BinaryEye: 422 Unprocessable Entity
-
-**Symptom:** Scan sends but returns 422.
-
-**Cause:** The `content` field is empty (BinaryEye scanned something it couldn't decode cleanly) or the Content-Type is wrong.
-
-**Fix:** Make sure BinaryEye is configured to send **POST JSON** (`application/json`). The other modes (GET, form-urlencoded) are not supported by `/scan/app`.
-
-### BinaryEye: Connection Refused / Timeout
-
-**Fix:**
-
-1. Is your phone on the same WiFi as the middleware? Mobile data won't reach a local IP.
-2. Check the URL: `http://your-middleware-ip:9930/scan/app` — note the port and path.
-3. Test from your phone's browser: open `http://your-middleware-ip:9930/health` — you should see a JSON response.
-4. Firewall: some routers block inter-device traffic. Check your router's "AP isolation" setting.
-
-### iOS Shortcut: "The request timed out"
-
-**Fix:** Same network check as above. Also ensure the URL doesn't have a trailing slash.
-
----
-
-## Home Assistant Notifications
-
-### No Push Notifications After Scanning
-
-**Check:**
-
-1. Is `HA_WEBHOOK_URL` set? Check the middleware web UI → Settings → System → Home Assistant.
-2. Is the URL correct? It should be `http://homeassistant.local:8123/api/webhook/YOUR-WEBHOOK-ID` (or your HA IP).
-3. Does the webhook ID match? The ID in the URL must match the `webhook_id` in the HA automation YAML.
-4. Is the HA automation enabled? Check Settings → Automations in HA.
-5. Is `MIDDLEWARE_BASE_URL` set? Without it, the notification's deep link will be a relative path (`/barcodes/...`) instead of a clickable URL.
-
-**Test the webhook manually:**
-
-```bash
-curl -X POST http://homeassistant.local:8123/api/webhook/barcode-scanner \
-  -H "Content-Type: application/json" \
-  -d '{"barcode":"0000000000000","item":"Test Item","result_type":"unknown","action_url":"http://your-middleware-ip:9930/barcodes/0000000000000"}'
-```
-
-If this triggers a notification, the webhook works and the issue is on the middleware side. Check Docker logs for `HA webhook` messages.
-
-### Duplicate Notifications (ESP32 + Webhook)
-
-If you previously used the ESPHome event-based automation (`esphome.barcode_scanned`), disable it. Notifications are now handled centrally by the middleware webhook — keeping both active will produce duplicates for ESP32 scans.
-
----
-
-## Docker
-
-### Container Won't Start
-
-Check the logs:
-
-```bash
-docker logs mealie-barcode-middleware 2>&1 | head -30
-```
-
-Common causes:
-
-- `.env` file missing or has syntax errors
-- Required variables (`MEALIE_URL`, `MEALIE_API_KEY`, `MEALIE_SHOPPING_LIST_ID`) not set
-- Port conflict — another service is already using port 9930
-
-### Database Permission Error
-
-**Symptom:** Container starts but crashes with a SQLite permission error.
-
-**Fix:** The container runs as a non-root user. The `/data` volume must be writable:
-
-```bash
-chmod 777 ./middleware-data  # or chown to UID 1000
-```
-
-### Health Check Failing
-
-**Symptom:** Docker reports the container as unhealthy.
-
-The health check calls `GET /health` every 30 seconds. If it fails:
-
-1. Check if uvicorn is running: `docker exec <container> ps aux`
-2. Check if the port is correct: the container listens on port 8000 internally, mapped to your chosen external port
-3. Check Docker logs for Python exceptions on startup
+For feature-specific guidance see [Actions & Home Assistant](actions.md), [Labels & B21 Pro Printing](b21-printing.md) and [Users, Permissions & Appearance](permissions-appearance.md).
