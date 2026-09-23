@@ -33,10 +33,85 @@ def main() -> None:
         page.get_by_role("button", name="Create account").click()
         page.wait_for_load_state("domcontentloaded")
 
+        # Navbar light/dark must update immediately and persist as the personal mode.
+        page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
+        with page.expect_response(lambda r: r.url.endswith("/api/appearance-v24/mode") and r.request.method == "POST", timeout=5_000) as dark_response:
+            page.locator("#theme-toggle-dark").click(force=True)
+        assert dark_response.value.ok
+        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'dark'", timeout=3_000)
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'dark'", timeout=3_000)
+
+        with page.expect_response(lambda r: r.url.endswith("/api/appearance-v24/mode") and r.request.method == "POST", timeout=5_000) as light_response:
+            page.locator("#theme-toggle-light").click(force=True)
+        assert light_response.value.ok
+        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'light'", timeout=3_000)
+
+        # Appearance preview must apply light/dark and e-paper before Save.
+        page.goto(f"{BASE_URL}/profile/appearance", wait_until="domcontentloaded", timeout=20_000)
+        page.locator('form[action="/profile/appearance"]').wait_for(state="visible", timeout=5_000)
+        epaper = page.locator('input[name="theme_epaper"]')
+        epaper.check()
+        page.wait_for_function("document.documentElement.classList.contains('b2m-epaper')", timeout=3_000)
+        page.wait_for_function(
+            "document.querySelector('#b2m-theme-v32-preview') && document.querySelector('#b2m-theme-v32-preview').textContent.includes('grayscale(1)')",
+            timeout=5_000,
+        )
+        page.locator('input[name="theme_mode"][value="dark"]').check()
+        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'dark'", timeout=3_000)
+        page.locator('input[name="theme_mode"][value="light"]').check()
+        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'light'", timeout=3_000)
+
+        # Build a deterministic two-label queue for editor/live-layer tests.
         page.goto(f"{BASE_URL}/labels", wait_until="domcontentloaded", timeout=20_000)
+        queue_payload = {
+            "queue": [
+                {"_id": "ci-label-1", "code": "12345678", "label": "CI Label One", "kind": "code128", "qty": 1},
+                {"_id": "ci-label-2", "code": "87654321", "label": "CI Label Two", "kind": "code128", "qty": 1},
+            ]
+        }
+        page.evaluate("payload => localStorage.setItem('b2m-label-generator-v2', JSON.stringify(payload))", queue_payload)
+        page.reload(wait_until="domcontentloaded")
         page.locator("#label-queue").wait_for(state="attached", timeout=5_000)
         page.locator("#label-editor-mode").wait_for(state="visible", timeout=5_000)
-        assert page.locator("#label-editor-mode").is_visible()
+        page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
+        page.locator('#b21-label-stage [data-element-id="label"]').wait_for(state="attached", timeout=5_000)
+
+        layer_switch = page.locator('[data-layer-visible="label"]')
+        assert layer_switch.is_checked()
+        layer_switch.uncheck()
+        page.wait_for_function("!document.querySelector('#b21-label-stage [data-element-id=\"label\"]')", timeout=3_000)
+        assert not page.get_by_text("Label / calibration", exact=True).is_visible()
+
+        # Current label only must use the canonical job endpoint, never v30 batch queue.
+        label_hits = {"batch": 0, "jobs_post": 0}
+
+        def handle_batch(route):
+            label_hits["batch"] += 1
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "quantity": 2}))
+
+        def handle_job_create(route):
+            label_hits["jobs_post"] += 1
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({"id": "ci-label-job"}))
+
+        def handle_job_status(route):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({"id": "ci-label-job", "status": "completed", "completed_pages": 1, "page_count": 1, "printed_labels": 1, "error": ""}),
+            )
+
+        page.route("**/labels/b21/print-batch-v30", handle_batch)
+        page.route("**/labels/b21/jobs", lambda route: handle_job_create(route) if route.request.method == "POST" else route.continue_())
+        page.route("**/labels/b21/jobs/ci-label-job", handle_job_status)
+        page.locator("#b21-v2-print-scope").select_option("current")
+        try:
+            with page.expect_request(lambda request: request.url.endswith("/labels/b21/jobs") and request.method == "POST", timeout=7_000):
+                page.locator("#label-niim-print").dispatch_event("click")
+        except PlaywrightTimeoutError as exc:
+            raise AssertionError(f"Current-label print did not reach canonical job endpoint; hits={label_hits!r}") from exc
+        assert label_hits["jobs_post"] == 1, label_hits
+        assert label_hits["batch"] == 0, label_hits
 
         page.goto(f"{BASE_URL}/actions/new", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="New action").wait_for(timeout=5_000)
