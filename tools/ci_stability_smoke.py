@@ -15,13 +15,17 @@ if str(ROOT) not in sys.path:
 
 from sqlalchemy import inspect
 
-# Import the delivery model before init_db so its table is part of Base.metadata.
+# Import models before init_db so their tables are part of Base.metadata.
 from app import models  # noqa: F401, E402
 from app import models_scan_delivery  # noqa: F401, E402
-from app.database import engine, init_db  # noqa: E402
+from app import models_scan_stats  # noqa: F401, E402
+from app.database import SessionLocal, engine, init_db  # noqa: E402
 from app.events import EventBus  # noqa: E402
+from app.models import Activity  # noqa: E402
+from app.models_scan_stats import ScanDailyStat  # noqa: E402
 from app.services.bounded_executor import BoundedExecutor, ExecutorSaturated  # noqa: E402
 from app.services.database_backup import create_verified_backup, remove_backup  # noqa: E402
+from app.services.scan_stats import ensure_scan_stats_backfilled  # noqa: E402
 
 
 def smoke_backup() -> None:
@@ -54,6 +58,47 @@ def smoke_delivery_table() -> None:
     init_db()
     tables = set(inspect(engine).get_table_names())
     assert "scan_deliveries" in tables, sorted(tables)
+
+
+def smoke_scan_aggregates() -> None:
+    init_db()
+    tables = set(inspect(engine).get_table_names())
+    assert "scan_daily_stats" in tables, sorted(tables)
+
+    db = SessionLocal()
+    try:
+        db.query(Activity).filter(Activity.barcode == "ci-stat-barcode").delete()
+        db.query(ScanDailyStat).filter(ScanDailyStat.target_id == "ci-stat-food").delete()
+        db.commit()
+
+        for _ in range(2):
+            db.add(Activity(
+                barcode="ci-stat-barcode",
+                title="CI scan",
+                message="CI Food",
+                result="added",
+                is_read=True,
+                is_dismissed=True,
+                is_scan_event=True,
+                target_type="food",
+                target_id="ci-stat-food",
+                target_name="CI Food",
+            ))
+            db.commit()
+
+        live = db.query(ScanDailyStat).filter(ScanDailyStat.target_id == "ci-stat-food").one()
+        assert live.count == 2, live.count
+    finally:
+        db.close()
+
+    # Rebuilding from raw history must be idempotent and preserve the same count.
+    ensure_scan_stats_backfilled()
+    db = SessionLocal()
+    try:
+        rebuilt = db.query(ScanDailyStat).filter(ScanDailyStat.target_id == "ci-stat-food").one()
+        assert rebuilt.count == 2, rebuilt.count
+    finally:
+        db.close()
 
 
 async def _event_bus_case() -> None:
@@ -92,6 +137,7 @@ def smoke_bounded_executor() -> None:
 def main() -> None:
     smoke_backup()
     smoke_delivery_table()
+    smoke_scan_aggregates()
     smoke_event_bus()
     smoke_bounded_executor()
     print("stability smoke ok")
