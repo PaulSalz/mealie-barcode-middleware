@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
+from app.i18n import template_language, template_translate
 from app.theme import THEME_DEFAULTS, build_theme_css
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -18,21 +19,11 @@ _GERMAN_MONTHS = (
     "Juli", "August", "September", "Oktober", "November", "Dezember",
 )
 
-# Cache-buster: short hash of JS/CSS modification times (recomputed on startup)
 _static_dir = BASE_DIR / "static"
-_mtimes = "".join(
-    str(f.stat().st_mtime_ns)
-    for f in sorted(_static_dir.rglob("*.js"))
-    if f.is_file()
-)
-_mtimes += "".join(
-    str(f.stat().st_mtime_ns)
-    for f in sorted(_static_dir.rglob("*.css"))
-    if f.is_file()
-)
+_mtimes = "".join(str(f.stat().st_mtime_ns) for f in sorted(_static_dir.rglob("*.js")) if f.is_file())
+_mtimes += "".join(str(f.stat().st_mtime_ns) for f in sorted(_static_dir.rglob("*.css")) if f.is_file())
 ASSET_VERSION = hashlib.md5(_mtimes.encode()).hexdigest()[:8]
 
-# Global theme cache — loaded once at startup, updated on save
 _current_theme: dict[str, str] = dict(THEME_DEFAULTS)
 _current_theme_css: str = ""
 
@@ -60,7 +51,6 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 
 def _localtime(value, fmt=None):
-    """Convert a UTC datetime to local time using the configured full-date style."""
     value = _as_utc(value)
     if not value:
         return "—"
@@ -76,34 +66,27 @@ def _localtime(value, fmt=None):
 
 
 def _relative_time(value):
-    """Compact human-readable age used consistently throughout the UI."""
     value = _as_utc(value)
     if not value:
         return "Never"
     seconds = max(0, int((datetime.now(timezone.utc) - value).total_seconds()))
     if seconds < 60:
         return "just now"
-
     minutes = seconds // 60
     if minutes < 60:
         return f"{minutes} min{'s' if minutes != 1 else ''} ago"
-
     hours = minutes // 60
     if hours < 24:
         return f"{hours} hr{'s' if hours != 1 else ''} ago"
-
     days = hours // 24
     if days < 7:
         return f"{days} day{'s' if days != 1 else ''} ago"
-
     weeks = days // 7
     if days < 35:
         return f"{weeks} week{'s' if weeks != 1 else ''} ago"
-
     months = max(1, days // 30)
     if days < 365:
         return f"{months} month{'s' if months != 1 else ''} ago"
-
     years = max(1, days // 365)
     return f"{years} year{'s' if years != 1 else ''} ago"
 
@@ -120,3 +103,6 @@ templates.env.filters["relative_time"] = _relative_time
 templates.env.filters["fromjson"] = _fromjson
 templates.env.globals["v"] = ASSET_VERSION
 templates.env.globals["get_theme"] = get_cached_theme
+templates.env.globals["t"] = template_translate
+templates.env.globals["tr"] = template_translate
+templates.env.globals["ui_language"] = template_language
