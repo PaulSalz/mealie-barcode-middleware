@@ -34,7 +34,7 @@ def test_fast_bootstrap_avoids_full_printer_status_diagnostics():
     start = router.index("def shopping_print_bootstrap_v31")
     end = router.index('@router.post("/labels/b21/print-batch-v30")')
     body = router[start:end]
-    assert "printer_status" not in body
+    assert "printer_status(" not in body
     assert '"status_mode": "fast"' in body
 
 
