@@ -38,7 +38,6 @@ GLOBAL_JS = (
     "js/ui-fixes-v30.js",
     "js/terminology-v30.js",
     "js/shopping-bootstrap-v31.js",
-    "js/shopping-fixes-v30.js",
     "js/ui-v12-bell.js",
 )
 LABEL_JS = (
