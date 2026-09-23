@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import tempfile
 import threading
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -26,6 +27,8 @@ from app.events import EventBus  # noqa: E402
 from app.models import ActionExecution, Activity  # noqa: E402
 from app.models_action_stats import ActionAggregate  # noqa: E402
 from app.models_scan_stats import ScanDailyStat  # noqa: E402
+from app.routers import shopping_print as shopping_print_router  # noqa: E402
+from app.services import mealie_extras  # noqa: E402
 from app.services.action_stats import (  # noqa: E402
     action_stats,
     ensure_action_stats_backfilled,
@@ -190,6 +193,40 @@ def smoke_performance_indexes() -> None:
     assert "ix_action_executions_action_created" in action_indexes, action_indexes
 
 
+def smoke_catalog_cache() -> None:
+    mealie_extras.clear_catalog_cache()
+    calls = 0
+    calls_lock = threading.Lock()
+    start = threading.Event()
+    results: list[list[dict]] = []
+
+    def loader():
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+        time.sleep(0.05)
+        return [{"id": "ci-label", "name": "CI Label"}]
+
+    def worker():
+        start.wait()
+        results.append(mealie_extras._cached("ci-catalog", loader))
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    start.set()
+    for thread in threads:
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+
+    assert calls == 1, calls
+    assert len(results) == 8, len(results)
+    assert all(rows == [{"id": "ci-label", "name": "CI Label"}] for rows in results)
+    # Shopping Print must consume the cached catalog rather than the direct
+    # Mealie get_labels() helper on every five-second list poll.
+    assert shopping_print_router.cached_labels is mealie_extras.cached_labels
+
+
 async def _event_bus_case() -> None:
     bus = EventBus(max_queue_size=2)
     event_queue = bus.subscribe()
@@ -229,6 +266,7 @@ def main() -> None:
     smoke_scan_aggregates()
     smoke_action_aggregates()
     smoke_performance_indexes()
+    smoke_catalog_cache()
     smoke_event_bus()
     smoke_bounded_executor()
     print("stability smoke ok")
