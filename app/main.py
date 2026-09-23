@@ -10,7 +10,7 @@ from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
 from app.permission_guard_v23 import PermissionGuardV23Middleware
-from app.routers import access_v23, actions, appearance_v3, appearance_v24, barcodes, cache_recovery_v15, dashboard, database_backup, docs, health, integrations, items, label_printer, labels, localization, login, notifications, recipes, runtime_features, scan, scan_fast_v11, scanner, settings as settings_router, shopping_print, target_editor_v6, theme_preview_v2, version_api
+from app.routers import access_v23, actions, appearance_v3, appearance_v24, barcodes, dashboard, database_backup, docs, health, integrations, items, label_printer, labels, localization, login, notifications, recipes, runtime_features, scan_gateway, scanner, settings as settings_router, shopping_print, target_editor_v6, theme_preview_v2, version_api
 from app.scan_timing_v6 import ScanTimingMiddleware
 from app.services.scheduler import start_scheduler, stop_scheduler
 
@@ -76,9 +76,9 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 app.include_router(version_api.router, tags=["system"])
 app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(docs.router, tags=["docs"])
-app.include_router(cache_recovery_v15.router, tags=["scan", "barcodes"])
-app.include_router(scan_fast_v11.router, tags=["scan"])
-app.include_router(scan.router, tags=["scan"])
+# All public scan entry points live in one router. scan.py and scan_fast_v11.py
+# are implementation modules and are deliberately not registered directly.
+app.include_router(scan_gateway.router, tags=["scan"])
 app.include_router(scanner.router, tags=["scanner"])
 app.include_router(integrations.router, tags=["integrations"])
 app.include_router(appearance_v3.router, tags=["ui"])
