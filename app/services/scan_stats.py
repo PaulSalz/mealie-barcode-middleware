@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, event, func, or_, text
+from sqlalchemy import and_, event, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -105,12 +105,7 @@ def _capture_scan_activity(_mapper, connection, activity: Activity) -> None:
 
 
 def ensure_scan_stats_backfilled() -> int:
-    """Build aggregates once for scan rows created before this feature existed.
-
-    A partial/crashed backfill is harmless: without the completion marker the
-    next startup clears the partial aggregate table and rebuilds it from raw scan
-    history before the application starts serving requests.
-    """
+    """Build aggregates once for scan rows created before this feature existed."""
     db = SessionLocal()
     processed = 0
     try:
@@ -152,12 +147,6 @@ def ensure_scan_stats_backfilled() -> int:
 
 
 def _recent_target_filter(target_type: str, target_id: str):
-    """Match primary and multi-target raw scan snapshots for recent-history UI.
-
-    New statistics never depend on this JSON search; it is used only for the
-    bounded list of recent raw Activity rows kept for human-readable history.
-    IDs created by B2M/Mealie contain no quotes; LIKE wildcards are escaped.
-    """
     escaped = (
         str(target_id)
         .replace("\\", "\\\\")
@@ -222,7 +211,6 @@ def target_scan_stats(
 
     return {
         "total": int(total or 0),
-        # Daily aggregates intentionally define these as UTC calendar-day windows.
         "days_7": int(days_7 or 0),
         "days_30": int(days_30 or 0),
         "last_scan": last_scan,
@@ -254,37 +242,47 @@ def target_usage_summary(db: Session, target_type: str) -> dict[str, dict]:
 
 
 def frequent_targets(db: Session, target_type: str, limit: int = 6) -> list[dict]:
-    """Return the most-used targets without scanning raw Activity history."""
-    rows = (
+    """Return the most-used targets in one SQL query, independent of raw history size."""
+    aggregate = (
         db.query(
-            ScanDailyStat.target_id,
+            ScanDailyStat.target_id.label("target_id"),
             func.sum(ScanDailyStat.count).label("uses"),
             func.max(ScanDailyStat.last_scan).label("last_scan"),
         )
         .filter(ScanDailyStat.target_type == target_type)
         .group_by(ScanDailyStat.target_id)
-        .order_by(func.sum(ScanDailyStat.count).desc(), func.max(ScanDailyStat.last_scan).desc())
+        .subquery()
+    )
+    latest_name = (
+        select(ScanDailyStat.target_name)
+        .where(
+            ScanDailyStat.target_type == target_type,
+            ScanDailyStat.target_id == aggregate.c.target_id,
+            ScanDailyStat.target_name.isnot(None),
+        )
+        .order_by(ScanDailyStat.last_scan.desc())
+        .limit(1)
+        .correlate(aggregate)
+        .scalar_subquery()
+    )
+    rows = (
+        db.query(
+            aggregate.c.target_id,
+            latest_name.label("target_name"),
+            aggregate.c.uses,
+        )
+        .order_by(aggregate.c.uses.desc(), aggregate.c.last_scan.desc())
         .limit(max(1, min(int(limit), 50)))
         .all()
     )
-    result = []
-    for target_id, uses, _last_scan in rows:
-        latest_name = (
-            db.query(ScanDailyStat.target_name)
-            .filter(
-                ScanDailyStat.target_type == target_type,
-                ScanDailyStat.target_id == target_id,
-                ScanDailyStat.target_name.isnot(None),
-            )
-            .order_by(ScanDailyStat.last_scan.desc())
-            .first()
-        )
-        result.append({
+    return [
+        {
             "id": str(target_id),
-            "name": latest_name[0] if latest_name and latest_name[0] else str(target_id),
+            "name": target_name or str(target_id),
             "uses": int(uses or 0),
-        })
-    return result
+        }
+        for target_id, target_name, uses in rows
+    ]
 
 
 def purge_raw_scan_history(db: Session, retention_days: int, *, batch_size: int = 2000) -> int:
