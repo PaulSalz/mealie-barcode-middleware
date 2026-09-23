@@ -2,10 +2,12 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from fastapi import Depends
 from fastapi.applications import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.admin_write_guard import AdminWriteGuardMiddleware
+from app.barcode_dependencies import recover_known_barcode_cache
 from app.config import settings
 from app.database import init_db
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
@@ -88,7 +90,11 @@ app.include_router(theme_preview_v2.router, tags=["theme"])
 app.include_router(health.router, tags=["health"])
 app.include_router(login.router, tags=["auth"])
 app.include_router(localization.router, tags=["localization"])
-app.include_router(barcodes.router, tags=["barcodes"])
+app.include_router(
+    barcodes.router,
+    tags=["barcodes"],
+    dependencies=[Depends(recover_known_barcode_cache)],
+)
 app.include_router(target_editor_v6.router, tags=["barcodes"])
 app.include_router(items.router, tags=["items"])
 app.include_router(recipes.router, tags=["recipes"])
