@@ -5,16 +5,33 @@
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
     <title>{% block title %}Mealie Barcode Middleware{% endblock %}</title>
+    <script>
+    /* Apply the last confirmed personal mode before any stylesheet can paint.
+       /api/theme refreshes this cache on normal page loads. */
+    (function(){
+        try {
+            var mode = localStorage.getItem('theme-mode-override');
+            if (mode === 'light' || mode === 'dark') document.documentElement.setAttribute('data-bs-theme', mode);
+            var base = localStorage.getItem('theme-base-override');
+            if (base) document.documentElement.dataset.b2mBase = base;
+        } catch (e) {}
+    })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <!-- Inter font (bundled for offline use) -->
     <link rel="stylesheet" href="/static/vendor/inter/inter.css">
     <link rel="stylesheet" href="/static/vendor/tabler/css/tabler.min.css">
+    {% if not request.session.get('user_id') %}
     <link rel="stylesheet" href="/theme.css">
+    {% endif %}
     <link rel="stylesheet" href="/static/vendor/tabler-icons/tabler-icons.min.css">
     <link rel="stylesheet" href="/static/css/app.css?v={{ v }}">
-    <!-- Per-user theme must be render-blocking. Loading it later from JS caused
-         the accent/buttons to briefly paint with the global/default color. -->
+    {% if request.session.get('user_id') %}
+    <!-- For signed-in users the merged personal theme is authoritative. Loading
+         global theme.css underneath it prevents default personal values such as
+         gray or epaper=false from resetting a non-default global theme. -->
     <link rel="stylesheet" href="/user-theme.css?v={{ v }}">
+    {% endif %}
     <script src="/static/js/theme-init.js?v={{ v }}"></script>
 </head>
 <body>

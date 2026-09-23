@@ -14,6 +14,9 @@
     var userThemeLink = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find(function (link) {
       return String(link.getAttribute('href') || '').indexOf('/user-theme.css') === 0;
     });
+    var globalThemeLink = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find(function (link) {
+      return String(link.getAttribute('href') || '').indexOf('/theme.css') === 0;
+    });
     var previewStyle = document.createElement('style');
     previewStyle.id = 'b2m-personal-theme-live-preview';
     document.head.appendChild(previewStyle);
@@ -44,13 +47,16 @@
       var values = payload();
       root.setAttribute('data-bs-theme', values.mode);
       root.dataset.b2mBase = values.base;
-      root.classList.toggle('b2m-epaper-v9', values.epaper === 'true');
       if (contrastOut && contrast) contrastOut.textContent = contrast.value;
     }
 
-    async function renderExactPreview(disableSavedImmediately) {
+    function setSavedStylesEnabled(enabled) {
+      if (userThemeLink) userThemeLink.disabled = !enabled;
+      if (globalThemeLink) globalThemeLink.disabled = !enabled;
+    }
+
+    async function renderExactPreview() {
       applyImmediateState();
-      if (disableSavedImmediately && userThemeLink) userThemeLink.disabled = true;
       var id = ++requestId;
       try {
         var response = await fetch('/api/appearance-v24/preview', {
@@ -63,27 +69,30 @@
         var css = await response.text();
         if (id !== requestId) return;
         previewStyle.textContent = css;
-        if (userThemeLink) userThemeLink.disabled = true;
+        /* The preview is a complete theme state. Keeping a saved/global theme
+           underneath breaks default values such as gray or epaper=false because
+           build_theme_css intentionally emits no override for those defaults. */
+        setSavedStylesEnabled(false);
       } catch (error) {
-        if (userThemeLink) userThemeLink.disabled = false;
+        if (id !== requestId) return;
+        previewStyle.textContent = '';
+        setSavedStylesEnabled(true);
       }
     }
 
-    function schedulePreview(disableSavedImmediately) {
+    function schedulePreview() {
       applyImmediateState();
       clearTimeout(previewTimer);
-      previewTimer = window.setTimeout(function () {
-        renderExactPreview(disableSavedImmediately);
-      }, 45);
+      previewTimer = window.setTimeout(renderExactPreview, 20);
     }
 
     form.addEventListener('input', function (event) {
       if (!event.target.matches('input[name^="theme_"],select[name^="theme_"]')) return;
-      schedulePreview(true);
+      schedulePreview();
     });
     form.addEventListener('change', function (event) {
       if (!event.target.matches('input[name^="theme_"],select[name^="theme_"]')) return;
-      schedulePreview(true);
+      schedulePreview();
     });
 
     /* Cache only values that are actually being submitted. Unsaved previews do not
@@ -95,7 +104,7 @@
     });
 
     applyImmediateState();
-    renderExactPreview(false);
+    renderExactPreview();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once: true});

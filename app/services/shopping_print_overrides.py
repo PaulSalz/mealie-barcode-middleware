@@ -47,11 +47,40 @@ def save_marker_style(db: Session, value: str) -> str:
 
 
 def item_override_key(item: dict) -> str:
-    food_id = str(item.get("food_id") or "").strip()
-    if food_id:
-        return f"food:{food_id}"
+    """Use the concrete Mealie shopping-list row as the override identity.
+
+    A food can occur more than once on the same list with different quantities or
+    units. Food-level keys therefore cause one override to affect several rows.
+    """
     item_id = str(item.get("id") or "").strip()
-    return f"item:{item_id}" if item_id else ""
+    if item_id:
+        return f"item:{item_id}"
+    food_id = str(item.get("food_id") or "").strip()
+    return f"food:{food_id}" if food_id else ""
+
+
+def _quantity_value_text(item: dict) -> str:
+    value = item.get("quantity")
+    if value is None or value == "":
+        return ""
+    try:
+        number = float(value)
+        if number.is_integer():
+            return str(int(number))
+        return f"{number:.2f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return str(value).strip()
+
+
+def _unit_text(item: dict, quantity_value: str) -> str:
+    combined = str(item.get("quantity_text") or "").strip()
+    if not combined:
+        return ""
+    if quantity_value and combined == quantity_value:
+        return ""
+    if quantity_value and combined.startswith(quantity_value):
+        return combined[len(quantity_value):].strip()
+    return ""
 
 
 def load_item_overrides(db: Session) -> dict[str, dict[str, dict]]:
@@ -71,13 +100,16 @@ def load_item_overrides(db: Session) -> dict[str, dict[str, dict]]:
                 continue
             name_alias = str(entry.get("name_alias") or "").strip()[:160]
             quantity_alias = str(entry.get("quantity_alias") or "").strip()[:60]
-            if not name_alias and not quantity_alias:
+            unit_alias = str(entry.get("unit_alias") or "").strip()[:60]
+            if not name_alias and not quantity_alias and not unit_alias:
                 continue
             clean[override_key] = {
                 "name_alias": name_alias,
                 "quantity_alias": quantity_alias,
+                "unit_alias": unit_alias,
                 "source_name": str(entry.get("source_name") or "").strip()[:160],
                 "source_quantity_text": str(entry.get("source_quantity_text") or "").strip()[:60],
+                "source_unit_text": str(entry.get("source_unit_text") or "").strip()[:60],
             }
         result[str(list_id)] = clean
     return result
@@ -89,33 +121,44 @@ def save_item_override(
     override_key: str,
     name_alias: str,
     quantity_alias: str,
+    unit_alias: str = "",
     source_name: str = "",
     source_quantity_text: str = "",
+    source_unit_text: str = "",
 ) -> dict | None:
     list_id = str(list_id or "").strip()
     override_key = str(override_key or "").strip()
     name_alias = str(name_alias or "").strip()
     quantity_alias = str(quantity_alias or "").strip()
+    unit_alias = str(unit_alias or "").strip()
     source_name = str(source_name or "").strip()
     source_quantity_text = str(source_quantity_text or "").strip()
+    source_unit_text = str(source_unit_text or "").strip()
     if not list_id or not override_key:
         raise ValueError("Shopping list id and item key are required")
     if len(override_key) > 200 or len(name_alias) > 160 or len(source_name) > 160:
         raise ValueError("Item override name is too long")
-    if len(quantity_alias) > 60 or len(source_quantity_text) > 60:
-        raise ValueError("Item override quantity is too long")
+    if (
+        len(quantity_alias) > 60
+        or len(unit_alias) > 60
+        or len(source_quantity_text) > 60
+        or len(source_unit_text) > 60
+    ):
+        raise ValueError("Item override quantity or unit is too long")
 
     all_rows = load_item_overrides(db)
     rows = dict(all_rows.get(list_id, {}))
-    if not name_alias and not quantity_alias:
+    if not name_alias and not quantity_alias and not unit_alias:
         rows.pop(override_key, None)
         saved = None
     else:
         saved = {
             "name_alias": name_alias,
             "quantity_alias": quantity_alias,
+            "unit_alias": unit_alias,
             "source_name": source_name,
             "source_quantity_text": source_quantity_text,
+            "source_unit_text": source_unit_text,
         }
         rows[override_key] = saved
     all_rows[list_id] = rows
@@ -124,7 +167,7 @@ def save_item_override(
 
 
 def delete_item_override(db: Session, list_id: str, override_key: str) -> None:
-    save_item_override(db, list_id, override_key, "", "")
+    save_item_override(db, list_id, override_key, "", "", "")
 
 
 def apply_item_overrides(db: Session, list_id: str, payload: dict) -> dict:
@@ -132,30 +175,54 @@ def apply_item_overrides(db: Session, list_id: str, payload: dict) -> dict:
     overrides = load_item_overrides(db).get(list_id, {})
     active_keys: set[str] = set()
 
+    # Legacy food-level overrides are only safe when that food appears once.
+    food_counts: dict[str, int] = {}
+    for item in payload.get("items") or []:
+        if isinstance(item, dict):
+            food_id = str(item.get("food_id") or "").strip()
+            if food_id:
+                food_counts[food_id] = food_counts.get(food_id, 0) + 1
+
     for item in payload.get("items") or []:
         if not isinstance(item, dict):
             continue
         key = item_override_key(item)
         original_name = str(item.get("name") or "")
-        original_quantity = str(item.get("quantity_text") or "")
+        original_quantity_text = str(item.get("quantity_text") or "")
+        quantity_value = _quantity_value_text(item)
+        unit_value = _unit_text(item, quantity_value)
         item["override_key"] = key
         item["original_name"] = original_name
-        item["original_quantity_text"] = original_quantity
+        item["original_quantity_text"] = original_quantity_text
+        item["original_quantity_value_text"] = quantity_value
+        item["original_unit_text"] = unit_value
+
         override = overrides.get(key) if key else None
+        active_key = key
+        if not override:
+            food_id = str(item.get("food_id") or "").strip()
+            legacy_key = f"food:{food_id}" if food_id else ""
+            if legacy_key and food_counts.get(food_id) == 1 and legacy_key in overrides:
+                override = overrides[legacy_key]
+                active_key = legacy_key
+
         if override:
-            active_keys.add(key)
+            active_keys.add(active_key)
             if override.get("name_alias"):
                 item["name"] = override["name_alias"]
-            if override.get("quantity_alias"):
-                item["quantity_text"] = override["quantity_alias"]
+            quantity_display = str(override.get("quantity_alias") or quantity_value).strip()
+            unit_display = str(override.get("unit_alias") or unit_value).strip()
+            item["quantity_text"] = " ".join(part for part in (quantity_display, unit_display) if part).strip()
 
     payload["item_overrides"] = [
         {
             "key": key,
             "name_alias": entry.get("name_alias") or "",
             "quantity_alias": entry.get("quantity_alias") or "",
+            "unit_alias": entry.get("unit_alias") or "",
             "source_name": entry.get("source_name") or key,
             "source_quantity_text": entry.get("source_quantity_text") or "",
+            "source_unit_text": entry.get("source_unit_text") or "",
             "active": key in active_keys,
         }
         for key, entry in sorted(
