@@ -10,6 +10,7 @@ from app.access_v23 import (
     personal_theme,
     rainbow_button_key,
     rainbow_button_preference,
+    save_personal_theme,
 )
 from app.database import get_db
 from app.models import SystemState
@@ -69,6 +70,22 @@ def appearance_v24_get(request: Request, db: Session = Depends(get_db)):
     }
 
 
+@router.post("/api/appearance-v24/mode")
+async def appearance_v24_mode(request: Request, db: Session = Depends(get_db)):
+    """Persist the navbar light/dark switch as a personal preference."""
+    user_id = _current_user_id(request)
+    if user_id is None:
+        return JSONResponse({"error": "login required"}, status_code=401)
+    body = await request.json()
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
+    mode = str(body.get("mode", "")).strip().lower()
+    if mode not in THEME_CHOICES["mode"]:
+        return JSONResponse({"error": "invalid mode"}, status_code=400)
+    theme = save_personal_theme(db, user_id, {"mode": mode})
+    return {"ok": True, "mode": mode, "theme": theme}
+
+
 @router.post("/api/appearance-v24")
 async def appearance_v24_save(request: Request, db: Session = Depends(get_db)):
     user_id = _current_user_id(request)
@@ -121,7 +138,7 @@ async def appearance_v24_preview(request: Request, db: Session = Depends(get_db)
     """Render the current user's form values through the real theme engine.
 
     This endpoint never persists anything. Personal Appearance can therefore
-    preview e-paper, contrast, neutral palette, fonts and radius before Save.
+    preview e-paper, contrast, background, fonts and radius before Save.
     """
     user_id = _current_user_id(request)
     if user_id is None:
