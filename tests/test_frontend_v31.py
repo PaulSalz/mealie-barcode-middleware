@@ -11,10 +11,10 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_legacy_shopping_v29_controller_is_not_executed():
+def test_legacy_shopping_patch_layers_are_not_executed():
     assert "js/shopping-fixes-v29.js" not in GLOBAL_JS
+    assert "js/shopping-fixes-v30.js" not in GLOBAL_JS
     assert "js/shopping-bootstrap-v31.js" in GLOBAL_JS
-    assert GLOBAL_JS.index("js/shopping-bootstrap-v31.js") < GLOBAL_JS.index("js/shopping-fixes-v30.js")
 
 
 def test_v31_redirects_only_shopping_bootstrap_and_preserves_autosave_controls():
