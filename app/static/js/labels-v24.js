@@ -107,6 +107,23 @@
       renderLayers();
     });
   }
+  function blockLegacyV30Preview(){
+    const stage=$('b21-label-stage');
+    if(stage)stage.dataset.b2mV30Observed='1';
+  }
+  function installLegacyFitGuard(){
+    const rerender=()=>window.setTimeout(refreshEditor,30);
+    const profile=$('b21-profile-select');
+    if(profile&&profile.dataset.b2mV24FitGuard!=='1'){
+      profile.dataset.b2mV24FitGuard='1';
+      profile.addEventListener('change',rerender);
+    }
+    document.querySelectorAll('input[name="b21-preset"]').forEach(input=>{
+      if(input.dataset.b2mV24FitGuard==='1')return;
+      input.dataset.b2mV24FitGuard='1';
+      input.addEventListener('change',rerender);
+    });
+  }
   function installLayerInspector(){
     const inspector=$('b21-v2-inspector'),select=$('b21-v2-element-select');if(!inspector||!select)return;
     const header=$('b21-v2-reset-all')?.parentElement||Array.from(inspector.children).find(node=>node.querySelector?.('#b21-v2-reset-all'));
@@ -135,13 +152,17 @@
   }
 
   function install(){
+    blockLegacyV30Preview();
     if(!$('b21-v2-inspector')||!$('b21-label-stage'))return false;
-    removeLegacyAppearance();installRotationSnap();installRollCalibration();installLayerInspector();installHandleTracking();
+    removeLegacyAppearance();installRotationSnap();installRollCalibration();installLayerInspector();installHandleTracking();installLegacyFitGuard();
     return true;
   }
   function start(){
+    /* Mark the stage before labels-fixes-v30's delayed boot runs. Its preview
+       observer is legacy-only; queue batch printing remains active. */
+    blockLegacyV30Preview();
     if(install())return;
-    const observer=new MutationObserver(function(){if(install())observer.disconnect();});
+    const observer=new MutationObserver(function(){blockLegacyV30Preview();if(install())observer.disconnect();});
     observer.observe(document.body,{childList:true,subtree:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
