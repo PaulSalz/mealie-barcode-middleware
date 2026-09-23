@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -12,6 +11,7 @@ from app.events import scan_events
 from app.models import Activity, BarcodeCache, BarcodeTarget
 from app.pause import is_paused
 from app.routers import scan as legacy_scan
+from app.services.bounded_executor import BoundedExecutor, ExecutorSaturated
 from app.services.homeassistant import notify_scan as ha_notify_scan
 from app.services.targets import ensure_targets
 from app.utils import utcnow
@@ -19,10 +19,10 @@ from app.utils import utcnow
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Keep slow network side effects completely outside the scanner HTTP request.
-# A small bounded pool prevents a burst of scans from spawning unbounded threads.
-_ROUTE_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="scan-route")
-_NOTIFY_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="scan-notify")
+# Keep slow network side effects completely outside the scanner HTTP request, but
+# cap both running and queued work. ThreadPoolExecutor's native queue is unbounded.
+_ROUTE_POOL = BoundedExecutor(max_workers=4, max_pending=32, thread_name_prefix="scan-route")
+_NOTIFY_POOL = BoundedExecutor(max_workers=4, max_pending=32, thread_name_prefix="scan-notify")
 
 
 def _local_label(barcode: str, db: Session) -> tuple[str, list[BarcodeTarget]]:
@@ -216,10 +216,21 @@ def fast_scan_barcode(
             paused=paused,
         )
 
-        # Scanner HTTP response returns now. HA notification and Mealie routing run
-        # independently and update the same unread notification when finished.
-        _NOTIFY_POOL.submit(_notify_received, barcode, item, paused)
-        _ROUTE_POOL.submit(_route_known_targets, barcode, [target.id for target in targets], paused)
+        # Admission to the routing pool happens before the HTTP acknowledgement.
+        # If capacity is exhausted, return 503 so the persistent scanner outbox
+        # retains this delivery and retries later rather than losing the route.
+        try:
+            _ROUTE_POOL.submit(_route_known_targets, barcode, [target.id for target in targets], paused)
+        except ExecutorSaturated as exc:
+            logger.warning("Scan routing queue saturated for barcode %s", barcode)
+            raise HTTPException(status_code=503, detail="Scan routing queue is busy; retry shortly") from exc
+
+        # HA's immediate "processing" notification is best-effort and must never
+        # consume the reliability budget reserved for actual shopping routing.
+        try:
+            _NOTIFY_POOL.submit(_notify_received, barcode, item, paused)
+        except ExecutorSaturated:
+            logger.warning("Scan notification queue saturated for barcode %s", barcode)
         return resp
 
     # Unknown/unmapped codes retain the current lookup/mapping behaviour. The web
