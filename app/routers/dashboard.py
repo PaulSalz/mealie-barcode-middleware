@@ -1,7 +1,5 @@
 import asyncio
 import json
-import threading
-import time
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Request
@@ -13,7 +11,7 @@ from app.config import settings
 from app.database import get_db
 from app.events import scan_events
 from app.models import Activity, ApiToken, BarcodeCache, BarcodeTarget, Item, RetryQueue
-from app.services.mealie import check_connectivity
+from app.services.mealie_health import mealie_reachable
 from app.services.scan_stats import frequent_targets as frequent_target_stats
 from app.services.shopping import get_default_shopping_list_id, get_shopping_list_counts
 from app.services.targets import primary_targets_by_barcode
@@ -21,21 +19,6 @@ from app.templating import _localtime, _relative_time, templates
 from app.utils import utcnow
 
 router = APIRouter()
-_mealie_health_lock = threading.Lock()
-_mealie_health_cache: tuple[float, bool] | None = None
-
-
-def _cached_mealie_reachable(ttl_seconds: float = 20.0) -> bool:
-    global _mealie_health_cache
-    now = time.monotonic()
-    with _mealie_health_lock:
-        cached = _mealie_health_cache
-        if cached and now - cached[0] < ttl_seconds:
-            return cached[1]
-    reachable = check_connectivity()
-    with _mealie_health_lock:
-        _mealie_health_cache = (time.monotonic(), reachable)
-    return reachable
 
 
 def _scan_status(result: str, target_type: str | None) -> str:
@@ -146,7 +129,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     total_barcodes, mapped_count, pending_count, queue_depth, unknown_count = _summary_counts(db)
     recent_items = _recent_scans(db, 25)
     frequent_foods, frequent_recipes, frequent_actions = _frequent_targets(db)
-    mealie_reachable = _cached_mealie_reachable()
+    reachable = mealie_reachable()
     scanner_online, scanner_total = _scanner_summary(db)
     last_sync = db.query(Item.synced_at).filter(Item.source == "mealie").order_by(Item.synced_at.desc()).first()
     last_sync_time = last_sync[0] if last_sync else None
@@ -155,13 +138,13 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     shopping_list_url = f"{mealie_url}/shopping-lists/{default_list_id}" if default_list_id else f"{mealie_url}/shopping-lists"
     shopping_lists_status = get_shopping_list_counts()
     has_tokens = db.query(ApiToken).first() is not None
-    readiness_issues = _readiness_issues(mealie_reachable=mealie_reachable, has_tokens=has_tokens, scanner_online=scanner_online, scanner_total=scanner_total, default_list_id=default_list_id, queue_depth=queue_depth)
+    readiness_issues = _readiness_issues(mealie_reachable=reachable, has_tokens=has_tokens, scanner_online=scanner_online, scanner_total=scanner_total, default_list_id=default_list_id, queue_depth=queue_depth)
     return templates.TemplateResponse(request, "dashboard.html", {
         "total_barcodes": total_barcodes, "mapped_count": mapped_count,
         "pending_count": pending_count, "queue_depth": queue_depth, "unknown_count": unknown_count,
         "recent_items": recent_items,
         "frequent_foods": frequent_foods, "frequent_recipes": frequent_recipes, "frequent_actions": frequent_actions,
-        "mealie_reachable": mealie_reachable, "last_sync_time": last_sync_time,
+        "mealie_reachable": reachable, "last_sync_time": last_sync_time,
         "has_tokens": has_tokens,
         "mealie_url": mealie_url, "shopping_list_url": shopping_list_url,
         "shopping_lists_status": shopping_lists_status,
