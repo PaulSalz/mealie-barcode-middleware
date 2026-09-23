@@ -121,6 +121,74 @@ def _scanner_summary(db: Session) -> tuple[int, int]:
     return connected, len(tokens)
 
 
+def _readiness_issues(
+    *,
+    mealie_reachable: bool,
+    has_tokens: bool,
+    scanner_online: int,
+    scanner_total: int,
+    default_list_id: str | None,
+    queue_depth: int,
+) -> list[dict]:
+    """Translate technical health into user-facing next actions."""
+    issues: list[dict] = []
+    if not mealie_reachable:
+        issues.append({
+            "severity": "danger",
+            "icon": "plug-connected-x",
+            "title": "Mealie is not reachable",
+            "message": "B2M cannot read or update your shopping lists right now.",
+            "href": "/settings?tab=mealie",
+            "action": "Check Mealie connection",
+        })
+    if not default_list_id:
+        issues.append({
+            "severity": "warning",
+            "icon": "list-check",
+            "title": "No default shopping list is selected",
+            "message": "Choose which Mealie list should receive scans when no list is specified.",
+            "href": "/settings?tab=mealie",
+            "action": "Choose shopping list",
+        })
+    if not has_tokens:
+        issues.append({
+            "severity": "warning",
+            "icon": "key",
+            "title": "No scanner access token exists",
+            "message": "Create one token before connecting a physical barcode scanner.",
+            "href": "/settings?tab=tokens",
+            "action": "Create scanner token",
+        })
+    elif scanner_total == 0:
+        issues.append({
+            "severity": "warning",
+            "icon": "scan",
+            "title": "No scanner has connected yet",
+            "message": "B2M is ready for a scanner, but no scanner bridge has reported in yet.",
+            "href": "/settings?tab=scanning",
+            "action": "Open scanner setup",
+        })
+    elif scanner_online == 0:
+        issues.append({
+            "severity": "warning",
+            "icon": "scan-eye",
+            "title": "Your scanner is offline",
+            "message": "A scanner is configured, but B2M has not seen it recently.",
+            "href": "/settings?tab=scanning",
+            "action": "Check scanner",
+        })
+    if queue_depth:
+        issues.append({
+            "severity": "warning",
+            "icon": "refresh",
+            "title": f"{queue_depth} scan{'s are' if queue_depth != 1 else ' is'} waiting for retry",
+            "message": "Nothing is lost. B2M will retry automatically when Mealie is available.",
+            "href": "/activities?result=queued",
+            "action": "View queued scans",
+        })
+    return issues
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)):
     total_barcodes, mapped_count, pending_count, queue_depth, unknown_count = _summary_counts(db)
@@ -134,6 +202,15 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     default_list_id = get_default_shopping_list_id(db)
     shopping_list_url = f"{mealie_url}/shopping-lists/{default_list_id}" if default_list_id else f"{mealie_url}/shopping-lists"
     shopping_lists_status = get_shopping_list_counts()
+    has_tokens = db.query(ApiToken).first() is not None
+    readiness_issues = _readiness_issues(
+        mealie_reachable=mealie_reachable,
+        has_tokens=has_tokens,
+        scanner_online=scanner_online,
+        scanner_total=scanner_total,
+        default_list_id=default_list_id,
+        queue_depth=queue_depth,
+    )
 
     return templates.TemplateResponse(request, "dashboard.html", {
         "total_barcodes": total_barcodes, "mapped_count": mapped_count,
@@ -141,10 +218,12 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         "recent_items": recent_items,
         "frequent_foods": frequent_foods, "frequent_recipes": frequent_recipes, "frequent_actions": frequent_actions,
         "mealie_reachable": mealie_reachable, "last_sync_time": last_sync_time,
-        "has_tokens": db.query(ApiToken).first() is not None,
+        "has_tokens": has_tokens,
         "mealie_url": mealie_url, "shopping_list_url": shopping_list_url,
         "shopping_lists_status": shopping_lists_status,
         "scanner_online": scanner_online, "scanner_total": scanner_total,
+        "readiness_issues": readiness_issues,
+        "system_ready": not readiness_issues,
         "dashboard_poll_interval_seconds": settings.dashboard_poll_interval_seconds,
         "health_poll_interval_seconds": settings.health_poll_interval_seconds,
     })

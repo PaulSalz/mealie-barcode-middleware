@@ -12,6 +12,33 @@
   </div>
 </div>
 
+{% if system_ready %}
+<div class="alert alert-success d-flex align-items-center mb-3" role="status">
+  <span class="avatar avatar-sm bg-green-lt text-green me-3"><i class="ti ti-circle-check"></i></span>
+  <div class="flex-fill">
+    <div class="fw-semibold">B2M is ready</div>
+    <div class="small">Mealie is connected, a shopping list is selected and at least one scanner is online.</div>
+  </div>
+</div>
+{% else %}
+<div class="card mb-3 border-warning" id="readiness-card">
+  <div class="card-header">
+    <div><h3 class="card-title"><i class="ti ti-tool me-2"></i>Needs attention</h3><p class="card-subtitle">Follow these steps to get B2M fully ready. Your existing data is safe.</p></div>
+  </div>
+  <div class="list-group list-group-flush">
+    {% for issue in readiness_issues %}
+    <div class="list-group-item">
+      <div class="row g-2 align-items-center">
+        <div class="col-auto"><span class="avatar avatar-sm bg-{{ issue.severity }}-lt text-{{ issue.severity }}"><i class="ti ti-{{ issue.icon }}"></i></span></div>
+        <div class="col min-w-0"><div class="fw-semibold">{{ issue.title }}</div><div class="text-secondary small">{{ issue.message }}</div></div>
+        <div class="col-auto"><a class="btn btn-sm btn-outline-primary" href="{{ issue.href }}">{{ issue.action }}</a></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div class="row row-deck row-cards mb-3">
   <div class="col-lg-7"><div class="card h-100"><div class="card-body"><div class="row g-3 align-items-center">
     <div class="col-auto"><span id="health-indicator" class="status-indicator status-{{ 'green' if mealie_reachable else 'red' }}{{ ' status-indicator-animated' if mealie_reachable }}"><span class="status-indicator-circle"></span><span class="status-indicator-circle"></span><span class="status-indicator-circle"></span></span></div>
