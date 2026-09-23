@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models import Action, ActionExecution
+from app.services.action_stats import action_overview, action_stats, delete_action_stats
 from app.services.actions import execute_action
 from app.templating import templates
 from app.utils import utcnow
@@ -97,32 +98,13 @@ def _apply_form(
 
 
 def _stats(db: Session, action_id: str) -> dict:
-    total = db.query(ActionExecution).filter(ActionExecution.action_id == action_id).count()
-    success = db.query(ActionExecution).filter(ActionExecution.action_id == action_id, ActionExecution.status == "success").count()
-    failed = db.query(ActionExecution).filter(ActionExecution.action_id == action_id, ActionExecution.status == "failed").count()
-    ignored = db.query(ActionExecution).filter(ActionExecution.action_id == action_id, ActionExecution.status == "ignored_cooldown").count()
-    avg_ms = db.query(func.avg(ActionExecution.duration_ms)).filter(
-        ActionExecution.action_id == action_id,
-        ActionExecution.duration_ms.isnot(None),
-    ).scalar()
-    latest = db.query(ActionExecution).filter(ActionExecution.action_id == action_id).order_by(ActionExecution.created_at.desc()).first()
-    return {
-        "total": total,
-        "success": success,
-        "failed": failed,
-        "ignored": ignored,
-        "avg_ms": round(float(avg_ms), 1) if avg_ms is not None else None,
-        "last_execution": latest.created_at if latest else None,
-    }
+    return action_stats(db, action_id)
 
 
 @router.get("/actions", response_class=HTMLResponse)
 def actions_page(request: Request, db: Session = Depends(get_db)):
     rows = db.query(Action).order_by(func.lower(Action.name)).all()
-    counts = dict(db.query(ActionExecution.action_id, func.count(ActionExecution.id)).group_by(ActionExecution.action_id).all())
-    latest_rows = {}
-    for execution in db.query(ActionExecution).order_by(ActionExecution.created_at.desc()).all():
-        latest_rows.setdefault(execution.action_id, execution)
+    counts, latest_rows = action_overview(db)
     return templates.TemplateResponse(request, "actions.html", {
         "actions": rows,
         "counts": counts,
@@ -217,6 +199,7 @@ def action_delete(action_id: str, db: Session = Depends(get_db)):
     action = db.get(Action, action_id)
     if action:
         db.query(ActionExecution).filter(ActionExecution.action_id == action.id).delete()
+        delete_action_stats(db, action.id)
         db.delete(action)
         db.commit()
     return RedirectResponse("/actions", status_code=303)

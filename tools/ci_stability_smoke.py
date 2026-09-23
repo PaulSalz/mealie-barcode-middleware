@@ -18,14 +18,22 @@ from sqlalchemy import inspect
 
 # Import models before init_db so their tables are part of Base.metadata.
 from app import models  # noqa: F401, E402
+from app import models_action_stats  # noqa: F401, E402
 from app import models_scan_delivery  # noqa: F401, E402
 from app import models_scan_stats  # noqa: F401, E402
 from app.database import SessionLocal, engine, init_db  # noqa: E402
 from app.events import EventBus  # noqa: E402
-from app.models import Activity  # noqa: E402
+from app.models import ActionExecution, Activity  # noqa: E402
+from app.models_action_stats import ActionAggregate  # noqa: E402
 from app.models_scan_stats import ScanDailyStat  # noqa: E402
+from app.services.action_stats import (  # noqa: E402
+    action_stats,
+    ensure_action_stats_backfilled,
+    purge_action_executions,
+)
 from app.services.bounded_executor import BoundedExecutor, ExecutorSaturated  # noqa: E402
 from app.services.database_backup import create_verified_backup, remove_backup  # noqa: E402
+from app.services.performance_indexes import ensure_performance_indexes  # noqa: E402
 from app.services.scan_stats import (  # noqa: E402
     ensure_scan_stats_backfilled,
     purge_raw_scan_history,
@@ -113,7 +121,6 @@ def smoke_scan_aggregates() -> None:
     finally:
         db.close()
 
-    # Rebuilding from raw history must be idempotent and preserve the same count.
     ensure_scan_stats_backfilled()
     db = SessionLocal()
     try:
@@ -132,6 +139,55 @@ def smoke_scan_aggregates() -> None:
         assert retained["days_7"] == 2, retained
     finally:
         db.close()
+
+
+def smoke_action_aggregates() -> None:
+    init_db()
+    tables = set(inspect(engine).get_table_names())
+    assert "action_aggregates" in tables, sorted(tables)
+
+    db = SessionLocal()
+    try:
+        db.query(ActionExecution).filter(ActionExecution.action_id == "ci-action").delete(synchronize_session=False)
+        db.query(ActionAggregate).filter(ActionAggregate.action_id == "ci-action").delete(synchronize_session=False)
+        db.commit()
+        db.add(ActionExecution(
+            action_id="ci-action", barcode="ACTION:ci-action", status="success",
+            duration_ms=120, created_at=utcnow() - timedelta(days=200),
+        ))
+        db.add(ActionExecution(
+            action_id="ci-action", barcode="ACTION:ci-action", status="failed",
+            duration_ms=80, created_at=utcnow(),
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    ensure_action_stats_backfilled()
+    db = SessionLocal()
+    try:
+        stats = action_stats(db, "ci-action")
+        assert stats["total"] == 2, stats
+        assert stats["success"] == 1, stats
+        assert stats["failed"] == 1, stats
+        assert stats["avg_ms"] == 100.0, stats
+        assert stats["last_status"] == "failed", stats
+
+        deleted = purge_action_executions(db, 180)
+        assert deleted >= 1, deleted
+        retained = action_stats(db, "ci-action")
+        assert retained["total"] == 2, retained
+        assert retained["success"] == 1, retained
+    finally:
+        db.close()
+
+
+def smoke_performance_indexes() -> None:
+    ensure_performance_indexes()
+    retry_indexes = {row["name"] for row in inspect(engine).get_indexes("retry_queue")}
+    action_indexes = {row["name"] for row in inspect(engine).get_indexes("action_executions")}
+    assert "ix_retry_queue_next_retry_at" in retry_indexes, retry_indexes
+    assert "ix_action_executions_action_created" in action_indexes, action_indexes
 
 
 async def _event_bus_case() -> None:
@@ -171,6 +227,8 @@ def main() -> None:
     smoke_backup()
     smoke_delivery_table()
     smoke_scan_aggregates()
+    smoke_action_aggregates()
+    smoke_performance_indexes()
     smoke_event_bus()
     smoke_bounded_executor()
     print("stability smoke ok")
