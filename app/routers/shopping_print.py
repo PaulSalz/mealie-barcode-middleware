@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.models import SystemState
 from app.services.niimblue import is_configured as niim_is_configured, print_image_base64, printer_status
 from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
 from app.services.shopping_print import (
@@ -30,6 +31,36 @@ from app.services.shopping_print_overrides import (
 from app.templating import templates
 
 router = APIRouter()
+
+_TOP_MARGIN_KEY = "shopping_print.top_margin_mm"
+_TOP_MARGIN_DEFAULT = 2.2
+
+
+def _load_top_margin(db: Session) -> float:
+    row = db.get(SystemState, _TOP_MARGIN_KEY)
+    if not row or row.value is None:
+        return _TOP_MARGIN_DEFAULT
+    try:
+        value = float(row.value)
+    except (TypeError, ValueError):
+        return _TOP_MARGIN_DEFAULT
+    return round(max(0.0, min(20.0, value)), 1)
+
+
+def _save_top_margin(db: Session, value) -> float:
+    try:
+        clean = round(float(value), 1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("top_margin_mm must be a number") from exc
+    if not 0 <= clean <= 20:
+        raise ValueError("top_margin_mm must be between 0 and 20")
+    row = db.get(SystemState, _TOP_MARGIN_KEY)
+    if row:
+        row.value = str(clean)
+    else:
+        db.add(SystemState(key=_TOP_MARGIN_KEY, value=str(clean)))
+    db.commit()
+    return clean
 
 
 def _valid_list_id(list_id: str) -> bool:
@@ -171,6 +202,7 @@ def shopping_print_bootstrap(db: Session = Depends(get_db)):
     except Exception as exc:
         status = {"configured": niim_is_configured(), "connected": False, "error": str(exc)}
     print_settings = load_print_settings(db)
+    print_settings["top_margin_mm"] = _load_top_margin(db)
     print_settings["item_marker_style"] = load_marker_style(db)
     return {
         "lists": lists,
@@ -198,6 +230,7 @@ def shopping_print_save_settings(body: dict, db: Session = Depends(get_db)):
         return JSONResponse({"error": "JSON object required"}, status_code=400)
     try:
         saved = save_print_settings(db, body)
+        saved["top_margin_mm"] = _save_top_margin(db, body.get("top_margin_mm", _load_top_margin(db)))
         marker_style = save_marker_style(db, body.get("item_marker_style", load_marker_style(db)))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
