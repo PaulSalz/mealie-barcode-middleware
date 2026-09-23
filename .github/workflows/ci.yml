@@ -112,6 +112,12 @@ jobs:
       MIDDLEWARE_BASE_URL: http://127.0.0.1:8001
       DB_PATH: /tmp/b2m-browser.db
       B2M_BROWSER_URL: http://127.0.0.1:8001
+      # Point the optional printer adapter back at the local B2M server. This
+      # marks B21 as configured for UI coverage while /connected fails fast
+      # with 404 instead of requiring a physical printer in CI.
+      NIIMBLUE_URL: http://127.0.0.1:8001
+      NIIMBLUE_ADDRESS: ci-b21
+      NIIMBLUE_TRANSPORT: ble
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
