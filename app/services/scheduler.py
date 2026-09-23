@@ -1,14 +1,15 @@
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.config import settings
 from app.database import SessionLocal
 from app.events import scan_events
-from app.models import BarcodeMapping, Item, Activity, RetryQueue
+from app.models import Activity, Item, RetryQueue
 from app.services.mealie_extras import sync_items_enhanced
+from app.services.scan_stats import ensure_scan_stats_backfilled
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ def _run_item_sync():
     try:
         sync_items_enhanced(db)
     except Exception as e:
-        logger.error(f"Scheduled item sync failed: {e}")
+        logger.error("Scheduled item sync failed: %s", e)
     finally:
         db.close()
 
@@ -48,7 +49,7 @@ def _process_retry_queue():
         if not pending:
             return
 
-        logger.info(f"Processing {len(pending)} retry queue items")
+        logger.info("Processing %d retry queue items", len(pending))
         headers = {
             "Authorization": f"Bearer {settings.mealie_api_key}",
             "Content-Type": "application/json",
@@ -62,22 +63,22 @@ def _process_retry_queue():
                 resp = httpx.post(url, headers=headers, json=payload, timeout=10)
                 if resp.status_code in (200, 201):
                     db.delete(item)
-                    logger.info(f"Retry success for barcode={item.barcode}")
+                    logger.info("Retry success for barcode=%s", item.barcode)
                 else:
                     item.attempts += 1
                     if item.attempts >= settings.max_retry_attempts:
                         _create_retry_failed_activity(item, db)
                         db.delete(item)
                         logger.warning(
-                            f"Retry permanently failed for {item.barcode} after "
-                            f"{item.attempts} attempts (HTTP {resp.status_code})"
+                            "Retry permanently failed for %s after %d attempts (HTTP %d)",
+                            item.barcode, item.attempts, resp.status_code,
                         )
                     else:
                         backoff = min(2**item.attempts, 480)
                         item.next_retry_at = now + timedelta(minutes=backoff)
                         logger.warning(
-                            f"Retry failed for {item.barcode}: HTTP {resp.status_code}, "
-                            f"next retry in {backoff}m"
+                            "Retry failed for %s: HTTP %d, next retry in %dm",
+                            item.barcode, resp.status_code, backoff,
                         )
             except httpx.HTTPError as e:
                 item.attempts += 1
@@ -85,13 +86,13 @@ def _process_retry_queue():
                     _create_retry_failed_activity(item, db)
                     db.delete(item)
                     logger.warning(
-                        f"Retry permanently failed for {item.barcode} after "
-                        f"{item.attempts} attempts: {e}"
+                        "Retry permanently failed for %s after %d attempts: %s",
+                        item.barcode, item.attempts, e,
                     )
                 else:
                     backoff = min(2**item.attempts, 480)
                     item.next_retry_at = now + timedelta(minutes=backoff)
-                    logger.warning(f"Retry error for {item.barcode}: {e}, next in {backoff}m")
+                    logger.warning("Retry error for %s: %s, next in %dm", item.barcode, e, backoff)
 
         db.commit()
     finally:
@@ -139,15 +140,25 @@ def _purge_old_activities():
         )
         db.commit()
         if deleted:
-            logger.info(f"Purged {deleted} old read notification activities")
+            logger.info("Purged %d old read notification activities", deleted)
     except Exception as e:
-        logger.error(f"Activity purge failed: {e}")
+        logger.error("Activity purge failed: %s", e)
     finally:
         db.close()
 
 
 def start_scheduler():
-    """Start the APScheduler with item sync and retry queue jobs."""
+    """Start the APScheduler with item sync, history aggregation and retry jobs."""
+    # Base.metadata.create_all() has already run before start_scheduler(). The
+    # scan-stats service is imported above so its aggregate model is registered
+    # before that create_all call, and legacy scan history can now be backfilled.
+    try:
+        ensure_scan_stats_backfilled()
+    except Exception:
+        # Raw Activity history remains intact. Do not prevent B2M from starting;
+        # a later restart will retry because the completion marker was not set.
+        logger.exception("Could not backfill compact scan statistics")
+
     db = SessionLocal()
     try:
         if db.query(Item).first() is None:
@@ -155,7 +166,7 @@ def start_scheduler():
             try:
                 sync_items_enhanced(db)
             except Exception as e:
-                logger.warning(f"Initial sync failed (will retry on schedule): {e}")
+                logger.warning("Initial sync failed (will retry on schedule): %s", e)
     finally:
         db.close()
 
