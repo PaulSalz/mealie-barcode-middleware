@@ -64,6 +64,7 @@ def appearance_v24_get(request: Request, db: Session = Depends(get_db)):
     return {
         "rainbow_buttons": rainbow_button_preference(db, user_id),
         "advanced_settings": _advanced_settings_preference(db, user_id),
+        "theme": personal_theme(db, user_id),
         "choices": [RAINBOW_BUTTON_DEFAULT, *COLOR_CSS.keys()],
     }
 
@@ -111,6 +112,7 @@ async def appearance_v24_save(request: Request, db: Session = Depends(get_db)):
         "ok": True,
         "rainbow_buttons": rainbow_button_preference(db, user_id),
         "advanced_settings": _advanced_settings_preference(db, user_id),
+        "theme": personal_theme(db, user_id),
     }
 
 
