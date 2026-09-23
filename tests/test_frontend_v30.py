@@ -17,7 +17,7 @@ def test_v30_assets_are_retained_without_legacy_theme_runtime():
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/shopping-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-fixes-v30.js" in LABEL_JS
-    assert APP_VERSION == "2026.09.23.6"
+    assert APP_VERSION == "2026.09.24.1"
 
 
 def test_label_queue_uses_one_native_multipage_job():
@@ -65,10 +65,13 @@ def test_shopping_alias_drafts_quantity_hide_and_reset_sources_are_retained():
     assert 'save_local_content(db, list_id, "", [])' in router
 
 
-def test_personal_theme_reload_uses_personal_endpoint():
+def test_personal_theme_reload_is_server_rendered_without_async_repaint():
     source = read("app/static/js/theme-init.js")
+    templating = read("app/templating.py")
     profile = read("app/templates/profile_appearance.html")
-    assert "fetch('/api/appearance-v24'" in source
-    assert "fetch('/api/theme'" not in source
+    assert "fetch(" not in source
+    assert "/api/appearance-v24" not in source
+    assert "_effective_theme_for_request" in templating
+    assert "personal_theme(db, int(user_id))" in templating
     assert ">Background</label>" in profile
     assert "Neutral palette" not in profile
