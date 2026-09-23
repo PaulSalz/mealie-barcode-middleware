@@ -85,30 +85,18 @@ def _page_values(page: int, limit: int) -> tuple[int, int, int]:
 
 
 @router.get("/activities", response_class=HTMLResponse)
-def activity_page(
-    request: Request,
-    result: str = Query("all"),
-    page: int = Query(1, ge=1),
-    limit: int = Query(100, ge=1, le=200),
-    db: Session = Depends(get_db),
-):
-    page, limit, offset = _page_values(page, limit)
-    query = _activity_query(db, result)
-    total = query.count()
+def activity_page(request: Request, result: str = Query("all"), db: Session = Depends(get_db)):
+    # The current table widget paginates/sorts these rows client-side. Keep its
+    # existing 200-row window until that UI is migrated to server-side paging.
     activities = (
-        query.order_by(Activity.created_at.desc())
-        .offset(offset)
-        .limit(limit)
+        _activity_query(db, result)
+        .order_by(Activity.created_at.desc())
+        .limit(200)
         .all()
     )
-    pages = max(1, ceil(total / limit)) if total else 1
     return templates.TemplateResponse(request, "activity.html", {
         "activities": activities,
         "current_filter": result,
-        "page": page,
-        "limit": limit,
-        "total": total,
-        "pages": pages,
     })
 
 
