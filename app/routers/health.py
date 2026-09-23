@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services.mealie import check_connectivity
+from app.services.mealie_health import mealie_reachable
 
 router = APIRouter()
 
@@ -11,15 +12,14 @@ router = APIRouter()
 def health_check(db: Session = Depends(get_db)):
     db_ok = True
     try:
-        db.execute(__import__("sqlalchemy").text("SELECT 1"))
+        db.execute(text("SELECT 1"))
     except Exception:
         db_ok = False
 
-    mealie_reachable = check_connectivity()
-
-    status = "ok" if (db_ok and mealie_reachable) else "degraded"
+    reachable = mealie_reachable()
+    status = "ok" if (db_ok and reachable) else "degraded"
     return {
         "status": status,
-        "mealie_reachable": mealie_reachable,
+        "mealie_reachable": reachable,
         "db_ok": db_ok,
     }
