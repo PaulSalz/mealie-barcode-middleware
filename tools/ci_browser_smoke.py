@@ -20,6 +20,15 @@ def main() -> None:
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.on("console", lambda message: console_messages.append(f"{message.type}: {message.text}"))
 
+        def wait_until(predicate, message: str, timeout_ms: int = 5_000, step_ms: int = 100) -> None:
+            elapsed = 0
+            while elapsed < timeout_ms:
+                if predicate():
+                    return
+                page.wait_for_timeout(step_ms)
+                elapsed += step_ms
+            raise AssertionError(message)
+
         page.goto(f"{BASE_URL}/setup", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="Welcome").wait_for(timeout=5_000)
         assert page.get_by_role("button", name="Create account").is_visible()
@@ -33,10 +42,123 @@ def main() -> None:
         page.get_by_role("button", name="Create account").click()
         page.wait_for_load_state("domcontentloaded")
 
+        # Navbar light/dark must update immediately and persist as the personal mode.
+        page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
+        html = page.locator("html")
+        with page.expect_response(lambda r: r.url.endswith("/api/appearance-v24/mode") and r.request.method == "POST", timeout=5_000) as dark_response:
+            page.locator("#theme-toggle-dark").click(force=True)
+        assert dark_response.value.ok
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "dark",
+            "Navbar did not switch to dark mode immediately.",
+            timeout_ms=3_000,
+        )
+        page.reload(wait_until="domcontentloaded")
+        html = page.locator("html")
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "dark",
+            "Personal dark mode was not retained after reload.",
+            timeout_ms=3_000,
+        )
+
+        with page.expect_response(lambda r: r.url.endswith("/api/appearance-v24/mode") and r.request.method == "POST", timeout=5_000) as light_response:
+            page.locator("#theme-toggle-light").click(force=True)
+        assert light_response.value.ok
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "light",
+            "Navbar did not switch back to light mode immediately.",
+            timeout_ms=3_000,
+        )
+
+        # Appearance preview must apply light/dark and e-paper before Save.
+        page.goto(f"{BASE_URL}/profile/appearance", wait_until="domcontentloaded", timeout=20_000)
+        page.locator('form[action="/profile/appearance"]').wait_for(state="visible", timeout=5_000)
+        html = page.locator("html")
+        epaper = page.locator('input[name="theme_epaper"]')
+        epaper.check()
+        wait_until(
+            lambda: "b2m-epaper" in (html.get_attribute("class") or "").split(),
+            "E-paper class was not applied before Save.",
+            timeout_ms=3_000,
+        )
+        preview = page.locator("#b2m-theme-v32-preview")
+        wait_until(
+            lambda: preview.count() == 1 and "grayscale(1)" in (preview.text_content() or ""),
+            "E-paper preview CSS was not applied before Save.",
+            timeout_ms=5_000,
+        )
+        page.locator('input[name="theme_mode"][value="dark"]').check(force=True)
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "dark",
+            "Appearance form did not preview dark mode immediately.",
+            timeout_ms=3_000,
+        )
+        page.locator('input[name="theme_mode"][value="light"]').check(force=True)
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "light",
+            "Appearance form did not preview light mode immediately.",
+            timeout_ms=3_000,
+        )
+
+        # Build a deterministic two-label queue for editor/live-layer tests.
         page.goto(f"{BASE_URL}/labels", wait_until="domcontentloaded", timeout=20_000)
+        queue_payload = {
+            "queue": [
+                {"_id": "ci-label-1", "code": "12345678", "label": "CI Label One", "kind": "code128", "qty": 1},
+                {"_id": "ci-label-2", "code": "87654321", "label": "CI Label Two", "kind": "code128", "qty": 1},
+            ]
+        }
+        page.evaluate("payload => localStorage.setItem('b2m-label-generator-v2', JSON.stringify(payload))", queue_payload)
+        page.reload(wait_until="domcontentloaded")
         page.locator("#label-queue").wait_for(state="attached", timeout=5_000)
-        page.locator("#label-editor-mode").wait_for(state="visible", timeout=5_000)
-        assert page.locator("#label-editor-mode").is_visible()
+        b21_output = page.locator('input[name="label-output"][value="b21"]')
+        b21_output.wait_for(state="attached", timeout=5_000)
+        b21_output.check(force=True)
+        page.locator("#b21-layout-body").wait_for(state="visible", timeout=5_000)
+        page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
+        label_element = page.locator('#b21-label-stage [data-element-id="label"]')
+        label_element.wait_for(state="attached", timeout=5_000)
+
+        layer_switch = page.locator('[data-layer-visible="label"]')
+        assert layer_switch.is_checked()
+        layer_switch.uncheck()
+        label_element.wait_for(state="detached", timeout=3_000)
+        assert not page.get_by_text("Label / calibration", exact=True).is_visible()
+
+        # Current label only must use the canonical job endpoint, never v30 batch queue.
+        label_hits = {"batch": 0, "jobs_post": 0}
+
+        def handle_batch(route):
+            label_hits["batch"] += 1
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "quantity": 2}))
+
+        def handle_job_create(route):
+            label_hits["jobs_post"] += 1
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({"id": "ci-label-job"}))
+
+        def handle_job_status(route):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({"id": "ci-label-job", "status": "completed", "completed_pages": 1, "page_count": 1, "printed_labels": 1, "error": ""}),
+            )
+
+        page.route("**/labels/b21/print-batch-v30", handle_batch)
+        page.route("**/labels/b21/jobs", lambda route: handle_job_create(route) if route.request.method == "POST" else route.continue_())
+        page.route("**/labels/b21/jobs/ci-label-job", handle_job_status)
+        page.locator("#b21-v2-print-scope").select_option("current")
+        try:
+            with page.expect_request(lambda request: request.url.endswith("/labels/b21/jobs") and request.method == "POST", timeout=7_000):
+                page.locator("#label-niim-print").dispatch_event("click")
+        except PlaywrightTimeoutError as exc:
+            raise AssertionError(f"Current-label print did not reach canonical job endpoint; hits={label_hits!r}") from exc
+        wait_until(
+            lambda: label_hits["jobs_post"] == 1,
+            f"Current-label job route callback did not complete; hits={label_hits!r}",
+            timeout_ms=2_000,
+            step_ms=25,
+        )
+        assert label_hits["batch"] == 0, label_hits
 
         page.goto(f"{BASE_URL}/actions/new", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="New action").wait_for(timeout=5_000)
@@ -134,17 +256,15 @@ def main() -> None:
 
         page.goto(f"{BASE_URL}/shopping-print", wait_until="domcontentloaded", timeout=20_000)
         select = page.locator("#shopping-print-list")
+        status = page.locator("#shopping-print-status")
         try:
             select.wait_for(state="attached", timeout=2_000)
-            page.wait_for_function(
-                """() => {
-                    const el = document.querySelector('#shopping-print-list');
-                    const status = document.querySelector('#shopping-print-status');
-                    return !!el && !el.disabled && !!status && status.textContent.includes('Preview uses');
-                }""",
-                timeout=3_000,
+            wait_until(
+                lambda: not select.is_disabled() and "Preview uses" in (status.text_content() or ""),
+                "Shopping Print did not settle.",
+                timeout_ms=3_000,
             )
-        except PlaywrightTimeoutError as exc:
+        except (PlaywrightTimeoutError, AssertionError) as exc:
             try:
                 state = page.evaluate(
                     """() => {

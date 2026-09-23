@@ -8,6 +8,7 @@
   const ENTRY_KEY='b2m-b21-entry-settings-v3';
   const $=id=>document.getElementById(id);
   let handleRaf=0;
+  let stageRepairRaf=0;
 
   function readJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'')||fallback;}catch(e){return fallback;}}
   function writeJson(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch(e){}}
@@ -51,10 +52,9 @@
     const buttons=$('b21-v2-reset-cal')?.closest('.d-flex')||$('b21-v2-test-cal')?.closest('.d-flex');
     if(buttons){buttons.classList.add('col-12','mt-1');row.appendChild(buttons);}
     (editor.querySelector('.row')||editor).appendChild(wrap);
-    if(oldSection){
-      const useful=Array.from(oldSection.querySelectorAll('input,select,button')).some(el=>!el.classList.contains('d-none')&&!el.closest('.d-none'));
-      if(!useful)oldSection.remove();
-    }
+    /* Keep legacy frame/threshold inputs in the DOM for the canonical controller,
+       but remove the obsolete "Label / calibration" block from the visible UI. */
+    if(oldSection){oldSection.classList.add('d-none');oldSection.setAttribute('aria-hidden','true');}
     removeLegacyAppearance();
   }
 
@@ -62,9 +62,17 @@
   function layerName(element){return element.name||(element.type==='code'?'Code':element.type==='line'?'Line':'Text');}
   function selectLayer(id){const select=$('b21-v2-element-select');if(!select)return;select.value=String(id);refreshEditor();renderLayers();}
   function setVisible(id,visible){
-    const c=context();if(!c||!Array.isArray(c.state.elements))return;
-    const element=c.state.elements.find(row=>String(row.id)===String(id));if(!element)return;
-    element.visible=!!visible;persist(c);refreshEditor();renderLayers();
+    /* Do not write localStorage behind the canonical editor's back. Its entryStates
+       object is intentionally kept in memory, so direct storage writes only become
+       visible after reload. Drive the hidden canonical Visible control instead. */
+    const select=$('b21-v2-element-select'),input=$('b21-v2-visible');
+    if(!select||!input)return;
+    const previous=String(select.value||'');
+    if(previous!==String(id)){select.value=String(id);refreshEditor();}
+    input.checked=!!visible;
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+    if(previous&&previous!==String(id)){select.value=previous;refreshEditor();}
+    requestAnimationFrame(renderLayers);
   }
   function moveLayer(id,direction){
     const c=context();if(!c||!Array.isArray(c.state.elements))return;
@@ -88,6 +96,34 @@
     root.querySelectorAll('[data-layer-forward]').forEach(button=>button.addEventListener('click',()=>moveLayer(button.dataset.layerForward,1)));
     root.querySelectorAll('[data-layer-back]').forEach(button=>button.addEventListener('click',()=>moveLayer(button.dataset.layerBack,-1)));
   }
+  function repairLegacyStage(stage){
+    cancelAnimationFrame(stageRepairRaf);
+    stageRepairRaf=requestAnimationFrame(()=>{
+      /* labels-b21.js still owns the surrounding printer/profile UI, but its old
+         preview renderer can run after v2 and replace the canonical layer DOM.
+         Legacy nodes use data-element; v2 nodes use data-element-id. Re-dispatch
+         the hidden canonical element selector only when a legacy render won. */
+      if(stage.querySelector('[data-element]')&&!stage.querySelector('[data-element-id]'))refreshEditor();
+      renderLayers();
+    });
+  }
+  function blockLegacyV30Preview(){
+    const stage=$('b21-label-stage');
+    if(stage)stage.dataset.b2mV30Observed='1';
+  }
+  function installLegacyFitGuard(){
+    const rerender=()=>window.setTimeout(refreshEditor,30);
+    const profile=$('b21-profile-select');
+    if(profile&&profile.dataset.b2mV24FitGuard!=='1'){
+      profile.dataset.b2mV24FitGuard='1';
+      profile.addEventListener('change',rerender);
+    }
+    document.querySelectorAll('input[name="b21-preset"]').forEach(input=>{
+      if(input.dataset.b2mV24FitGuard==='1')return;
+      input.dataset.b2mV24FitGuard='1';
+      input.addEventListener('change',rerender);
+    });
+  }
   function installLayerInspector(){
     const inspector=$('b21-v2-inspector'),select=$('b21-v2-element-select');if(!inspector||!select)return;
     const header=$('b21-v2-reset-all')?.parentElement||Array.from(inspector.children).find(node=>node.querySelector?.('#b21-v2-reset-all'));
@@ -96,7 +132,7 @@
     if(!$('b21-v24-layer-list')){
       const list=document.createElement('div');list.id='b21-v24-layer-list';list.className='b21-v24-layer-list mb-3';select.insertAdjacentElement('beforebegin',list);
       select.addEventListener('change',()=>requestAnimationFrame(renderLayers));
-      const stage=$('b21-label-stage');if(stage)new MutationObserver(()=>requestAnimationFrame(renderLayers)).observe(stage,{childList:true,subtree:true});
+      const stage=$('b21-label-stage');if(stage)new MutationObserver(()=>repairLegacyStage(stage)).observe(stage,{childList:true,subtree:true});
     }
     renderLayers();
   }
@@ -116,13 +152,17 @@
   }
 
   function install(){
+    blockLegacyV30Preview();
     if(!$('b21-v2-inspector')||!$('b21-label-stage'))return false;
-    removeLegacyAppearance();installRotationSnap();installRollCalibration();installLayerInspector();installHandleTracking();
+    removeLegacyAppearance();installRotationSnap();installRollCalibration();installLayerInspector();installHandleTracking();installLegacyFitGuard();
     return true;
   }
   function start(){
+    /* Mark the stage before labels-fixes-v30's delayed boot runs. Its preview
+       observer is legacy-only; queue batch printing remains active. */
+    blockLegacyV30Preview();
     if(install())return;
-    const observer=new MutationObserver(function(){if(install())observer.disconnect();});
+    const observer=new MutationObserver(function(){blockLegacyV30Preview();if(install())observer.disconnect();});
     observer.observe(document.body,{childList:true,subtree:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
