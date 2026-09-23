@@ -1,26 +1,8 @@
-/* Apply persisted theme before render, then load the current UI layers. */
+/* Apply persisted theme before render, then load behavior-only UI layers. */
 (function() {
     'use strict';
 
-    var version = '2026.09.23.3';
-
-    /* Reserve scrollbar width before body layout so the navbar does not jump
-       horizontally when Items/Barcodes content makes the page scrollable. */
-    var earlyStyle = document.createElement('style');
-    earlyStyle.textContent = 'html{overflow-y:scroll;scrollbar-gutter:stable}';
-    document.head.appendChild(earlyStyle);
-
-    function preloadFont(path) {
-        var link = document.createElement('link');
-        link.rel = 'preload';
-        link.as = 'font';
-        link.type = 'font/woff2';
-        link.crossOrigin = 'anonymous';
-        link.href = path;
-        document.head.appendChild(link);
-    }
-    preloadFont('/static/vendor/inter/InterVariable.woff2');
-    preloadFont('/static/vendor/tabler-icons/fonts/tabler-icons.woff2?v3.44.0');
+    var version = '2026.09.23.4';
 
     var override = localStorage.getItem('theme-mode-override');
     if (override === 'light' || override === 'dark') {
@@ -34,12 +16,6 @@
         document.documentElement.classList.toggle('b2m-epaper', epaperOverride === 'true');
     }
 
-    function stylesheet(path) {
-        var link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = path + '?v=' + version;
-        document.head.appendChild(link);
-    }
     function script(path) {
         var node = document.createElement('script');
         node.src = path + '?v=' + version;
@@ -47,19 +23,9 @@
         document.head.appendChild(node);
     }
 
-    stylesheet('/static/css/ui-v2.css');
-    stylesheet('/static/css/ui-v4.css');
-    stylesheet('/static/css/ui-v6.css');
-    stylesheet('/static/css/ui-v9.css');
-    stylesheet('/static/css/ui-v17.css');
-    stylesheet('/static/css/ui-v22.css');
-    stylesheet('/static/css/ui-v23.css');
-    stylesheet('/static/css/ui-v24.css');
-    stylesheet('/static/css/ui-v25.css');
-    stylesheet('/static/css/ui-v27.css');
-
-    // /user-theme.css is linked directly from base.html so it participates in
-    // render blocking and the first painted frame already uses the user's accent.
+    // /user-theme.css and all global UI styles are linked directly from
+    // base.html. They are therefore render-blocking and cannot change layout
+    // after the first painted frame.
     fetch('/api/theme', {headers:{Accept:'application/json'}, cache:'no-store'})
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(theme){
@@ -95,10 +61,6 @@
         script('/static/js/profile-live-v27.js');
     }
 
-    /* Shopping-print-v5 used to monkey-patch the legacy shopping-print client.
-       The current page owns these behaviors directly and must not load that patch
-       a second time. */
-
     if (window.location.pathname === '/settings') {
         script('/static/js/theme-live-v2.js');
     }
@@ -110,7 +72,6 @@
     }
 
     if (window.location.pathname === '/labels') {
-        stylesheet('/static/css/ui-v13.css');
         script('/static/js/labels-b21-v2.js');
         script('/static/js/labels-b21-v2-patch.js');
         script('/static/js/labels-b21-v4.js');
