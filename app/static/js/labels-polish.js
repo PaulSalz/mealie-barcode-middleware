@@ -1,6 +1,10 @@
 (function() {
     'use strict';
 
+    var MODE_KEY = 'b2m-label-editor-mode-v1';
+    var advancedMode = false;
+    try { advancedMode = localStorage.getItem(MODE_KEY) === 'advanced'; } catch (e) {}
+
     function showQueueFeedback(message) {
         var box = document.getElementById('label-queue-feedback');
         if (!box) return;
@@ -20,6 +24,82 @@
         box.className = 'd-none ms-2';
         box.style.verticalAlign = 'middle';
         title.appendChild(box);
+    }
+
+    function ensureModeSwitch() {
+        var header = document.querySelector('.page-header .btn-list');
+        if (!header || document.getElementById('label-editor-mode')) return;
+        var group = document.createElement('div');
+        group.id = 'label-editor-mode';
+        group.className = 'btn-group me-2';
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', 'Label editor mode');
+        group.innerHTML = '<button type="button" class="btn btn-outline-secondary" data-label-mode="quick"><i class="ti ti-sparkles icon"></i> Quick print</button>' +
+            '<button type="button" class="btn btn-outline-secondary" data-label-mode="advanced"><i class="ti ti-adjustments icon"></i> Advanced editor</button>';
+        header.insertBefore(group, header.firstChild);
+        group.querySelectorAll('[data-label-mode]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                advancedMode = button.dataset.labelMode === 'advanced';
+                try { localStorage.setItem(MODE_KEY, advancedMode ? 'advanced' : 'quick'); } catch (e) {}
+                applyEditorMode();
+            });
+        });
+    }
+
+    function setHidden(node, hidden) {
+        if (node) node.classList.toggle('d-none', hidden);
+    }
+
+    function applyEditorMode() {
+        ensureModeSwitch();
+        document.querySelectorAll('#label-editor-mode [data-label-mode]').forEach(function(button) {
+            var active = (button.dataset.labelMode === 'advanced') === advancedMode;
+            button.classList.toggle('btn-primary', active);
+            button.classList.toggle('btn-outline-secondary', !active);
+        });
+
+        var pageTitle = document.querySelector('.page-header .page-title');
+        var subtitle = pageTitle && pageTitle.parentElement ? pageTitle.parentElement.querySelector('.text-secondary') : null;
+        if (pageTitle) pageTitle.firstChild.textContent = advancedMode ? 'Code Generator ' : 'Labels ';
+        if (subtitle) subtitle.textContent = advancedMode
+            ? 'Build, edit and keep a reusable label queue. Code style is chosen per label.'
+            : 'Choose what to print, set the number of copies, pick a label size and print.';
+
+        // Queue-wide code-format controls are power-user functionality.
+        var queue = document.getElementById('label-queue');
+        var queueCard = queue ? queue.closest('.card') : null;
+        if (queueCard) setHidden(queueCard.querySelector('.card-actions'), !advancedMode);
+
+        // Per-entry quick mode keeps the human-facing label and Copies control,
+        // while hiding raw payload and symbology details.
+        document.querySelectorAll('#label-queue .label-card').forEach(function(card) {
+            var code = card.querySelector('.entry-code');
+            var kind = card.querySelector('.entry-kind');
+            var hint = card.querySelector('.entry-hint');
+            setHidden(code ? code.closest('.col-md-6') : null, !advancedMode);
+            setHidden(kind ? kind.closest('.col-md-5') : null, !advancedMode);
+            setHidden(hint, !advancedMode);
+            var badges = card.querySelector('.col-md-4');
+            setHidden(badges, !advancedMode);
+        });
+
+        var printCard = document.getElementById('label-format');
+        printCard = printCard ? printCard.closest('.card') : null;
+        if (printCard) {
+            var body = printCard.querySelector('.card-body');
+            var title = printCard.querySelector('.card-title');
+            var cardSubtitle = printCard.querySelector('.card-subtitle');
+            if (title) title.textContent = advancedMode ? 'Print layout' : 'Label size';
+            if (cardSubtitle) cardSubtitle.textContent = advancedMode
+                ? 'Physical label/page settings. Code type is configured in the queue.'
+                : 'Choose a common size. The recommended defaults handle spacing and text automatically.';
+            if (body) {
+                Array.from(body.children).forEach(function(child, index) {
+                    // The preset row is the second child and remains visible in both modes.
+                    setHidden(child, !advancedMode && index !== 1);
+                });
+            }
+        }
     }
 
     function fixQueuePreviewImages() {
@@ -82,9 +162,10 @@
         if (!count || !root) return;
         var previous = count.textContent;
         var ready = false;
-        requestAnimationFrame(function() { ready = true; previous = count.textContent; fixQueuePreviewImages(); });
+        requestAnimationFrame(function() { ready = true; previous = count.textContent; fixQueuePreviewImages(); applyEditorMode(); });
         new MutationObserver(function() {
             fixQueuePreviewImages();
+            applyEditorMode();
             if (!ready) return;
             var current = count.textContent;
             if (current !== previous) {
@@ -117,11 +198,13 @@
         document.body.appendChild(script);
     }
 
+    ensureModeSwitch();
     moveQueueFeedback();
     preloadActions();
     prefillRecipeFromUrl();
     watchQueue();
     loadB21Designer();
+    applyEditorMode();
 
     var foodResults = document.getElementById('generator-food-results');
     if (foodResults) {
