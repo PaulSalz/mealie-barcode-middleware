@@ -1,4 +1,4 @@
-"""Theme settings — global appearance stored in the DB."""
+"""Theme settings — global defaults and deterministic CSS rendering."""
 
 import logging
 
@@ -46,13 +46,18 @@ FONT_CSS = {
     "dyslexia": 'OpenDyslexic,"Atkinson Hyperlegible",Verdana,Tahoma,Arial,sans-serif',
 }
 
+# One canonical neutral palette table is used by server-rendered CSS and mirrored
+# by the browser live renderer. ui-v29 previously used a second, stronger table
+# after load, which caused a visible background jump on every navigation.
 GRAY_CSS = {
-    "gray": None,
-    "slate":{"50":"#f8fafc","100":"#f1f5f9","200":"#e2e8f0","300":"#cbd5e1","400":"#94a3b8","500":"#64748b","600":"#475569","700":"#334155","800":"#1e293b","900":"#0f172a","950":"#020617"},
-    "zinc":{"50":"#fafafa","100":"#f4f4f5","200":"#e4e4e7","300":"#d4d4d8","400":"#a1a1aa","500":"#71717a","600":"#52525b","700":"#3f3f46","800":"#27272a","900":"#18181b","950":"#09090b"},
-    "neutral":{"50":"#fafafa","100":"#f5f5f5","200":"#e5e5e5","300":"#d4d4d4","400":"#a3a3a3","500":"#737373","600":"#525252","700":"#404040","800":"#262626","900":"#171717","950":"#0a0a0a"},
-    "stone":{"50":"#fafaf9","100":"#f5f5f4","200":"#e7e5e4","300":"#d6d3d1","400":"#a8a29e","500":"#78716c","600":"#57534e","700":"#44403c","800":"#292524","900":"#1c1917","950":"#0c0a09"},
+    "gray":{"50":"#f7f8fa","100":"#eceff3","200":"#d8dde5","300":"#b9c1cc","400":"#8f9aa8","500":"#687483","600":"#4c5765","700":"#37414d","800":"#242c35","900":"#171d24","950":"#0b0f14"},
+    "slate":{"50":"#f6f8fb","100":"#e8eef6","200":"#d2ddea","300":"#afc0d4","400":"#7f96b0","500":"#5a7390","600":"#405870","700":"#2e4258","800":"#1d2d3e","900":"#111d2a","950":"#08111c"},
+    "zinc":{"50":"#fafafa","100":"#eeeeef","200":"#d9d9dc","300":"#bdbdc3","400":"#97979f","500":"#707078","600":"#515158","700":"#3a3a40","800":"#25252a","900":"#17171b","950":"#0b0b0e"},
+    "neutral":{"50":"#fbfbfb","100":"#f0f0f0","200":"#d8d8d8","300":"#b9b9b9","400":"#929292","500":"#6d6d6d","600":"#4f4f4f","700":"#393939","800":"#242424","900":"#151515","950":"#080808"},
+    "stone":{"50":"#fbf9f6","100":"#f0ebe5","200":"#ddd4ca","300":"#c1b3a4","400":"#9b8977","500":"#796856","600":"#5a4d41","700":"#443a32","800":"#2d2722","900":"#1c1815","950":"#0e0c0a"},
 }
+
+RADIUS_REM = {"0":0.0, "0.5":0.25, "1":0.5, "1.5":0.8, "2":1.1}
 
 
 def get_theme(db) -> dict[str, str]:
@@ -102,10 +107,9 @@ def build_theme_css(theme: dict[str, str]) -> str:
     dark_props: list[str] = []
     extra_rules: list[str] = []
 
+    epaper = theme.get("epaper", THEME_DEFAULTS["epaper"]) == "true"
     color = theme.get("color", THEME_DEFAULTS["color"])
-    if color == "rainbow":
-        # Custom properties switch between six strong accent colors. The brand
-        # itself uses a continuously moving gradient for a smooth rainbow pass.
+    if color == "rainbow" and not epaper:
         extra_rules.extend([
             "@keyframes b2m-rainbow-accent{0%,100%{--tblr-primary:#d63939;--tblr-primary-rgb:214,57,57}16%{--tblr-primary:#f76707;--tblr-primary-rgb:247,103,7}33%{--tblr-primary:#f59f00;--tblr-primary-rgb:245,159,0}50%{--tblr-primary:#2fb344;--tblr-primary-rgb:47,179,68}66%{--tblr-primary:#17a2b8;--tblr-primary-rgb:23,162,184}83%{--tblr-primary:#ae3ec9;--tblr-primary-rgb:174,62,201}}",
             ":root{animation:b2m-rainbow-accent 14s linear infinite}",
@@ -123,21 +127,41 @@ def build_theme_css(theme: dict[str, str]) -> str:
         extra_rules.extend(["body{letter-spacing:.018em;word-spacing:.045em;line-height:1.55}", "input,select,textarea,button{letter-spacing:.012em}"])
 
     base = theme.get("base", THEME_DEFAULTS["base"])
-    if base != THEME_DEFAULTS["base"] and base in GRAY_CSS and GRAY_CSS[base]:
-        grays = GRAY_CSS[base]
-        for step, val in grays.items():
-            props.append(f"--tblr-gray-{step}:{val}")
-        dark_props.extend([
-            f"--tblr-body-color:{grays['200']}", f"--tblr-body-bg:{grays['900']}",
-            f"--tblr-secondary-bg:{grays['800']}", f"--tblr-light-text-emphasis:{grays['100']}",
-            f"--tblr-dark-text-emphasis:{grays['300']}", f"--tblr-light-bg-subtle:{grays['800']}",
-        ])
+    grays = GRAY_CSS.get(base, GRAY_CSS[THEME_DEFAULTS["base"]])
+    for step, val in grays.items():
+        props.append(f"--tblr-gray-{step}:{val}")
+    props.extend([
+        f"--tblr-body-color:{grays['900']}",
+        f"--tblr-body-bg:{grays['100']}",
+        f"--tblr-bg-surface:{grays['50']}",
+        f"--tblr-bg-surface-secondary:{grays['200']}",
+        f"--tblr-secondary-bg:{grays['200']}",
+        f"--tblr-border-color:{grays['300']}",
+        f"--tblr-secondary-color:{grays['600']}",
+    ])
+    dark_props.extend([
+        f"--tblr-body-color:{grays['100']}",
+        f"--tblr-body-bg:{grays['950']}",
+        f"--tblr-bg-surface:{grays['900']}",
+        f"--tblr-bg-surface-secondary:{grays['800']}",
+        f"--tblr-secondary-bg:{grays['800']}",
+        f"--tblr-border-color:{grays['700']}",
+        f"--tblr-secondary-color:{grays['400']}",
+        f"--tblr-light-text-emphasis:{grays['100']}",
+        f"--tblr-dark-text-emphasis:{grays['300']}",
+        f"--tblr-light-bg-subtle:{grays['800']}",
+    ])
 
-    radius = theme.get("radius", THEME_DEFAULTS["radius"])
-    if radius != THEME_DEFAULTS["radius"]:
-        props.append(f"--tblr-border-radius-scale:{radius}")
+    radius = str(theme.get("radius", THEME_DEFAULTS["radius"]))
+    radius_rem = RADIUS_REM.get(radius, RADIUS_REM[THEME_DEFAULTS["radius"]])
+    props.extend([
+        f"--tblr-border-radius-scale:{radius}",
+        f"--tblr-border-radius:{radius_rem}rem",
+        f"--tblr-border-radius-sm:{max(0.0, radius_rem * 0.72)}rem",
+        f"--tblr-border-radius-lg:{max(0.0, radius_rem * 1.45)}rem",
+        f"--tblr-border-radius-xl:{max(0.0, radius_rem * 1.9)}rem",
+    ])
 
-    epaper = theme.get("epaper", THEME_DEFAULTS["epaper"]) == "true"
     try:
         contrast = max(0, min(100, int(theme.get("contrast", THEME_DEFAULTS["contrast"]))))
     except (TypeError, ValueError):
@@ -148,7 +172,8 @@ def build_theme_css(theme: dict[str, str]) -> str:
         surface = max(238, 255 - round(contrast * 0.12))
         mono_props = [
             "--tblr-primary:#000", "--tblr-primary-rgb:0,0,0", "--tblr-body-color:#000", "--tblr-body-bg:#fff",
-            f"--tblr-bg-surface:rgb({surface},{surface},{surface})", f"--tblr-border-color:rgb({border},{border},{border})",
+            f"--tblr-bg-surface:rgb({surface},{surface},{surface})", f"--tblr-bg-surface-secondary:rgb({surface},{surface},{surface})",
+            f"--tblr-secondary-bg:rgb({surface},{surface},{surface})", f"--tblr-border-color:rgb({border},{border},{border})",
             f"--tblr-secondary-color:rgb({muted},{muted},{muted})", "--tblr-link-color:#000", "--tblr-link-hover-color:#000",
         ]
         props.extend(mono_props)
@@ -162,8 +187,6 @@ def build_theme_css(theme: dict[str, str]) -> str:
             ".badge{border:1px solid currentColor!important}",
         ])
 
-    if not props and not dark_props and not extra_rules:
-        return ""
     parts: list[str] = []
     if props:
         parts.append(":root{" + ";".join(props) + "}")

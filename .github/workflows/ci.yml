@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Compile Python
-        run: python -m compileall -q app tests tools/barcode2mealie-usb/scanner.py tools/ci_stability_smoke.py tools/ci_browser_smoke.py
+        run: python -m compileall -q app tests tools/barcode2mealie-usb/scanner.py tools/ci_stability_smoke.py tools/ci_browser_smoke.py tools/ci_theme_v33_smoke.py
       - name: Import application modules
         run: |
           python - <<'PY'
@@ -151,7 +151,9 @@ jobs:
           cat /tmp/b2m-browser.log
           exit 1
       - name: Browser setup smoke
-        run: python tools/ci_browser_smoke.py
+        run: |
+          python tools/ci_browser_smoke.py
+          python tools/ci_theme_v33_smoke.py
       - name: Show server log on failure
         if: failure()
         run: cat /tmp/b2m-browser.log || true
