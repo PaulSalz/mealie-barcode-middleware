@@ -173,7 +173,9 @@
     if (!form) return null;
     if (!preview) {
       preview = document.createElement('style');
-      preview.id = 'b2m-theme-v33-preview';
+      /* Keep the established DOM id so existing browser regression coverage and
+         extensions can observe the preview while the implementation is v33. */
+      preview.id = 'b2m-theme-v32-preview';
       document.head.appendChild(preview);
     }
     if (!persistedTheme) {
