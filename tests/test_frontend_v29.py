@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from app.frontend_assets import GLOBAL_CSS, GLOBAL_JS
+from app.services.niimblue import _media_from_rfid_payload
+from app.services.shopping_print import LABEL_TYPES
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,3 +69,35 @@ def test_unit_hide_is_a_real_persisted_override():
     assert '"hide_unit": hide_unit' in source
     assert '_bool(override.get("hide_unit", False))' in source
     assert 'unit_display = ""' in source
+
+
+def test_rfid_consumables_type_is_used_as_media_type():
+    media = _media_from_rfid_payload({
+        "paperRfidInfo": {
+            "tagPresent": True,
+            "barCode": "ROLL-123",
+            "uuid": "abc",
+            "consumablesType": 3,
+        }
+    })
+    assert media == {
+        "tag_present": True,
+        "barcode": "ROLL-123",
+        "uuid": "abc",
+        "label_type": 3,
+    }
+
+
+def test_label_print_uses_bound_roll_dimensions_and_preserves_aspect_ratio():
+    service = (ROOT / "app/services/niimblue.py").read_text(encoding="utf-8")
+    router = (ROOT / "app/routers/label_printer.py").read_text(encoding="utf-8")
+    assert '"imageFit": "contain"' in service
+    assert 'media.get("label_type")' in service
+    assert 'width_mm = float(applied_profile["width_mm"])' in router
+    assert 'height_mm = float(applied_profile["height_mm"])' in router
+    assert 'result["applied_profile_id"]' in router
+
+
+def test_shopping_print_keeps_media_type_fallbacks_available():
+    assert LABEL_TYPES[1] == "With gaps"
+    assert LABEL_TYPES[3] == "Continuous"
