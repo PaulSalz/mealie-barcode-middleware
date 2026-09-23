@@ -12,6 +12,10 @@ COPY app/ ./app/
 COPY docs/ ./docs/
 COPY entrypoint.sh /entrypoint.sh
 
+# Generate deterministic UI entrypoints at image-build time. app.main also has
+# a development fallback when running directly from a source checkout.
+RUN python -m app.frontend_assets
+
 # Bundle OpenDyslexic locally so Appearance does not depend on an external font CDN
 # at runtime. The upstream project is SIL-OFL licensed.
 RUN mkdir -p /app/app/static/vendor/opendyslexic \
