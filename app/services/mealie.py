@@ -5,7 +5,8 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, Item, RetryQueue
+from app.models import Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
+from app.services.targets import primary_target
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -89,15 +90,11 @@ def sync_items(db: Session) -> int:
 
     stale_items = db.query(Item).filter(Item.source == "mealie", Item.synced_at < sync_started).all()
     for stale in stale_items:
-        mappings = db.query(BarcodeMapping).filter(
-            BarcodeMapping.target_type == "food",
-            BarcodeMapping.target_id == stale.id,
-        ).all()
         targets = db.query(BarcodeTarget).filter(
             BarcodeTarget.target_type == "food",
             BarcodeTarget.target_id == stale.id,
         ).all()
-        affected = {row.barcode for row in mappings} | {row.barcode for row in targets}
+        affected = {row.barcode for row in targets}
         for barcode in affected:
             db.add(Activity(
                 barcode=barcode,
@@ -105,8 +102,6 @@ def sync_items(db: Session) -> int:
                 message=f"{stale.name} was deleted in Mealie — remap needed",
                 result="broken",
             ))
-        for mapping in mappings:
-            db.delete(mapping)
         for target in targets:
             db.delete(target)
         db.delete(stale)
@@ -445,16 +440,16 @@ def reconcile_linked_barcode(barcode: str) -> None:
 
     db = SessionLocal()
     try:
-        mapping = db.get(BarcodeMapping, barcode)
-        if not mapping:
+        target = primary_target(barcode, db)
+        if not target:
             return
 
         cached = db.get(BarcodeCache, barcode)
         shopping_item_id = cached.shopping_item_id if cached else None
         pending = db.query(RetryQueue).filter(RetryQueue.barcode == barcode).all()
 
-        if mapping.target_type == "food":
-            item = db.get(Item, mapping.target_id)
+        if target.target_type == "food":
+            item = db.get(Item, target.target_id)
             if not item:
                 return
 
@@ -465,10 +460,10 @@ def reconcile_linked_barcode(barcode: str) -> None:
                 except (ValueError, TypeError):
                     continue
                 payload.pop("note", None)
-                payload["foodId"] = mapping.target_id
-                payload["quantity"] = mapping.quantity or 1
-                if mapping.unit_id:
-                    payload["unitId"] = mapping.unit_id
+                payload["foodId"] = target.target_id
+                payload["quantity"] = target.quantity or 1
+                if target.unit_id:
+                    payload["unitId"] = target.unit_id
                 else:
                     payload.pop("unitId", None)
                 if not payload.get("shoppingListId"):
@@ -493,11 +488,11 @@ def reconcile_linked_barcode(barcode: str) -> None:
                 return
             payload = {
                 "shoppingListId": list_id,
-                "quantity": mapping.quantity or 1,
+                "quantity": target.quantity or 1,
                 "checked": current.get("checked", False),
                 "position": current.get("position", 0),
-                "foodId": mapping.target_id,
-                "unitId": mapping.unit_id,
+                "foodId": target.target_id,
+                "unitId": target.unit_id,
                 "note": "",
             }
             if _put_shopping_item(shopping_item_id, payload):
@@ -506,7 +501,7 @@ def reconcile_linked_barcode(barcode: str) -> None:
                 logger.info("Reconciled shopping item %s for barcode %s -> %s", shopping_item_id, barcode, item.name)
             return
 
-        if mapping.target_type == "recipe":
+        if target.target_type == "recipe":
             should_add_recipe = bool(pending)
             for entry in pending:
                 db.delete(entry)
@@ -522,10 +517,10 @@ def reconcile_linked_barcode(barcode: str) -> None:
                 db.commit()
 
             if should_add_recipe:
-                if add_recipe_to_shopping_list(mapping.target_id, mapping.recipe_scale or 1.0):
-                    logger.info("Reconciled barcode %s to recipe %s", barcode, mapping.target_name or mapping.target_id)
+                if add_recipe_to_shopping_list(target.target_id, target.recipe_scale or 1.0):
+                    logger.info("Reconciled barcode %s to recipe %s", barcode, target.target_name or target.target_id)
                 else:
-                    logger.error("Failed to reconcile barcode %s to recipe %s", barcode, mapping.target_id)
+                    logger.error("Failed to reconcile barcode %s to recipe %s", barcode, target.target_id)
     finally:
         db.close()
 
