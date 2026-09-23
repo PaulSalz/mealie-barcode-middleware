@@ -2,7 +2,6 @@ import asyncio
 import json
 import threading
 import time
-from collections import Counter
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Request
@@ -10,14 +9,15 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from starlette.responses import StreamingResponse
 
+from app.config import settings
 from app.database import get_db
 from app.events import scan_events
 from app.models import Activity, ApiToken, BarcodeCache, BarcodeMapping, Item, RetryQueue
 from app.services.mealie import check_connectivity
+from app.services.scan_stats import frequent_targets as frequent_target_stats
 from app.services.shopping import get_default_shopping_list_id, get_shopping_list_counts
 from app.templating import _localtime, _relative_time, templates
 from app.utils import utcnow
-from app.config import settings
 
 router = APIRouter()
 _mealie_health_lock = threading.Lock()
@@ -89,23 +89,11 @@ def _recent_scans(db: Session, limit: int = 25) -> list[dict]:
 
 
 def _frequent_targets(db: Session, limit_each: int = 6) -> tuple[list[dict], list[dict], list[dict]]:
-    activities = db.query(Activity).filter(Activity.is_scan_event == True).order_by(Activity.created_at.desc()).limit(5000).all()
-    if not activities: return [], [], []
-    barcodes = list({a.barcode for a in activities if not a.target_type and not a.targets_json})
-    mappings = {m.barcode: m for m in db.query(BarcodeMapping).filter(BarcodeMapping.barcode.in_(barcodes)).all()} if barcodes else {}
-    counts: Counter[tuple[str, str, str]] = Counter()
-    for activity in activities:
-        for target in _activity_targets(activity, mappings.get(activity.barcode)):
-            target_type, target_id = target.get("type"), target.get("id")
-            if target_type not in {"food", "recipe", "action"} or not target_id: continue
-            counts[(target_type, str(target_id), target.get("name") or str(target_id))] += 1
-    foods, recipes, actions = [], [], []
-    for (target_type, target_id, target_name), uses in counts.most_common():
-        entry = {"id": target_id, "name": target_name, "uses": uses}
-        if target_type == "food" and len(foods) < limit_each: foods.append(entry)
-        elif target_type == "recipe" and len(recipes) < limit_each: recipes.append(entry)
-        elif target_type == "action" and len(actions) < limit_each: actions.append(entry)
-    return foods, recipes, actions
+    return (
+        frequent_target_stats(db, "food", limit_each),
+        frequent_target_stats(db, "recipe", limit_each),
+        frequent_target_stats(db, "action", limit_each),
+    )
 
 
 def _summary_counts(db: Session) -> tuple[int, int, int, int, int]:
