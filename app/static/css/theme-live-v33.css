@@ -1,0 +1,83 @@
+/* v2026.09.24.1 — CSP-safe live appearance rules.
+   JavaScript only toggles classes and CSS custom properties; all selector-based
+   effects live in this self-hosted stylesheet so style-src 'self' stays strict. */
+
+@keyframes b2m-rainbow-accent {
+  0%,100% { --tblr-primary:#d63939; --tblr-primary-rgb:214,57,57; }
+  16% { --tblr-primary:#f76707; --tblr-primary-rgb:247,103,7; }
+  33% { --tblr-primary:#f59f00; --tblr-primary-rgb:245,159,0; }
+  50% { --tblr-primary:#2fb344; --tblr-primary-rgb:47,179,68; }
+  66% { --tblr-primary:#17a2b8; --tblr-primary-rgb:23,162,184; }
+  83% { --tblr-primary:#ae3ec9; --tblr-primary-rgb:174,62,201; }
+}
+
+@keyframes b2m-rainbow-brand-move {
+  0% { background-position:0% 50%; }
+  100% { background-position:200% 50%; }
+}
+
+html.b2m-rainbow-active {
+  animation: b2m-rainbow-accent 14s linear infinite;
+}
+html.b2m-rainbow-active .b2m-brand-text {
+  background: linear-gradient(90deg,#d63939,#f76707,#f59f00,#2fb344,#17a2b8,#4263eb,#ae3ec9,#d63939);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+  animation: b2m-rainbow-brand-move 12s linear infinite;
+}
+
+html.b2m-font-dyslexia-live body {
+  letter-spacing: .018em;
+  word-spacing: .045em;
+  line-height: 1.55;
+}
+html.b2m-font-dyslexia-live input,
+html.b2m-font-dyslexia-live select,
+html.b2m-font-dyslexia-live textarea,
+html.b2m-font-dyslexia-live button {
+  letter-spacing: .012em;
+}
+
+html.b2m-theme-live-epaper {
+  filter: grayscale(1);
+  color-scheme: light;
+}
+html.b2m-theme-live-epaper body,
+html.b2m-theme-live-epaper .page,
+html.b2m-theme-live-epaper .page-wrapper {
+  background: #fff !important;
+  color: #000 !important;
+}
+html.b2m-theme-live-epaper .card,
+html.b2m-theme-live-epaper .dropdown-menu,
+html.b2m-theme-live-epaper .modal-content,
+html.b2m-theme-live-epaper .navbar,
+html.b2m-theme-live-epaper .list-group-item {
+  box-shadow: none !important;
+}
+html.b2m-theme-live-epaper .card,
+html.b2m-theme-live-epaper .dropdown-menu,
+html.b2m-theme-live-epaper .modal-content,
+html.b2m-theme-live-epaper .navbar,
+html.b2m-theme-live-epaper .list-group-item,
+html.b2m-theme-live-epaper .form-control,
+html.b2m-theme-live-epaper .form-select,
+html.b2m-theme-live-epaper .btn {
+  border-color: var(--b2m-epaper-border, #555) !important;
+}
+html.b2m-theme-live-epaper .text-secondary,
+html.b2m-theme-live-epaper .form-hint,
+html.b2m-theme-live-epaper .card-subtitle {
+  color: var(--b2m-epaper-muted, #444) !important;
+}
+html.b2m-theme-live-epaper [class*="bg-"][class*="-lt"] {
+  background: #fff !important;
+  color: #000 !important;
+  border: 1px solid #000 !important;
+}
+html.b2m-theme-live-epaper .badge {
+  border: 1px solid currentColor !important;
+}
