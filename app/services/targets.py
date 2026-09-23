@@ -1,6 +1,6 @@
 import json
 
-from app.models import BarcodeMapping, BarcodeTarget
+from app.models import BarcodeTarget
 
 
 def list_ids(target: BarcodeTarget) -> list[str]:
@@ -18,64 +18,38 @@ def set_list_ids(target: BarcodeTarget, values) -> None:
 
 
 def ensure_targets(barcode: str, db) -> list[BarcodeTarget]:
-    targets = (
+    """Return canonical targets for a barcode.
+
+    Legacy BarcodeMapping rows are migrated forward during database startup. Runtime
+    code deliberately never falls back to or recreates that compatibility table,
+    keeping BarcodeTarget as the only source of truth after initialization.
+    """
+    return (
         db.query(BarcodeTarget)
         .filter(BarcodeTarget.barcode == barcode)
         .order_by(BarcodeTarget.position, BarcodeTarget.id)
         .all()
     )
-    if targets:
-        return targets
-    mapping = db.get(BarcodeMapping, barcode)
-    if not mapping:
-        return []
-    target = BarcodeTarget(
-        barcode=barcode,
-        target_type=mapping.target_type,
-        target_id=mapping.target_id,
-        target_name=mapping.target_name,
-        route="inherit",
-        quantity=None if mapping.target_type == "food" and mapping.quantity <= 0.001 else mapping.quantity,
-        unit_id=mapping.unit_id,
-        recipe_scale=mapping.recipe_scale or 1.0,
-        position=0,
-        enabled=True,
-        mapped_by=mapping.mapped_by,
-    )
-    set_list_ids(target, [mapping.shopping_list_id] if mapping.shopping_list_id else [])
-    db.add(target)
-    db.commit()
-    db.refresh(target)
-    return [target]
 
 
-def sync_legacy_primary(barcode: str, db) -> None:
-    """Mirror the first enabled target into BarcodeMapping for old clients/views."""
-    target = (
-        db.query(BarcodeTarget)
-        .filter(BarcodeTarget.barcode == barcode, BarcodeTarget.enabled == True)
-        .order_by(BarcodeTarget.position, BarcodeTarget.id)
-        .first()
-    )
-    mapping = db.get(BarcodeMapping, barcode)
-    if not target:
-        if mapping:
-            db.delete(mapping)
-            db.commit()
-        return
-    if not mapping:
-        mapping = BarcodeMapping(barcode=barcode, target_type=target.target_type, target_id=target.target_id)
-        db.add(mapping)
-    mapping.target_type = target.target_type
-    mapping.target_id = target.target_id
-    mapping.target_name = target.target_name
-    mapping.quantity = target.quantity if target.quantity is not None else 0.001
-    mapping.unit_id = target.unit_id
-    mapping.recipe_scale = target.recipe_scale or 1.0
-    ids = list_ids(target)
-    mapping.shopping_list_id = ids[0] if ids else None
-    mapping.mapped_by = target.mapped_by or "manual"
-    db.commit()
+def primary_target(barcode: str, db, *, enabled_only: bool = True) -> BarcodeTarget | None:
+    query = db.query(BarcodeTarget).filter(BarcodeTarget.barcode == barcode)
+    if enabled_only:
+        query = query.filter(BarcodeTarget.enabled == True)
+    return query.order_by(BarcodeTarget.position, BarcodeTarget.id).first()
+
+
+def primary_targets_by_barcode(db, barcodes: list[str] | None = None) -> dict[str, BarcodeTarget]:
+    query = db.query(BarcodeTarget).filter(BarcodeTarget.enabled == True)
+    if barcodes is not None:
+        if not barcodes:
+            return {}
+        query = query.filter(BarcodeTarget.barcode.in_(barcodes))
+    rows = query.order_by(BarcodeTarget.barcode, BarcodeTarget.position, BarcodeTarget.id).all()
+    result: dict[str, BarcodeTarget] = {}
+    for row in rows:
+        result.setdefault(row.barcode, row)
+    return result
 
 
 def add_target(
@@ -94,9 +68,8 @@ def add_target(
 ) -> BarcodeTarget:
     """Add or update one logical target for a barcode.
 
-    A Food/recipe already attached to the barcode is updated in place instead of
-    creating another identical row. This makes repeated UI submissions safe and
-    avoids position races from producing duplicate targets.
+    BarcodeTarget is the canonical mapping store. A Food/recipe already attached
+    to the barcode is updated in place instead of creating another identical row.
     """
     normalized_route = route if route in {"inherit", "mealie", "homeassistant", "both", "none"} else "inherit"
     existing_target = (
@@ -120,7 +93,6 @@ def add_target(
         set_list_ids(existing_target, list_ids_value or [])
         db.commit()
         db.refresh(existing_target)
-        sync_legacy_primary(barcode, db)
         return existing_target
 
     existing = ensure_targets(barcode, db)
@@ -143,5 +115,4 @@ def add_target(
     db.add(target)
     db.commit()
     db.refresh(target)
-    sync_legacy_primary(barcode, db)
     return target
