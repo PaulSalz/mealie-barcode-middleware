@@ -83,7 +83,7 @@ jobs:
           print('migration/backfill ok')
           PY
       - name: Pytest reliability suite
-        run: pytest -q
+        run: python -m pytest -q
       - name: Parse Jinja templates
         run: |
           python - <<'PY'
