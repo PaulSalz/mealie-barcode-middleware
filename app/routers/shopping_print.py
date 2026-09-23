@@ -179,8 +179,10 @@ async def shopping_print_save_item_override(request: Request, db: Session = Depe
             str(body.get("key") or ""),
             str(body.get("name_alias") or ""),
             str(body.get("quantity_alias") or ""),
+            str(body.get("unit_alias") or ""),
             str(body.get("source_name") or ""),
             str(body.get("source_quantity_text") or ""),
+            str(body.get("source_unit_text") or ""),
         )
         payload = _full_payload(db, list_id)
     except ValueError as exc:
