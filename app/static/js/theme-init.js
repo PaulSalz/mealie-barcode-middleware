@@ -2,7 +2,7 @@
 (function() {
     'use strict';
 
-    var version = '2026.09.23.1';
+    var version = '2026.09.23.3';
 
     /* Reserve scrollbar width before body layout so the navbar does not jump
        horizontally when Items/Barcodes content makes the page scrollable. */
@@ -28,6 +28,11 @@
     }
     var baseOverride = localStorage.getItem('theme-base-override');
     if (baseOverride) document.documentElement.dataset.b2mBase = baseOverride;
+    var epaperOverride = localStorage.getItem('theme-epaper-override');
+    if (epaperOverride === 'true' || epaperOverride === 'false') {
+        document.documentElement.classList.toggle('b2m-epaper-v9', epaperOverride === 'true');
+        document.documentElement.classList.toggle('b2m-epaper', epaperOverride === 'true');
+    }
 
     function stylesheet(path) {
         var link = document.createElement('link');
@@ -67,6 +72,10 @@
                 document.documentElement.dataset.b2mBase = theme.base;
                 localStorage.setItem('theme-base-override', theme.base);
             }
+            var mono = theme.epaper === 'true';
+            document.documentElement.classList.toggle('b2m-epaper-v9', mono);
+            document.documentElement.classList.toggle('b2m-epaper', mono);
+            localStorage.setItem('theme-epaper-override', mono ? 'true' : 'false');
         })
         .catch(function(){});
 
@@ -86,9 +95,9 @@
         script('/static/js/profile-live-v27.js');
     }
 
-    if (window.location.pathname === '/shopping-print') {
-        script('/static/js/shopping-print-v5.js');
-    }
+    /* Shopping-print-v5 used to monkey-patch the legacy shopping-print client.
+       The current page owns these behaviors directly and must not load that patch
+       a second time. */
 
     if (window.location.pathname === '/settings') {
         script('/static/js/theme-live-v2.js');

@@ -2,6 +2,7 @@
 {% block title %}Dashboard — Mealie Barcode Middleware{% endblock %}
 
 {% block content %}
+<div id="dashboard-poll-config" class="d-none" data-dashboard-seconds="{{ dashboard_poll_interval_seconds }}" data-health-seconds="{{ health_poll_interval_seconds }}"></div>
 <div class="page-header d-print-none mb-3">
   <div class="row g-2 align-items-center">
     <div class="col"><h2 class="page-title">Dashboard <span class="text-secondary small fw-normal ms-2">v2026.09.21.1</span></h2></div>
@@ -53,4 +54,4 @@
 {% endif %}
 </div></div></div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/health.js?v={{ v }}"></script><script src="/static/js/dashboard-v2.js?v={{ v }}&rev=1"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/health.js?v={{ v }}&rev=2"></script><script src="/static/js/dashboard-v2.js?v={{ v }}&rev=2"></script>{% endblock %}

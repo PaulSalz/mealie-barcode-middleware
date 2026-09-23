@@ -157,6 +157,8 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         "mealie_url": mealie_url, "shopping_list_url": shopping_list_url,
         "shopping_lists_status": shopping_lists_status,
         "scanner_online": scanner_online, "scanner_total": scanner_total,
+        "dashboard_poll_interval_seconds": settings.dashboard_poll_interval_seconds,
+        "health_poll_interval_seconds": settings.health_poll_interval_seconds,
     })
 
 
@@ -170,6 +172,7 @@ def dashboard_api(db: Session = Depends(get_db)):
         "pending_count": pending_count, "queue_depth": queue_depth, "unknown_count": unknown_count,
         "scanner_online": scanner_online, "scanner_total": scanner_total,
         "shopping_lists": get_shopping_list_counts(),
+        "poll_interval_seconds": settings.dashboard_poll_interval_seconds,
         "recent_items": [{
             "barcode": row["barcode"],
             "product_name": row["title"] or "—",

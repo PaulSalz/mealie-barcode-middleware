@@ -4,10 +4,12 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.services.niimblue import is_configured as niim_is_configured, print_image_base64, printer_status
 from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
 from app.services.shopping_print import (
+    LABEL_TYPES,
     load_category_aliases,
     load_print_settings,
     save_category_aliases,
@@ -78,6 +80,8 @@ def shopping_print_bootstrap(db: Session = Depends(get_db)):
         "default_list_id": get_default_shopping_list_id(db),
         "settings": print_settings,
         "printer": status,
+        "poll_interval_seconds": settings.shopping_print_poll_interval_seconds,
+        "label_types": [{"value": value, "name": name} for value, name in LABEL_TYPES.items()],
     }
 
 

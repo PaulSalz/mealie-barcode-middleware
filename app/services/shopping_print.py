@@ -20,6 +20,17 @@ _CATEGORY_ORDERS_KEY = "shopping_print.category_orders"
 _CATEGORY_ALIASES_KEY = "shopping_print.category_aliases"
 _LOCAL_CONTENT_KEY = "shopping_print.local_content"
 
+LABEL_TYPES = {
+    1: "With gaps",
+    2: "Black mark",
+    3: "Continuous",
+    4: "Perforated",
+    5: "Transparent",
+    6: "PVC tag",
+    10: "Black mark + gap",
+    11: "Heat-shrink tube",
+}
+
 DEFAULT_PRINT_SETTINGS = {
     "paper_width_mm": 50.0,
     "margin_mm": 2.2,
@@ -30,7 +41,6 @@ DEFAULT_PRINT_SETTINGS = {
     "dpi": 300,
     "density": 3,
     "threshold": 145,
-    # NIIMBOT paper type 3 = continuous stock (1 = gap/die-cut labels).
     "label_type": 3,
     "show_checkboxes": True,
     "show_items": True,
@@ -137,6 +147,10 @@ def validate_print_settings(values: dict) -> dict:
     if divider_style not in {"solid", "dashed"}:
         raise ValueError("category_divider_style must be solid or dashed")
 
+    label_type = integer("label_type", 1, 255)
+    if label_type not in LABEL_TYPES:
+        raise ValueError("Unsupported NIIM label type")
+
     return {
         "paper_width_mm": round(number("paper_width_mm", 20, 80), 1),
         "margin_mm": round(number("margin_mm", 0, 8), 1),
@@ -147,7 +161,7 @@ def validate_print_settings(values: dict) -> dict:
         "dpi": integer("dpi", 100, 1200),
         "density": integer("density", 1, 5),
         "threshold": integer("threshold", 1, 255),
-        "label_type": integer("label_type", 1, 20),
+        "label_type": label_type,
         "show_checkboxes": _boolean(values, "show_checkboxes"),
         "show_items": _boolean(values, "show_items"),
         "show_quantities": _boolean(values, "show_quantities"),
@@ -341,18 +355,18 @@ def _item_name(row: dict) -> str:
     ).strip()
 
 
-def _quantity_text(row: dict) -> str:
+def _quantity_parts(row: dict) -> tuple[str, str]:
     quantity = row.get("quantity")
-    if quantity is None or quantity == "":
-        return ""
-    try:
-        number = float(quantity)
-        if number.is_integer():
-            quantity_text = str(int(number))
-        else:
-            quantity_text = f"{number:.2f}".rstrip("0").rstrip(".")
-    except (TypeError, ValueError):
-        quantity_text = str(quantity).strip()
+    quantity_text = ""
+    if quantity is not None and quantity != "":
+        try:
+            number = float(quantity)
+            if number.is_integer():
+                quantity_text = str(int(number))
+            else:
+                quantity_text = f"{number:.2f}".rstrip("0").rstrip(".")
+        except (TypeError, ValueError):
+            quantity_text = str(quantity).strip()
 
     unit = row.get("unit") if isinstance(row.get("unit"), dict) else {}
     if not unit and isinstance(row.get("shoppingListItemUnit"), dict):
@@ -366,15 +380,18 @@ def _quantity_text(row: dict) -> str:
             or unit.get("abbreviation")
             or ""
         ).strip()
-    return f"{quantity_text} {unit_text}".strip()
+    return quantity_text, unit_text
 
 
 def _normalized_item(row: dict, label_names: dict[str, str]) -> dict:
+    quantity_value_text, unit_text = _quantity_parts(row)
     return {
         "id": str(row.get("id") or ""),
         "name": _item_name(row),
         "quantity": row.get("quantity"),
-        "quantity_text": _quantity_text(row),
+        "quantity_value_text": quantity_value_text,
+        "unit_text": unit_text,
+        "quantity_text": f"{quantity_value_text} {unit_text}".strip(),
         "category": _category_name(row, label_names),
         "food_id": str(row.get("foodId") or ((row.get("food") or {}).get("id") if isinstance(row.get("food"), dict) else "") or ""),
         "local_only": False,
