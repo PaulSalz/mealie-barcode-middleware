@@ -42,6 +42,22 @@
       };
     }
 
+    function radiusValue(scale) {
+      var map = {'0':0,'0.5':.25,'1':.5,'1.5':.8,'2':1.1};
+      var key = String(scale == null ? '1' : scale);
+      return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : .5;
+    }
+
+    function applyRadiusOnly() {
+      var scale = checkedValue('theme_radius', '1');
+      var base = radiusValue(scale);
+      root.style.setProperty('--tblr-border-radius-scale', String(scale));
+      root.style.setProperty('--tblr-border-radius', base + 'rem');
+      root.style.setProperty('--tblr-border-radius-sm', Math.max(0, base * .72) + 'rem');
+      root.style.setProperty('--tblr-border-radius-lg', Math.max(0, base * 1.45) + 'rem');
+      root.style.setProperty('--tblr-border-radius-xl', Math.max(0, base * 1.9) + 'rem');
+    }
+
     function applyImmediateState() {
       var values = payload();
       root.setAttribute('data-bs-theme', values.mode);
@@ -49,6 +65,7 @@
       var mono = values.epaper === 'true';
       root.classList.toggle('b2m-epaper-v9', mono);
       root.classList.toggle('b2m-epaper', mono);
+      applyRadiusOnly();
       if (contrastOut && contrast) contrastOut.textContent = contrast.value;
     }
 
@@ -93,14 +110,20 @@
       }, 25);
     }
 
-    form.addEventListener('input', function (event) {
+    function handleThemeInput(event) {
       if (!event.target.matches('input[name^="theme_"],select[name^="theme_"]')) return;
+      /* Radius is a geometry-only preference. Re-rendering the complete theme for
+         it used to disable/re-enable the persisted stylesheet and visibly change
+         the selected background. Keep it isolated and purely local. */
+      if (event.target.name === 'theme_radius') {
+        applyRadiusOnly();
+        return;
+      }
       schedulePreview(true);
-    });
-    form.addEventListener('change', function (event) {
-      if (!event.target.matches('input[name^="theme_"],select[name^="theme_"]')) return;
-      schedulePreview(true);
-    });
+    }
+
+    form.addEventListener('input', handleThemeInput);
+    form.addEventListener('change', handleThemeInput);
 
     if (contrast) {
       contrast.addEventListener('input', function () {
