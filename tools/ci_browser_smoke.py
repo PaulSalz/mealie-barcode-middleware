@@ -122,6 +122,7 @@ def main() -> None:
             route.abort()
 
         page.route("**/api/shopping-print/bootstrap-v31*", lambda route: fulfill_json(route, bootstrap_payload))
+        page.route("**/api/shopping-print/bootstrap", handle_legacy_bootstrap)
         page.route("**/api/shopping-print/bootstrap?*", handle_legacy_bootstrap)
         page.route("**/api/access/me*", lambda route: fulfill_json(route, {"is_admin": True, "permissions": {"printer": True}}))
         page.route("**/api/shopping-print/lists/ci-list*", handle_list)
