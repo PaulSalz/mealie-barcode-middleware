@@ -1,19 +1,25 @@
-"""Login, logout, and first-run setup routes."""
+"""Login, logout, first-run account setup, and guided onboarding routes."""
+from datetime import timedelta
 from urllib.parse import unquote
+
 import bcrypt
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User
+from app.models import Activity, ApiToken, SystemState, User
+from app.services.mealie import check_connectivity
+from app.services.shopping import get_default_shopping_list_id
 from app.templating import templates
+from app.utils import utcnow
 
 router = APIRouter()
 
 # Upper bound prevents bcrypt CPU exhaustion (bcrypt truncates at 72 bytes anyway)
 _MAX_PASSWORD_LENGTH = 128
+_ONBOARDING_KEY = "onboarding.completed.v1"
 
 
 def _hash_password(password: str) -> str:
@@ -24,12 +30,55 @@ def _verify_password(password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 
+def _require_logged_in_admin(request: Request) -> RedirectResponse | None:
+    if not request.session.get("user_id"):
+        return RedirectResponse("/login?next=/onboarding", status_code=303)
+    if not request.session.get("is_admin", False):
+        return RedirectResponse("/", status_code=303)
+    return None
+
+
+def _onboarding_status(db: Session) -> dict:
+    """Return a small, human-readable readiness snapshot for onboarding."""
+    mealie_ok = check_connectivity()
+    default_list_id = get_default_shopping_list_id(db)
+    tokens = db.query(ApiToken).filter(ApiToken.scanner_version.isnot(None)).all()
+    # A freshly created token has no scanner_version yet, so count every token for
+    # the token step, but only telemetry-bearing tokens for online state.
+    token_count = db.query(ApiToken.id).count()
+    cutoff = utcnow().replace(tzinfo=None) - timedelta(minutes=3)
+    disconnected_values = {"", "disconnected", "none", "offline", "unknown"}
+    scanner_online = any(
+        token.scanner_last_seen_at
+        and token.scanner_last_seen_at >= cutoff
+        and (token.scanner_device or "").strip().casefold() not in disconnected_values
+        for token in tokens
+    )
+    first_scan = (
+        db.query(Activity.id)
+        .filter(Activity.is_scan_event == True)
+        .order_by(Activity.id.desc())
+        .first()
+        is not None
+    )
+    return {
+        "mealie_ok": mealie_ok,
+        "list_ready": bool(default_list_id),
+        "default_list_id": default_list_id,
+        "token_ready": token_count > 0,
+        "token_count": token_count,
+        "scanner_online": scanner_online,
+        "first_scan": first_scan,
+        "ready_count": sum((mealie_ok, bool(default_list_id), token_count > 0, scanner_online, first_scan)),
+        "total_steps": 5,
+    }
+
+
 # ── Login ────────────────────────────────────────────────────────────
 
 
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, next: str = Query("")):
-    # Already logged in → go home
     if request.session.get("user_id"):
         return RedirectResponse("/", status_code=303)
     return templates.TemplateResponse(request, "login.html", {"error": None, "next": next})
@@ -44,7 +93,6 @@ def login_submit(
     next: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    # Reject oversized passwords early (bcrypt truncates at 72 bytes anyway)
     if len(password) > _MAX_PASSWORD_LENGTH:
         return templates.TemplateResponse(
             request, "login.html",
@@ -54,7 +102,6 @@ def login_submit(
 
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        # Constant-time: run bcrypt even on unknown usernames to prevent timing enumeration
         bcrypt.checkpw(b"dummy", bcrypt.hashpw(b"dummy", bcrypt.gensalt()))
         return templates.TemplateResponse(
             request, "login.html",
@@ -68,7 +115,6 @@ def login_submit(
             status_code=401,
         )
 
-    # Rotate session to prevent fixation
     request.session.clear()
     request.session["user_id"] = user.id
     request.session["username"] = user.username
@@ -76,7 +122,6 @@ def login_submit(
     if remember:
         request.session["_remember"] = True
 
-    # Redirect to the original page or home — block protocol-relative URLs (//evil.com)
     redirect_to = unquote(next) if next and next.startswith("/") and not next.startswith("//") else "/"
     return RedirectResponse(redirect_to, status_code=303)
 
@@ -87,12 +132,11 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
-# ── First-run setup ─────────────────────────────────────────────────
+# ── First-run account setup ──────────────────────────────────────────
 
 
 @router.get("/setup", response_class=HTMLResponse)
 def setup_page(request: Request, db: Session = Depends(get_db)):
-    # If users already exist, redirect away
     if db.query(User.id).first() is not None:
         return RedirectResponse("/", status_code=303)
     return templates.TemplateResponse(request, "setup.html", {"error": None})
@@ -106,7 +150,6 @@ def setup_submit(
     password_confirm: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    # Guard: if users already exist, reject
     if db.query(User.id).first() is not None:
         return RedirectResponse("/", status_code=303)
 
@@ -137,14 +180,38 @@ def setup_submit(
     try:
         db.commit()
     except IntegrityError:
-        # Race condition: another request created the first user simultaneously
         db.rollback()
         return RedirectResponse("/", status_code=303)
 
-    # Auto-login (clean session first)
     request.session.clear()
     request.session["user_id"] = user.id
     request.session["username"] = user.username
     request.session["is_admin"] = user.is_admin
 
+    return RedirectResponse("/onboarding", status_code=303)
+
+
+# ── Guided onboarding ────────────────────────────────────────────────
+
+
+@router.get("/onboarding", response_class=HTMLResponse)
+def onboarding_page(request: Request, db: Session = Depends(get_db)):
+    if redirect := _require_logged_in_admin(request):
+        return redirect
+    return templates.TemplateResponse(request, "onboarding.html", {
+        "status": _onboarding_status(db),
+        "completed": db.get(SystemState, _ONBOARDING_KEY) is not None,
+    })
+
+
+@router.post("/onboarding/complete")
+def onboarding_complete(request: Request, db: Session = Depends(get_db)):
+    if redirect := _require_logged_in_admin(request):
+        return redirect
+    row = db.get(SystemState, _ONBOARDING_KEY)
+    if row:
+        row.value = "complete"
+    else:
+        db.add(SystemState(key=_ONBOARDING_KEY, value="complete"))
+    db.commit()
     return RedirectResponse("/", status_code=303)
