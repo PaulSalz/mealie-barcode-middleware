@@ -9,6 +9,7 @@ import httpx
 
 from app.database import SessionLocal
 from app.models import Action, ActionExecution
+from app.services.action_stats import record_action_result
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -68,14 +69,23 @@ def _result(action: Action, status: str, *, http_status=None, duration_ms=None, 
 
 
 def _create_terminal(db, action: Action, barcode: str, status: str, *, http_status=None, duration_ms=None, error=None) -> dict:
-    db.add(ActionExecution(
+    execution = ActionExecution(
         action_id=action.id,
         barcode=barcode,
         status=status,
         http_status=http_status,
         duration_ms=duration_ms,
         error=error,
-    ))
+    )
+    db.add(execution)
+    db.flush()
+    record_action_result(
+        db,
+        action.id,
+        status,
+        duration_ms=duration_ms,
+        created_at=execution.created_at,
+    )
     db.commit()
     return _result(action, status, http_status=http_status, duration_ms=duration_ms, error=error)
 
@@ -85,6 +95,13 @@ def _finish(db, execution: ActionExecution, action: Action, status: str, *, http
     execution.http_status = http_status
     execution.duration_ms = duration_ms
     execution.error = error
+    record_action_result(
+        db,
+        action.id,
+        status,
+        duration_ms=duration_ms,
+        created_at=execution.created_at,
+    )
     db.commit()
     return _result(action, status, http_status=http_status, duration_ms=duration_ms, error=error)
 
