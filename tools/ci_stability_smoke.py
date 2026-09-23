@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import tempfile
 import threading
+from datetime import timedelta
 from pathlib import Path
 
 # Allow direct execution via `python tools/ci_stability_smoke.py` from any cwd.
@@ -25,7 +26,12 @@ from app.models import Activity  # noqa: E402
 from app.models_scan_stats import ScanDailyStat  # noqa: E402
 from app.services.bounded_executor import BoundedExecutor, ExecutorSaturated  # noqa: E402
 from app.services.database_backup import create_verified_backup, remove_backup  # noqa: E402
-from app.services.scan_stats import ensure_scan_stats_backfilled  # noqa: E402
+from app.services.scan_stats import (  # noqa: E402
+    ensure_scan_stats_backfilled,
+    purge_raw_scan_history,
+    target_scan_stats,
+)
+from app.utils import utcnow  # noqa: E402
 
 
 def smoke_backup() -> None:
@@ -67,13 +73,13 @@ def smoke_scan_aggregates() -> None:
 
     db = SessionLocal()
     try:
-        db.query(Activity).filter(Activity.barcode == "ci-stat-barcode").delete()
-        db.query(ScanDailyStat).filter(ScanDailyStat.target_id == "ci-stat-food").delete()
+        db.query(Activity).filter(Activity.barcode.like("ci-stat-barcode%" )).delete(synchronize_session=False)
+        db.query(ScanDailyStat).filter(ScanDailyStat.target_id == "ci-stat-food").delete(synchronize_session=False)
         db.commit()
 
-        for _ in range(2):
+        for index in range(2):
             db.add(Activity(
-                barcode="ci-stat-barcode",
+                barcode=f"ci-stat-barcode-{index}",
                 title="CI scan",
                 message="CI Food",
                 result="added",
@@ -84,10 +90,26 @@ def smoke_scan_aggregates() -> None:
                 target_id="ci-stat-food",
                 target_name="CI Food",
             ))
-            db.commit()
+        db.add(Activity(
+            barcode="ci-stat-barcode-old",
+            title="Old CI scan",
+            message="CI Food",
+            result="added",
+            is_read=True,
+            is_dismissed=True,
+            is_scan_event=True,
+            target_type="food",
+            target_id="ci-stat-food",
+            target_name="CI Food",
+            created_at=utcnow() - timedelta(days=400),
+        ))
+        db.commit()
 
-        live = db.query(ScanDailyStat).filter(ScanDailyStat.target_id == "ci-stat-food").one()
-        assert live.count == 2, live.count
+        live_total = sum(
+            row.count
+            for row in db.query(ScanDailyStat).filter(ScanDailyStat.target_id == "ci-stat-food").all()
+        )
+        assert live_total == 3, live_total
     finally:
         db.close()
 
@@ -95,8 +117,19 @@ def smoke_scan_aggregates() -> None:
     ensure_scan_stats_backfilled()
     db = SessionLocal()
     try:
-        rebuilt = db.query(ScanDailyStat).filter(ScanDailyStat.target_id == "ci-stat-food").one()
-        assert rebuilt.count == 2, rebuilt.count
+        stats = target_scan_stats(db, "food", "ci-stat-food")
+        assert stats["total"] == 3, stats
+        assert stats["days_7"] == 2, stats
+        assert len(stats["recent"]) == 3, stats["recent"]
+
+        deleted = purge_raw_scan_history(db, 365)
+        assert deleted >= 1, deleted
+        remaining_old = db.query(Activity).filter(Activity.barcode == "ci-stat-barcode-old").count()
+        assert remaining_old == 0, remaining_old
+
+        retained = target_scan_stats(db, "food", "ci-stat-food")
+        assert retained["total"] == 3, retained
+        assert retained["days_7"] == 2, retained
     finally:
         db.close()
 
