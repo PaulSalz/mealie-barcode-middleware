@@ -65,13 +65,10 @@
             ? 'Build, edit and keep a reusable label queue. Code style is chosen per label.'
             : 'Choose what to print, set the number of copies, pick a label size and print.';
 
-        // Queue-wide code-format controls are power-user functionality.
         var queue = document.getElementById('label-queue');
         var queueCard = queue ? queue.closest('.card') : null;
         if (queueCard) setHidden(queueCard.querySelector('.card-actions'), !advancedMode);
 
-        // Per-entry quick mode keeps the human-facing label and Copies control,
-        // while hiding raw payload and symbology details.
         document.querySelectorAll('#label-queue .label-card').forEach(function(card) {
             var code = card.querySelector('.entry-code');
             var kind = card.querySelector('.entry-kind');
@@ -95,7 +92,6 @@
                 : 'Choose a common size. The recommended defaults handle spacing and text automatically.';
             if (body) {
                 Array.from(body.children).forEach(function(child, index) {
-                    // The preset row is the second child and remains visible in both modes.
                     setHidden(child, !advancedMode && index !== 1);
                 });
             }
@@ -179,23 +175,16 @@
             if (current === previous) return;
             previous = current;
             showQueueFeedback('Updated · ' + current.replace(/[()]/g, ''));
-        }).observe(count, {childList:true, characterData:true, subtree:true});
+        }).observe(count, {childList:true, characterData:true,subtree:true});
     }
 
-    function loadB21Designer() {
-        if (!document.getElementById('b21-designer-stylesheet')) {
-            var link = document.createElement('link');
-            link.id = 'b21-designer-stylesheet';
-            link.rel = 'stylesheet';
-            link.href = '/static/css/labels-b21.css?v=20260921-1';
-            document.head.appendChild(link);
-        }
-        if (document.getElementById('b21-designer-script')) return;
-        var script = document.createElement('script');
-        script.id = 'b21-designer-script';
-        script.src = '/static/js/labels-b21.js?v=20260921-1';
-        script.defer = true;
-        document.body.appendChild(script);
+    function loadB21Styles() {
+        if (document.getElementById('b21-designer-stylesheet')) return;
+        var link = document.createElement('link');
+        link.id = 'b21-designer-stylesheet';
+        link.rel = 'stylesheet';
+        link.href = '/static/css/labels-b21.css?v=20260921-1';
+        document.head.appendChild(link);
     }
 
     ensureModeSwitch();
@@ -203,7 +192,7 @@
     preloadActions();
     prefillRecipeFromUrl();
     watchQueue();
-    loadB21Designer();
+    loadB21Styles();
     applyEditorMode();
 
     var foodResults = document.getElementById('generator-food-results');
