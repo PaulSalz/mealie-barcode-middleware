@@ -116,6 +116,36 @@
   border: 1px solid currentColor;
 }
 
+.shopping-print-divider-style {
+  display: flex;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.shopping-print-divider-style .form-selectgroup-item {
+  flex: 1 1 0;
+  margin: 0;
+}
+
+.shopping-print-divider-style .form-selectgroup-label {
+  width: 100%;
+  min-height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shopping-print-divider-preview {
+  display: inline-block;
+  width: 2.4rem;
+  margin-right: .45rem;
+  border-top: 2px solid currentColor;
+}
+
+.shopping-print-divider-preview.is-dashed {
+  border-top-style: dashed;
+}
+
 html.b2m-epaper #shopping-print-canvas,
 html.b2m-epaper-v9 #shopping-print-canvas {
   box-shadow: none;
