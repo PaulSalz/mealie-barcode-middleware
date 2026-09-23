@@ -1,0 +1,77 @@
+/* v2026.09.23.29 — stronger appearance differentiation and consistent radius. */
+
+/* Apply the selected radius to normal interactive surfaces, including Tabler
+   choice fields used heavily by Personal Appearance. */
+.btn,
+.card,
+.modal-content,
+.dropdown-menu,
+.form-control,
+.form-select,
+.input-group-text,
+.form-selectgroup-label,
+.alert,
+.list-group-item,
+.b2m-choice-card,
+.b2m-target-card,
+.b21-profile-editor,
+.b21-label-shell,
+.label-preview-page {
+  border-radius: var(--tblr-border-radius) !important;
+}
+
+.btn-sm,
+.form-control-sm,
+.form-select-sm {
+  border-radius: var(--tblr-border-radius-sm) !important;
+}
+
+/* Radius choices are previews and must remain visibly different from each
+   other even while the rest of the UI follows the selected global radius. */
+input[name="theme_radius"][value="0"] + .form-selectgroup-label { border-radius: 0 !important; }
+input[name="theme_radius"][value="0.5"] + .form-selectgroup-label { border-radius: .125rem !important; }
+input[name="theme_radius"][value="1"] + .form-selectgroup-label { border-radius: .25rem !important; }
+input[name="theme_radius"][value="1.5"] + .form-selectgroup-label { border-radius: .5rem !important; }
+input[name="theme_radius"][value="2"] + .form-selectgroup-label { border-radius: 1rem !important; }
+
+/* Keep joined controls joined while respecting the outer global radius. */
+.input-group > :first-child:not(:last-child),
+.btn-group > .btn:first-child:not(:last-child) {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+.input-group > :last-child:not(:first-child),
+.btn-group > .btn:last-child:not(:first-child) {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+.input-group > :not(:first-child):not(:last-child),
+.btn-group > .btn:not(:first-child):not(:last-child) {
+  border-radius: 0 !important;
+}
+
+/* The palette controller now deliberately uses separate body, surface,
+   secondary and border steps. Keep those transitions visible but quick. */
+body,
+.page,
+.page-wrapper,
+.card,
+.navbar,
+.dropdown-menu,
+.modal-content,
+.list-group-item,
+.form-control,
+.form-select,
+.form-selectgroup-label,
+.input-group-text {
+  transition: background-color .14s ease, border-color .14s ease, color .14s ease, border-radius .12s ease;
+}
+
+.b2m-global-advanced-menu {
+  cursor: pointer;
+  user-select: none;
+}
+.b2m-global-advanced-menu .form-check-input {
+  flex: 0 0 auto;
+  margin-top: 0;
+}

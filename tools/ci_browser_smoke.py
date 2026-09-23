@@ -42,7 +42,21 @@ def main() -> None:
         page.locator('input[name="name"]').fill("CI action")
         page.locator("#action-v22-builder").wait_for(state="visible", timeout=5_000)
         assert page.locator("#action-v22-builder").is_visible()
-        assert page.locator("#action-advanced-toggle").is_visible()
+
+        # Advanced mode is global now. The old Action-local switch remains as an
+        # implementation hook but must no longer be presented to the user.
+        local_advanced = page.locator("#action-advanced-toggle")
+        local_advanced.wait_for(state="attached", timeout=5_000)
+        assert not local_advanced.is_visible()
+
+        # Select the desktop Tools dropdown structurally instead of relying on a
+        # localized title/aria label.
+        tools = page.locator('.d-none.d-md-flex a[data-bs-toggle="dropdown"]').first
+        tools.wait_for(state="visible", timeout=5_000)
+        tools.click()
+        global_advanced = page.locator("#b2m-global-advanced-toggle")
+        global_advanced.wait_for(state="visible", timeout=5_000)
+        assert global_advanced.is_visible()
 
         if page_errors:
             raise AssertionError("Browser JavaScript errors: " + " | ".join(page_errors))

@@ -20,6 +20,7 @@ GLOBAL_CSS = (
     "css/ui-v25.css",
     "css/ui-v27.css",
     "css/ui-v28.css",
+    "css/ui-v29.css",
 )
 LABEL_CSS = ("css/ui-v13.css",)
 
@@ -33,6 +34,8 @@ GLOBAL_JS = (
     "js/ui-v26.js",
     "js/ui-v27.js",
     "js/regression-v28.js",
+    "js/ui-v29.js",
+    "js/shopping-fixes-v29.js",
     "js/ui-v12-bell.js",
 )
 LABEL_JS = (

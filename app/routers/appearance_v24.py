@@ -26,6 +26,19 @@ def _current_user_id(request: Request) -> int | None:
         return None
 
 
+def _advanced_settings_key(user_id: int) -> str:
+    return f"appearance.v29.user.{int(user_id)}.advanced_settings"
+
+
+def _advanced_settings_preference(db: Session, user_id: int | None) -> bool:
+    if not user_id:
+        return False
+    row = db.get(SystemState, _advanced_settings_key(int(user_id)))
+    if not row or not row.value:
+        return False
+    return str(row.value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _preview_theme(current: dict[str, str], body: dict) -> dict[str, str]:
     theme = dict(current)
     for key, default in THEME_DEFAULTS.items():
@@ -50,6 +63,8 @@ def appearance_v24_get(request: Request, db: Session = Depends(get_db)):
         return JSONResponse({"error": "login required"}, status_code=401)
     return {
         "rainbow_buttons": rainbow_button_preference(db, user_id),
+        "advanced_settings": _advanced_settings_preference(db, user_id),
+        "theme": personal_theme(db, user_id),
         "choices": [RAINBOW_BUTTON_DEFAULT, *COLOR_CSS.keys()],
     }
 
@@ -60,21 +75,45 @@ async def appearance_v24_save(request: Request, db: Session = Depends(get_db)):
     if user_id is None:
         return JSONResponse({"error": "login required"}, status_code=401)
     body = await request.json()
-    value = (
-        str(body.get("rainbow_buttons", RAINBOW_BUTTON_DEFAULT)).strip().lower()
-        if isinstance(body, dict)
-        else RAINBOW_BUTTON_DEFAULT
-    )
-    if value not in RAINBOW_BUTTON_CHOICES:
-        return JSONResponse({"error": "invalid rainbow_buttons value"}, status_code=400)
-    key = rainbow_button_key(user_id)
-    row = db.get(SystemState, key)
-    if row:
-        row.value = value
-    else:
-        db.add(SystemState(key=key, value=value))
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
+
+    changed = False
+
+    if "rainbow_buttons" in body:
+        value = str(body.get("rainbow_buttons", RAINBOW_BUTTON_DEFAULT)).strip().lower()
+        if value not in RAINBOW_BUTTON_CHOICES:
+            return JSONResponse({"error": "invalid rainbow_buttons value"}, status_code=400)
+        key = rainbow_button_key(user_id)
+        row = db.get(SystemState, key)
+        if row:
+            row.value = value
+        else:
+            db.add(SystemState(key=key, value=value))
+        changed = True
+
+    if "advanced_settings" in body:
+        raw = body.get("advanced_settings")
+        enabled = raw if isinstance(raw, bool) else str(raw).strip().lower() in {"1", "true", "yes", "on"}
+        key = _advanced_settings_key(user_id)
+        row = db.get(SystemState, key)
+        encoded = "true" if enabled else "false"
+        if row:
+            row.value = encoded
+        else:
+            db.add(SystemState(key=key, value=encoded))
+        changed = True
+
+    if not changed:
+        return JSONResponse({"error": "no supported appearance preference supplied"}, status_code=400)
+
     db.commit()
-    return {"ok": True, "rainbow_buttons": value}
+    return {
+        "ok": True,
+        "rainbow_buttons": rainbow_button_preference(db, user_id),
+        "advanced_settings": _advanced_settings_preference(db, user_id),
+        "theme": personal_theme(db, user_id),
+    }
 
 
 @router.post("/api/appearance-v24/preview")

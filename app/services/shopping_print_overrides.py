@@ -83,6 +83,12 @@ def _unit_text(item: dict, quantity_value: str) -> str:
     return ""
 
 
+def _bool(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().casefold() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 def load_item_overrides(db: Session) -> dict[str, dict[str, dict]]:
     raw = _state_json(db, _ITEM_OVERRIDES_KEY, {})
     if not isinstance(raw, dict):
@@ -101,12 +107,14 @@ def load_item_overrides(db: Session) -> dict[str, dict[str, dict]]:
             name_alias = str(entry.get("name_alias") or "").strip()[:160]
             quantity_alias = str(entry.get("quantity_alias") or "").strip()[:60]
             unit_alias = str(entry.get("unit_alias") or "").strip()[:60]
-            if not name_alias and not quantity_alias and not unit_alias:
+            hide_unit = _bool(entry.get("hide_unit", False))
+            if not name_alias and not quantity_alias and not unit_alias and not hide_unit:
                 continue
             clean[override_key] = {
                 "name_alias": name_alias,
                 "quantity_alias": quantity_alias,
                 "unit_alias": unit_alias,
+                "hide_unit": hide_unit,
                 "source_name": str(entry.get("source_name") or "").strip()[:160],
                 "source_quantity_text": str(entry.get("source_quantity_text") or "").strip()[:60],
                 "source_unit_text": str(entry.get("source_unit_text") or "").strip()[:60],
@@ -125,6 +133,7 @@ def save_item_override(
     source_name: str = "",
     source_quantity_text: str = "",
     source_unit_text: str = "",
+    hide_unit: bool = False,
 ) -> dict | None:
     list_id = str(list_id or "").strip()
     override_key = str(override_key or "").strip()
@@ -134,6 +143,7 @@ def save_item_override(
     source_name = str(source_name or "").strip()
     source_quantity_text = str(source_quantity_text or "").strip()
     source_unit_text = str(source_unit_text or "").strip()
+    hide_unit = _bool(hide_unit)
     if not list_id or not override_key:
         raise ValueError("Shopping list id and item key are required")
     if len(override_key) > 200 or len(name_alias) > 160 or len(source_name) > 160:
@@ -148,7 +158,7 @@ def save_item_override(
 
     all_rows = load_item_overrides(db)
     rows = dict(all_rows.get(list_id, {}))
-    if not name_alias and not quantity_alias and not unit_alias:
+    if not name_alias and not quantity_alias and not unit_alias and not hide_unit:
         rows.pop(override_key, None)
         saved = None
     else:
@@ -156,6 +166,7 @@ def save_item_override(
             "name_alias": name_alias,
             "quantity_alias": quantity_alias,
             "unit_alias": unit_alias,
+            "hide_unit": hide_unit,
             "source_name": source_name,
             "source_quantity_text": source_quantity_text,
             "source_unit_text": source_unit_text,
@@ -211,7 +222,10 @@ def apply_item_overrides(db: Session, list_id: str, payload: dict) -> dict:
             if override.get("name_alias"):
                 item["name"] = override["name_alias"]
             quantity_display = str(override.get("quantity_alias") or quantity_value).strip()
-            unit_display = str(override.get("unit_alias") or unit_value).strip()
+            if _bool(override.get("hide_unit", False)):
+                unit_display = ""
+            else:
+                unit_display = str(override.get("unit_alias") or unit_value).strip()
             item["quantity_text"] = " ".join(part for part in (quantity_display, unit_display) if part).strip()
 
     payload["item_overrides"] = [
@@ -220,6 +234,7 @@ def apply_item_overrides(db: Session, list_id: str, payload: dict) -> dict:
             "name_alias": entry.get("name_alias") or "",
             "quantity_alias": entry.get("quantity_alias") or "",
             "unit_alias": entry.get("unit_alias") or "",
+            "hide_unit": _bool(entry.get("hide_unit", False)),
             "source_name": entry.get("source_name") or key,
             "source_quantity_text": entry.get("source_quantity_text") or "",
             "source_unit_text": entry.get("source_unit_text") or "",

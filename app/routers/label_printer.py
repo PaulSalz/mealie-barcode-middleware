@@ -112,6 +112,23 @@ def _profile_from_body(body: dict) -> dict:
     }
 
 
+def _rfid_roll(db: Session, data: dict) -> dict:
+    paper = data.get("paperRfidInfo") if isinstance(data.get("paperRfidInfo"), dict) else {}
+    barcode = str(paper.get("barCode") or "").strip()
+    try:
+        detected_label_type = int(paper.get("consumablesType") or 0)
+    except (TypeError, ValueError):
+        detected_label_type = 0
+    profile_id = _bindings(db).get(barcode) if barcode else None
+    profile = next((row for row in _profiles(db) if str(row.get("id")) == str(profile_id)), None)
+    return {
+        "barcode": barcode,
+        "profile_id": profile_id if profile else None,
+        "profile": deepcopy(profile) if profile else None,
+        "detected_label_type": detected_label_type if detected_label_type > 0 else None,
+    }
+
+
 @router.get("/labels/b21/status")
 def b21_status(db: Session = Depends(get_db)):
     global _last_auto_reconnect
@@ -163,10 +180,13 @@ def b21_rfid(db: Session = Depends(get_db)):
         data = printer_rfid()
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
-    paper = data.get("paperRfidInfo") or {}
-    barcode = str(paper.get("barCode") or "")
-    bindings = _bindings(db)
-    return {**data, "profile_id": bindings.get(barcode) if barcode else None}
+    roll = _rfid_roll(db, data)
+    return {
+        **data,
+        "profile_id": roll["profile_id"],
+        "profile": roll["profile"],
+        "detected_label_type": roll["detected_label_type"],
+    }
 
 
 @router.get("/labels/b21/profiles")
@@ -248,7 +268,7 @@ def b21_bind_rfid(body: dict, db: Session = Depends(get_db)):
 
 
 @router.post("/labels/b21/print")
-def b21_print(body: dict):
+def b21_print(body: dict, db: Session = Depends(get_db)):
     image_base64 = str(body.get("image_base64") or "")
     if image_base64.startswith("data:") and "," in image_base64:
         image_base64 = image_base64.split(",", 1)[1]
@@ -256,16 +276,54 @@ def b21_print(body: dict):
         return JSONResponse({"error": "Rendered label image is required."}, status_code=400)
     if not niim_is_configured():
         return JSONResponse({"error": "NIIMBOT printing is not configured"}, status_code=400)
+
     try:
-        return print_image_base64(
+        width_mm = float(body.get("width_mm"))
+        height_mm = float(body.get("height_mm"))
+        dpi = int(body.get("dpi") or 300)
+        density = int(body.get("density") or 3)
+        label_type = int(body.get("label_type") or 1)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Invalid label dimensions or printer settings"}, status_code=400)
+
+    applied_profile = None
+    rfid_data = None
+    try:
+        rfid_data = printer_rfid()
+        roll = _rfid_roll(db, rfid_data)
+        applied_profile = roll.get("profile")
+        if applied_profile:
+            # A bound RFID roll is authoritative for physical size. This prevents
+            # a design made for a 50 mm roll from being sent as 50 mm when a
+            # smaller roll is currently inserted. The image adapter preserves
+            # aspect ratio while fitting the source into this target rectangle.
+            width_mm = float(applied_profile["width_mm"])
+            height_mm = float(applied_profile["height_mm"])
+            dpi = int(applied_profile.get("dpi") or dpi)
+            density = int(applied_profile.get("density") or density)
+            label_type = int(applied_profile.get("label_type") or label_type)
+    except Exception:
+        # Printing still works without RFID/profile metadata; print_image_base64
+        # performs its own best-effort media type detection and then falls back
+        # to the requested profile.
+        roll = {"profile_id": None, "detected_label_type": None, "barcode": ""}
+
+    try:
+        result = print_image_base64(
             image_base64,
-            width_mm=float(body.get("width_mm")),
-            height_mm=float(body.get("height_mm")),
+            width_mm=width_mm,
+            height_mm=height_mm,
             quantity=int(body.get("quantity") or 1),
-            density=int(body.get("density") or 3),
-            label_type=int(body.get("label_type") or 1),
-            dpi=int(body.get("dpi") or 300),
+            density=density,
+            label_type=label_type,
+            dpi=dpi,
             threshold=int(body.get("threshold") or 128),
         )
+        result["width_mm"] = width_mm
+        result["height_mm"] = height_mm
+        result["applied_profile_id"] = (applied_profile or {}).get("id")
+        result["rfid_barcode"] = roll.get("barcode")
+        result["rfid_label_type"] = roll.get("detected_label_type")
+        return result
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)

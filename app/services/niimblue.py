@@ -118,6 +118,39 @@ def _wait_connected(seconds: float = 3.0) -> bool:
     return _connected(timeout=1.0)
 
 
+def _media_from_rfid_payload(payload: dict | None) -> dict:
+    payload = payload if isinstance(payload, dict) else {}
+    paper = payload.get("paperRfidInfo") if isinstance(payload.get("paperRfidInfo"), dict) else {}
+    raw_type = paper.get("consumablesType")
+    try:
+        label_type = int(raw_type)
+    except (TypeError, ValueError):
+        label_type = 0
+    if label_type <= 0:
+        label_type = None
+    return {
+        "tag_present": bool(paper.get("tagPresent")),
+        "barcode": str(paper.get("barCode") or "").strip(),
+        "uuid": str(paper.get("uuid") or "").strip(),
+        "label_type": label_type,
+    }
+
+
+def detected_media() -> dict:
+    """Best-effort information about the currently inserted RFID media.
+
+    niimblue-node exposes ``paperRfidInfo.consumablesType`` using the same
+    LabelType enum used by the print protocol. Prefer this value over a stale UI
+    profile whenever a valid RFID tag is present.
+    """
+    if not is_configured() or not _connected():
+        return {"tag_present": False, "barcode": "", "uuid": "", "label_type": None}
+    try:
+        return _media_from_rfid_payload(_request("GET", "/rfid", timeout=5).json())
+    except Exception:
+        return {"tag_present": False, "barcode": "", "uuid": "", "label_type": None}
+
+
 def printer_status() -> dict:
     cfg = config()
     result = {
@@ -144,6 +177,9 @@ def printer_status() -> dict:
                     result["detected_print_task"] = info["detectedPrintTask"]
             except Exception as exc:
                 result["info_error"] = _http_error_message(exc, action="info request")
+            media = detected_media()
+            if media.get("tag_present"):
+                result["media"] = media
     except Exception as exc:
         result["error"] = _http_error_message(exc, action="status request")
     return result
@@ -267,28 +303,35 @@ def print_image_base64(
 
     resolved_dpi = max(100, min(int(dpi or cfg["dpi"]), 1200))
     resolved_density = max(1, min(int(density or cfg["density"]), 5))
-    resolved_label_type = max(1, int(label_type or cfg["label_type"]))
+    requested_label_type = max(1, int(label_type or cfg["label_type"]))
     resolved_threshold = max(1, min(int(threshold or 128), 255))
     px_per_mm = resolved_dpi / 25.4
-    payload = {
-        "printDirection": print_direction or cfg["print_direction"],
-        "printTask": print_task or cfg["print_task"],
-        "quantity": max(1, min(int(quantity), 99)),
-        "labelType": resolved_label_type,
-        "density": resolved_density,
-        "imageBase64": image_base64,
-        "labelWidth": max(8, round(width_mm * px_per_mm)),
-        "labelHeight": max(8, round(height_mm * px_per_mm)),
-        "imageFit": "fill",
-        "imagePosition": "centre",
-        "threshold": resolved_threshold,
-    }
+
     with _print_lock:
         _require_connected()
+        media = detected_media()
+        media_label_type = media.get("label_type") if media.get("tag_present") else None
+        resolved_label_type = int(media_label_type or requested_label_type)
+        payload = {
+            "printDirection": print_direction or cfg["print_direction"],
+            "printTask": print_task or cfg["print_task"],
+            "quantity": max(1, min(int(quantity), 99)),
+            "labelType": resolved_label_type,
+            "density": resolved_density,
+            "imageBase64": image_base64,
+            "labelWidth": max(8, round(width_mm * px_per_mm)),
+            "labelHeight": max(8, round(height_mm * px_per_mm)),
+            # Preserve the source aspect ratio when a bound roll profile changes
+            # the physical target size. 'fill' stretched smaller-roll labels.
+            "imageFit": "contain",
+            "imagePosition": "centre",
+            "threshold": resolved_threshold,
+        }
         try:
             response = _request("POST", "/print", json=payload, timeout=cfg["timeout"])
         except httpx.HTTPError as exc:
             raise RuntimeError(_http_error_message(exc, action="print")) from exc
+
     try:
         data = response.json()
     except ValueError:
@@ -299,4 +342,6 @@ def print_image_base64(
         "pixels": [payload["labelWidth"], payload["labelHeight"]],
         "density": resolved_density,
         "label_type": resolved_label_type,
+        "label_type_source": "rfid" if media.get("tag_present") and media.get("label_type") else "requested",
+        "media": media,
     }
