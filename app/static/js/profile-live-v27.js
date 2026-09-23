@@ -10,7 +10,6 @@
     var epaper = form.querySelector('input[name="theme_epaper"]');
     var contrast = document.getElementById('profile-contrast');
     var contrastOut = document.getElementById('profile-contrast-value');
-    var base = form.querySelector('select[name="theme_base"]');
     var userThemeLink = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find(function (link) {
       return String(link.getAttribute('href') || '').indexOf('/user-theme.css') === 0;
     });
@@ -47,6 +46,9 @@
       var values = payload();
       root.setAttribute('data-bs-theme', values.mode);
       root.dataset.b2mBase = values.base;
+      var mono = values.epaper === 'true';
+      root.classList.toggle('b2m-epaper-v9', mono);
+      root.classList.toggle('b2m-epaper', mono);
       if (contrastOut && contrast) contrastOut.textContent = contrast.value;
     }
 
@@ -55,8 +57,9 @@
       if (globalThemeLink) globalThemeLink.disabled = !enabled;
     }
 
-    async function renderExactPreview() {
+    async function renderExactPreview(disableSavedImmediately) {
       applyImmediateState();
+      if (disableSavedImmediately) setSavedStylesEnabled(false);
       var id = ++requestId;
       try {
         var response = await fetch('/api/appearance-v24/preview', {
@@ -69,42 +72,53 @@
         var css = await response.text();
         if (id !== requestId) return;
         previewStyle.textContent = css;
-        /* The preview is a complete theme state. Keeping a saved/global theme
-           underneath breaks default values such as gray or epaper=false because
-           build_theme_css intentionally emits no override for those defaults. */
+        /* The response is the complete effective personal theme. Disabling both
+           persisted layers is required for defaults such as gray/epaper=false to
+           remove a saved/global override instead of being stacked on top of it. */
         setSavedStylesEnabled(false);
+        applyImmediateState();
       } catch (error) {
         if (id !== requestId) return;
         previewStyle.textContent = '';
         setSavedStylesEnabled(true);
+        applyImmediateState();
       }
     }
 
-    function schedulePreview() {
+    function schedulePreview(disableSavedImmediately) {
       applyImmediateState();
       clearTimeout(previewTimer);
-      previewTimer = window.setTimeout(renderExactPreview, 20);
+      previewTimer = window.setTimeout(function () {
+        renderExactPreview(disableSavedImmediately);
+      }, 25);
     }
 
     form.addEventListener('input', function (event) {
       if (!event.target.matches('input[name^="theme_"],select[name^="theme_"]')) return;
-      schedulePreview();
+      schedulePreview(true);
     });
     form.addEventListener('change', function (event) {
       if (!event.target.matches('input[name^="theme_"],select[name^="theme_"]')) return;
-      schedulePreview();
+      schedulePreview(true);
     });
 
-    /* Cache only values that are actually being submitted. Unsaved previews do not
-       leak to the next page when the user navigates away without saving. */
+    if (contrast) {
+      contrast.addEventListener('input', function () {
+        if (contrastOut) contrastOut.textContent = contrast.value;
+        schedulePreview(true);
+      });
+    }
+    if (epaper) epaper.addEventListener('change', function () { schedulePreview(true); });
+
     form.addEventListener('submit', function () {
       var values = payload();
       localStorage.setItem('theme-mode-override', values.mode);
       localStorage.setItem('theme-base-override', values.base);
+      localStorage.setItem('theme-epaper-override', values.epaper);
     });
 
     applyImmediateState();
-    renderExactPreview();
+    renderExactPreview(false);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once: true});

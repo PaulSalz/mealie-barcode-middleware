@@ -12,6 +12,23 @@
 .token-value { font-size: .8rem; word-break: break-all; }
 .page-header .btn-list { justify-content: flex-end; }
 
+/* This stylesheet is render-blocking, unlike the later UI layers. Keep desktop
+   navigation metrics identical before the very first paint so changing the
+   active Items/Barcodes tab cannot push neighbouring buttons sideways. */
+@media (min-width: 768px) {
+  #navbar-menu > .navbar-nav > .nav-item > .nav-link,
+  #navbar-menu > .navbar-nav > .nav-item > .nav-link .nav-link-title,
+  #navbar-menu > .navbar-nav > .nav-item.active > .nav-link,
+  #navbar-menu > .navbar-nav > .nav-item.active > .nav-link .nav-link-title {
+    font-weight: 400 !important;
+  }
+  #navbar-menu > .navbar-nav > .nav-item > .nav-link .nav-link-icon {
+    width: 1.5rem;
+    min-width: 1.5rem;
+    flex: 0 0 1.5rem;
+  }
+}
+
 /* Gentle row/cell hover cue on data tables. */
 .table.table-vcenter tbody tr:not(.activity-empty-row):not(.barcodes-empty-row):not(.items-empty-row):hover > td { background: rgba(var(--tblr-primary-rgb), .035); }
 .table.table-vcenter tbody td:hover { box-shadow: inset 0 0 0 9999px rgba(var(--tblr-primary-rgb), .035); }
@@ -67,7 +84,7 @@ select[multiple][name="shopping_list_ids"] option { padding: .3rem .45rem; borde
 .b2m-choice-card:has(input:checked) { border-color: var(--tblr-primary); background: rgba(var(--tblr-primary-rgb), .08); box-shadow: inset 0 0 0 1px rgba(var(--tblr-primary-rgb), .08); }
 .b2m-choice-card span { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
 .b2m-choice-card small { display: block; margin-top: .2rem; color: var(--tblr-secondary); font-weight: 400; }
-.b2m-choice-disabled { opacity: .48; }
+.b2m-choice-disabled { opacity: .48; cursor: not-allowed; }
 .b2m-choice-disabled .b2m-choice-card { cursor: not-allowed; }
 .b2m-choice-card.b2m-inherited-active { opacity: .82; border-style: dashed; background: var(--tblr-bg-surface-secondary); }
 .b2m-choice-card.b2m-inherited-active small::after { content: " · inherited"; font-weight: 600; }

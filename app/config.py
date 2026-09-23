@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     notification_toast_seconds: int = 12
     notification_group_window_seconds: int = 30
 
+    # Browser-side polling. Event-driven scan refreshes still happen immediately;
+    # these intervals only control the periodic safety-net syncs while a page is visible.
+    dashboard_poll_interval_seconds: int = 5
+    health_poll_interval_seconds: int = 5
+    shopping_print_poll_interval_seconds: int = 5
+
     db_path: str = "/data/barcode.db"
     timezone: str = "Europe/Berlin"
     session_max_age_days: int = 7
@@ -113,6 +119,21 @@ EDITABLE_SETTINGS: dict[str, dict[str, Any]] = {
         "type": "int", "label": "NOTIFICATION_GROUP_WINDOW_SECONDS", "description": "Duplicate grouping window (seconds)",
         "help": "Identical scans inside this window are collapsed into one notification with a counter.",
         "min": 1, "max": 300, "group": "Notifications", "section": "Web UI",
+    },
+    "dashboard_poll_interval_seconds": {
+        "type": "int", "label": "DASHBOARD_POLL_INTERVAL_SECONDS", "description": "Dashboard data refresh",
+        "help": "How often the visible dashboard refreshes scanner state, recent scans and shopping-list counts. Scan events still refresh immediately.",
+        "min": 1, "max": 300, "group": "System", "section": "Polling intervals",
+    },
+    "health_poll_interval_seconds": {
+        "type": "int", "label": "HEALTH_POLL_INTERVAL_SECONDS", "description": "Mealie health check",
+        "help": "How often the visible dashboard refreshes the Mealie connection indicator.",
+        "min": 1, "max": 300, "group": "System", "section": "Polling intervals",
+    },
+    "shopping_print_poll_interval_seconds": {
+        "type": "int", "label": "SHOPPING_PRINT_POLL_INTERVAL_SECONDS", "description": "Shopping-print Mealie sync",
+        "help": "How often the shopping-list print page checks the selected Mealie list for checked, deleted or newly added items while the tab is visible.",
+        "min": 1, "max": 300, "group": "System", "section": "Polling intervals",
     },
     "timezone": {
         "type": "str", "label": "TIMEZONE", "description": "Timezone",

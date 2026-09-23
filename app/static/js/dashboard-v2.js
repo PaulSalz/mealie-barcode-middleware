@@ -5,6 +5,8 @@
   var refreshTimer = null;
   var refreshing = false;
   var pollTimer = null;
+  var config = document.getElementById('dashboard-poll-config');
+  var pollSeconds = Math.max(1, Number(config && config.dataset.dashboardSeconds || 5));
 
   function esc(value) {
     return String(value == null ? '' : value)
@@ -56,6 +58,13 @@
     });
   }
 
+  function updateScannerStats(data) {
+    var online = document.getElementById('stat-scanner-online');
+    var total = document.getElementById('stat-scanner-total');
+    if (online && data.scanner_online != null) online.textContent = Number(data.scanner_online || 0);
+    if (total && data.scanner_total != null) total.textContent = Number(data.scanner_total || 0);
+  }
+
   function refresh() {
     if (refreshing || document.hidden) return;
     refreshing = true;
@@ -68,6 +77,7 @@
         if (!data) return;
         renderRecent(data.recent_items || []);
         updateShoppingCounts(data.shopping_lists || []);
+        updateScannerStats(data);
       })
       .catch(function () {})
       .finally(function () { refreshing = false; });
@@ -86,7 +96,7 @@
     clearInterval(pollTimer);
     pollTimer = window.setInterval(function () {
       if (!document.hidden) refresh();
-    }, 3000);
+    }, pollSeconds * 1000);
   }
 
   function installRecentTableGuard() {
