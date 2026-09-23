@@ -6,12 +6,17 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models import SystemState
+from app.services.niimblue import _connected as niim_connected
+from app.services.niimblue import config as niim_config
 from app.services.niimblue import is_configured as niim_is_configured
 from app.services.niimblue_batch_v30 import print_images_base64
-from app.services.shopping import get_shopping_lists
+from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
 from app.services.shopping_print import (
+    LABEL_TYPES,
+    load_print_settings,
     save_category_aliases,
     save_category_order,
     save_local_content,
@@ -21,15 +26,30 @@ from app.services.shopping_print_overrides import (
     _ITEM_OVERRIDES_KEY,
     apply_item_overrides,
     load_item_overrides,
+    load_marker_style,
     save_item_override,
 )
 
 router = APIRouter()
 
+_TOP_MARGIN_KEY = "shopping_print.top_margin_mm"
+_TOP_MARGIN_DEFAULT = 2.2
+
 
 def _valid_list_id(list_id: str) -> bool:
     available = {str(row.get("id")) for row in get_shopping_lists(force=False)}
     return bool(list_id and list_id in available)
+
+
+def _load_top_margin(db: Session) -> float:
+    row = db.get(SystemState, _TOP_MARGIN_KEY)
+    if not row or row.value is None:
+        return _TOP_MARGIN_DEFAULT
+    try:
+        value = float(row.value)
+    except (TypeError, ValueError):
+        return _TOP_MARGIN_DEFAULT
+    return round(max(0.0, min(20.0, value)), 1)
 
 
 def _save_all_item_overrides(db: Session, value: dict) -> None:
@@ -40,6 +60,43 @@ def _save_all_item_overrides(db: Session, value: dict) -> None:
     else:
         db.add(SystemState(key=_ITEM_OVERRIDES_KEY, value=encoded))
     db.commit()
+
+
+@router.get("/api/shopping-print/bootstrap-v31")
+def shopping_print_bootstrap_v31(db: Session = Depends(get_db)):
+    """Fast Shopping Print startup data without expensive printer diagnostics.
+
+    The legacy bootstrap called printer_status(), which can perform /connected,
+    /info and RFID requests before returning the Mealie list selector. Shopping
+    Print only needs a connection boolean at startup, so bound that check to
+    800 ms and defer detailed printer diagnostics to the printer-specific APIs.
+    """
+    lists = get_shopping_lists(force=False)
+    print_settings = load_print_settings(db)
+    print_settings["top_margin_mm"] = _load_top_margin(db)
+    print_settings["item_marker_style"] = load_marker_style(db)
+
+    cfg = niim_config()
+    configured = bool(cfg["url"] and cfg["address"] and cfg["transport"] in {"ble", "serial"})
+    connected = niim_connected(timeout=0.8) if configured else False
+    printer = {
+        "configured": configured,
+        "connected": connected,
+        "address": cfg["address"],
+        "transport": cfg["transport"],
+        "print_task": cfg["print_task"],
+        "dpi": cfg["dpi"],
+        "max_label_width_mm": cfg["max_label_width_mm"],
+        "status_mode": "fast",
+    }
+    return {
+        "lists": lists,
+        "default_list_id": get_default_shopping_list_id(db),
+        "settings": print_settings,
+        "printer": printer,
+        "poll_interval_seconds": settings.shopping_print_poll_interval_seconds,
+        "label_types": [{"value": value, "name": name} for value, name in LABEL_TYPES.items()],
+    }
 
 
 @router.post("/labels/b21/print-batch-v30")
