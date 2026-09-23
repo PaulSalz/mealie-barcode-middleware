@@ -35,7 +35,7 @@ GLOBAL_JS = (
     "js/ui-v27.js",
     "js/regression-v28.js",
     "js/ui-v29.js",
-    "js/theme-controls-v32.js",
+    "js/theme-controls-v33.js",
     "js/terminology-v30.js",
     "js/shopping-bootstrap-v31.js",
     "js/ui-v12-bell.js",
