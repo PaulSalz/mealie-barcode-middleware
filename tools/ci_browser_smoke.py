@@ -55,9 +55,6 @@ def main() -> None:
         global_advanced.wait_for(state="visible", timeout=5_000)
         assert global_advanced.is_visible()
 
-        # Shopping Print historically accumulated multiple controller layers. Mock
-        # external data so CI can assert the page itself settles promptly and does
-        # not enter a bootstrap/list-request loop.
         shopping_hits = {"bootstrap_v31": 0, "lists": 0, "legacy_bootstrap": 0}
         bootstrap_payload = {
             "lists": [{"id": "ci-list", "name": "CI Shopping"}],
@@ -137,32 +134,35 @@ def main() -> None:
 
         page.goto(f"{BASE_URL}/shopping-print", wait_until="domcontentloaded", timeout=20_000)
         select = page.locator("#shopping-print-list")
-        select.wait_for(state="attached", timeout=5_000)
         try:
+            select.wait_for(state="attached", timeout=2_000)
             page.wait_for_function(
                 """() => {
                     const el = document.querySelector('#shopping-print-list');
                     const status = document.querySelector('#shopping-print-status');
                     return !!el && !el.disabled && !!status && status.textContent.includes('Preview uses');
                 }""",
-                timeout=5_000,
+                timeout=3_000,
             )
         except PlaywrightTimeoutError as exc:
-            state = page.evaluate(
-                """() => {
-                    const list = document.querySelector('#shopping-print-list');
-                    const status = document.querySelector('#shopping-print-status');
-                    return {
-                        pathname: location.pathname,
-                        v31Loaded: !!window.__b2mShoppingV31Loaded,
-                        v30Loaded: !!window.__b2mShoppingV30Loaded,
-                        listDisabled: list ? list.disabled : null,
-                        listValue: list ? list.value : null,
-                        listOptions: list ? Array.from(list.options).map(o => ({value:o.value,text:o.textContent})) : [],
-                        status: status ? status.textContent : null,
-                    };
-                }"""
-            )
+            try:
+                state = page.evaluate(
+                    """() => {
+                        const list = document.querySelector('#shopping-print-list');
+                        const status = document.querySelector('#shopping-print-status');
+                        return {
+                            pathname: location.pathname,
+                            v31Loaded: !!window.__b2mShoppingV31Loaded,
+                            v30Loaded: !!window.__b2mShoppingV30Loaded,
+                            listDisabled: list ? list.disabled : null,
+                            listValue: list ? list.value : null,
+                            listOptions: list ? Array.from(list.options).map(o => ({value:o.value,text:o.textContent})) : [],
+                            status: status ? status.textContent : null,
+                        };
+                    }"""
+                )
+            except Exception as eval_error:
+                state = {"evaluate_error": str(eval_error)}
             raise AssertionError(
                 "Shopping Print did not settle. "
                 f"state={state!r} hits={shopping_hits!r} "
