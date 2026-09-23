@@ -21,9 +21,9 @@ jobs:
           python-version: '3.14'
           cache: pip
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: Compile Python
-        run: python -m compileall -q app tools/barcode2mealie-usb/scanner.py tools/ci_stability_smoke.py
+        run: python -m compileall -q app tests tools/barcode2mealie-usb/scanner.py tools/ci_stability_smoke.py tools/ci_browser_smoke.py
       - name: Import application modules
         run: |
           python - <<'PY'
@@ -73,7 +73,6 @@ jobs:
           db.commit()
           db.close()
 
-          # Running startup migration again must copy a legacy mapping exactly once.
           init_db()
           db = SessionLocal()
           rows = db.query(BarcodeTarget).filter(BarcodeTarget.barcode == 'legacy-ci').all()
@@ -83,8 +82,8 @@ jobs:
           db.close()
           print('migration/backfill ok')
           PY
-      - name: Stability behavior smoke tests
-        run: python tools/ci_stability_smoke.py
+      - name: Pytest reliability suite
+        run: python -m pytest -q
       - name: Parse Jinja templates
         run: |
           python - <<'PY'
@@ -101,3 +100,54 @@ jobs:
             echo "checking $file"
             node --check "$file"
           done
+
+  browser-smoke:
+    needs: syntax-smoke
+    runs-on: ubuntu-latest
+    env:
+      MEALIE_URL: http://127.0.0.1:9000
+      MEALIE_API_KEY: ci-test-key
+      MEALIE_SHOPPING_LIST_ID: 00000000-0000-4000-8000-000000000001
+      MIDDLEWARE_BASE_URL: http://127.0.0.1:8001
+      DB_PATH: /tmp/b2m-browser.db
+      B2M_BROWSER_URL: http://127.0.0.1:8001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Prepare local database
+        run: |
+          rm -f /tmp/b2m-browser.db
+          python - <<'PY'
+          from app.database import SessionLocal, init_db
+          from app.models import Item
+          init_db()
+          db = SessionLocal()
+          db.add(Item(id='browser-food', name='Browser Food', source='mealie'))
+          db.commit()
+          db.close()
+          PY
+      - name: Start B2M
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8001 >/tmp/b2m-browser.log 2>&1 &
+          echo $! >/tmp/b2m-browser.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8001/setup >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/b2m-browser.log
+          exit 1
+      - name: Browser setup smoke
+        run: python tools/ci_browser_smoke.py
+      - name: Show server log on failure
+        if: failure()
+        run: cat /tmp/b2m-browser.log || true
+      - name: Stop B2M
+        if: always()
+        run: kill $(cat /tmp/b2m-browser.pid) 2>/dev/null || true
