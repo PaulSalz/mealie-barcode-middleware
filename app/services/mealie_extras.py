@@ -5,7 +5,7 @@ import time
 
 import httpx
 
-from app.models import Activity, BarcodeMapping, BarcodeTarget, Item
+from app.models import Activity, BarcodeTarget, Item
 from app.services import mealie_http
 from app.utils import utcnow
 
@@ -160,13 +160,10 @@ def sync_items_enhanced(db) -> int:
     db.flush()
     stale_items = db.query(Item).filter(Item.source == "mealie", Item.synced_at < sync_started).all()
     for stale in stale_items:
-        broken = db.query(BarcodeMapping).filter(
-            BarcodeMapping.target_type == "food", BarcodeMapping.target_id == stale.id,
-        ).all()
         target_rows = db.query(BarcodeTarget).filter(
             BarcodeTarget.target_type == "food", BarcodeTarget.target_id == stale.id,
         ).all()
-        affected = {row.barcode for row in broken} | {row.barcode for row in target_rows}
+        affected = {row.barcode for row in target_rows}
         for barcode in affected:
             db.add(Activity(
                 barcode=barcode,
@@ -174,8 +171,6 @@ def sync_items_enhanced(db) -> int:
                 message=f"{stale.name} was deleted in Mealie — remap needed",
                 result="broken",
             ))
-        for mapping in broken:
-            db.delete(mapping)
         for target in target_rows:
             db.delete(target)
         db.delete(stale)
