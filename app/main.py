@@ -10,6 +10,7 @@ from app.admin_write_guard import AdminWriteGuardMiddleware
 from app.barcode_dependencies import recover_known_barcode_cache
 from app.config import settings
 from app.database import init_db
+from app.frontend_assets import ensure_frontend_assets
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
 from app.permission_guard_v23 import PermissionGuardV23Middleware
 from app.routers import access_v23, actions, appearance_v3, appearance_v24, barcodes, dashboard, database_backup, docs, health, integrations, items, label_printer, labels, localization, login, notifications, recipes, runtime_features, scan_gateway, scanner, settings as settings_router, shopping_print, target_editor_v6, theme_preview_v2, version_api
@@ -23,6 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
+ensure_frontend_assets()
 
 
 @asynccontextmanager
