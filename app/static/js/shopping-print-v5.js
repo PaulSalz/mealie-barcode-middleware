@@ -40,6 +40,7 @@
     var nativeFetch = window.fetch.bind(window);
     var latestPayload = null;
     var overrideRefreshId = 0;
+    var localSaveTimer = null;
 
     function selectedKey() {
       return String(itemSelect.value || '');
@@ -141,7 +142,8 @@
         if (row.unit_alias) parts.push('unit → ' + row.unit_alias);
         if (!row.active) parts.push('currently not open');
         var meta = node.querySelector('.text-secondary.small');
-        if (meta) meta.textContent = parts.join(' · ');
+        var text = parts.join(' · ');
+        if (meta && meta.textContent !== text) meta.textContent = text;
       });
     }
 
@@ -213,18 +215,24 @@
     }
 
     if (overrideList) {
-      new MutationObserver(function () {
-        renderOverrideMetadata();
-      }).observe(overrideList, {childList: true, subtree: true});
+      new MutationObserver(renderOverrideMetadata).observe(overrideList, {childList: true, subtree: true});
     }
 
     /* Keep print-only entries durable immediately. Add/remove still updates the
        main in-memory state first; this listener then uses the existing Save path. */
     function scheduleLocalSave() {
       if (!localSave) return;
-      window.setTimeout(function () {
-        if (!localSave.disabled) localSave.click();
-      }, 40);
+      clearTimeout(localSaveTimer);
+      var attempts = 0;
+      function trySave() {
+        if (!localSave.disabled) {
+          localSave.click();
+          return;
+        }
+        attempts += 1;
+        if (attempts < 8) localSaveTimer = window.setTimeout(trySave, 120);
+      }
+      localSaveTimer = window.setTimeout(trySave, 40);
     }
     if (localAdd) localAdd.addEventListener('click', scheduleLocalSave);
     if (localEntries) {
