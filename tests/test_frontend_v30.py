@@ -11,13 +11,13 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_v30_assets_are_bundled_and_versioned():
-    assert "js/ui-fixes-v30.js" in GLOBAL_JS
-    # Shopping Print is being consolidated back to one controller in v31.
-    # Keep the v30 source for regression/reference tests, but do not execute it.
+def test_v30_assets_are_retained_without_legacy_theme_runtime():
+    # v30 Shopping and Appearance controller sources remain for regression/reference,
+    # but newer single-controller implementations own those runtime paths now.
+    assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/shopping-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-fixes-v30.js" in LABEL_JS
-    assert APP_VERSION == "2026.09.23.5"
+    assert APP_VERSION == "2026.09.23.6"
 
 
 def test_label_queue_uses_one_native_multipage_job():
@@ -41,7 +41,7 @@ def test_small_label_text_is_fitted_and_clipped_consistently():
     assert "physicalBounds" in source
 
 
-def test_shopping_top_margin_modifies_real_preview_canvas():
+def test_shopping_top_margin_source_is_retained_for_regression_reference():
     source = read("app/static/js/shopping-fixes-v30.js")
     assert "legacyTopMm" in source
     assert "desiredTopMm - legacyTopMm" in source
@@ -50,7 +50,7 @@ def test_shopping_top_margin_modifies_real_preview_canvas():
     assert "canvas.dataset.heightMm = adjustedHeightMm" in source
 
 
-def test_shopping_alias_drafts_quantity_hide_and_reset_are_covered():
+def test_shopping_alias_drafts_quantity_hide_and_reset_sources_are_retained():
     source = read("app/static/js/shopping-fixes-v30.js")
     overrides = read("app/services/shopping_print_overrides.py")
     router = read("app/routers/v30_fixes.py")
@@ -65,20 +65,10 @@ def test_shopping_alias_drafts_quantity_hide_and_reset_are_covered():
     assert 'save_local_content(db, list_id, "", [])' in router
 
 
-def test_secondary_shopping_connect_is_hidden():
-    source = read("app/static/js/shopping-fixes-v30.js")
-    assert "hideSecondaryConnect" in source
-    assert "shopping-print-connect" in source
-    assert "classList.add('d-none')" in source
-
-
-def test_personal_theme_not_global_theme_drives_reload():
+def test_personal_theme_reload_uses_personal_endpoint():
     source = read("app/static/js/theme-init.js")
     profile = read("app/templates/profile_appearance.html")
-    live = read("app/static/js/ui-fixes-v30.js")
     assert "fetch('/api/appearance-v24'" in source
     assert "fetch('/api/theme'" not in source
     assert ">Background</label>" in profile
     assert "Neutral palette" not in profile
-    assert "Radius changes only" in live
-    assert "event.target.name === 'theme_radius'" in live
