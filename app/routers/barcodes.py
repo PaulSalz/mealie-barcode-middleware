@@ -1,7 +1,6 @@
 import json
 import logging
 from collections import Counter
-from datetime import timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request
@@ -13,6 +12,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
 from app.services.barcode_lookup import perform_lookup
+from app.services.barcode_stats import barcode_scan_stats
 from app.services.fuzzy import fuzzy_match
 from app.services.homeassistant import dismiss_notification as ha_dismiss
 from app.services.mealie import create_food, find_food_by_name, reconcile_linked_barcode, search_recipes
@@ -51,14 +51,6 @@ def _parse_optional_quantity(value: str | float | int | None) -> float | None:
 
 def _is_database_locked(exc: OperationalError) -> bool:
     return "database is locked" in str(exc).casefold()
-
-
-def _naive_utc(value):
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _mark_notifications_read(barcode: str, db: Session):
@@ -137,18 +129,7 @@ def _cache_food(food: dict, db: Session) -> Item:
 
 
 def _barcode_stats(db: Session, barcode: str) -> dict:
-    scans = db.query(Activity).filter(Activity.is_scan_event == True, Activity.barcode == barcode).order_by(Activity.created_at.desc()).all()
-    now = _naive_utc(utcnow())
-    results = Counter(row.result for row in scans)
-    return {
-        "total": len(scans),
-        "days_7": sum(1 for row in scans if row.created_at and _naive_utc(row.created_at) >= now - timedelta(days=7)),
-        "days_30": sum(1 for row in scans if row.created_at and _naive_utc(row.created_at) >= now - timedelta(days=30)),
-        "last_scan": scans[0].created_at if scans else None,
-        "first_scan": scans[-1].created_at if scans else None,
-        "results": results,
-        "recent": scans[:25],
-    }
+    return barcode_scan_stats(db, barcode, recent_limit=25)
 
 
 def _mapped_subquery(db: Session):
