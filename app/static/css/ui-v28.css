@@ -1,0 +1,55 @@
+/* v2026.09.23.28: focused visual regression repairs. */
+
+/* Data tables highlight a row, never the individual cell under the pointer. */
+.table.table-vcenter tbody td:hover {
+  box-shadow: none !important;
+}
+.table.table-vcenter tbody tr:not(.activity-empty-row):not(.barcodes-empty-row):not(.items-empty-row):hover > td {
+  background: rgba(var(--tblr-primary-rgb), .055) !important;
+}
+
+/* Tabler bakes some component radii into component variables. Keep them tied to
+   the live root radius so Appearance changes apply without a reload. */
+.btn,
+.card,
+.modal-content,
+.dropdown-menu,
+.form-control,
+.form-select,
+.alert,
+.list-group-item,
+.b2m-choice-card,
+.b2m-target-card,
+.b21-profile-editor,
+.b21-label-shell,
+.label-preview-page {
+  border-radius: var(--tblr-border-radius) !important;
+}
+.btn-sm,
+.form-control-sm,
+.form-select-sm {
+  border-radius: var(--tblr-border-radius-sm) !important;
+}
+.btn-group > .btn:not(:first-child),
+.input-group > :not(:first-child) {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+.btn-group > .btn:not(:last-child),
+.input-group > :not(:last-child) {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+/* Surface variables are synchronized from the selected gray palette by
+   regression-v28.js. These transitions make palette changes visibly live. */
+body,
+.page,
+.page-wrapper,
+.card,
+.navbar,
+.dropdown-menu,
+.modal-content,
+.list-group-item {
+  transition: background-color .12s ease, border-color .12s ease, border-radius .12s ease;
+}
