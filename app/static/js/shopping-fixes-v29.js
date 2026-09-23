@@ -1,4 +1,4 @@
-/* v2026.09.23.29 — atomic print-only entries, unit hiding and header printer control. */
+/* v2026.09.23.29 — robust print-only entries, unit hiding and header printer control. */
 (function () {
   'use strict';
   if (window.location.pathname !== '/shopping-print' || window.__b2mShoppingV29Loaded) return;
@@ -21,6 +21,10 @@
 
   function listId() {
     return String(($('shopping-print-list') || {}).value || '').trim();
+  }
+
+  function localComment() {
+    return String(($('shopping-print-local-comment') || {}).value || '');
   }
 
   function setStatus(text, tone) {
@@ -115,6 +119,18 @@
     }
   }
 
+  async function saveLocalEntries(entries) {
+    return json('/api/shopping-print/local-content', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        list_id: listId(),
+        comment: localComment(),
+        entries: entries
+      })
+    });
+  }
+
   async function addLocalEntry(button) {
     var id = listId();
     var name = String(($('shopping-print-local-name') || {}).value || '').trim();
@@ -127,16 +143,14 @@
     button.disabled = true;
     setStatus('Saving new entry…', 'secondary');
     try {
-      await json('/api/shopping-print/local-content/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          list_id: id,
-          name: name,
-          quantity_text: String(($('shopping-print-local-qty') || {}).value || '').trim(),
-          category: String(($('shopping-print-local-category') || {}).value || '').trim() || 'Extra'
-        })
+      var payload = await refreshPayload(true);
+      var entries = (payload.local_entries || []).map(function (entry) { return Object.assign({}, entry); });
+      entries.push({
+        name: name,
+        quantity_text: String(($('shopping-print-local-qty') || {}).value || '').trim(),
+        category: String(($('shopping-print-local-category') || {}).value || '').trim() || 'Extra'
       });
+      await saveLocalEntries(entries);
       window.location.reload();
     } catch (error) {
       setStatus(error.message, 'danger');
@@ -154,11 +168,10 @@
       var index = Number(row.dataset.localIndex);
       var entry = (payload.local_entries || [])[index];
       if (!entry || !entry.id) throw new Error('Print-only entry could not be resolved. Refresh the page and try again.');
-      await json('/api/shopping-print/local-content/delete', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({list_id: id, entry_id: entry.id})
-      });
+      var entries = (payload.local_entries || []).filter(function (candidate) {
+        return String(candidate.id || '') !== String(entry.id);
+      }).map(function (candidate) { return Object.assign({}, candidate); });
+      await saveLocalEntries(entries);
       window.location.reload();
     } catch (error) {
       setStatus(error.message, 'danger');
