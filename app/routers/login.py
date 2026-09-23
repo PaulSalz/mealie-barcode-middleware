@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.i18n import language_for_user, normalize_language, save_language
 from app.models import Activity, ApiToken, SystemState, User
 from app.services.mealie import check_connectivity
 from app.services.shopping import get_default_shopping_list_id
@@ -16,8 +17,6 @@ from app.templating import templates
 from app.utils import utcnow
 
 router = APIRouter()
-
-# Upper bound prevents bcrypt CPU exhaustion (bcrypt truncates at 72 bytes anyway)
 _MAX_PASSWORD_LENGTH = 128
 _ONBOARDING_KEY = "onboarding.completed.v1"
 
@@ -30,6 +29,10 @@ def _verify_password(password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 
+def _preferred_language(request: Request) -> str:
+    return normalize_language(request.headers.get("accept-language", "en"))
+
+
 def _require_logged_in_admin(request: Request) -> RedirectResponse | None:
     if not request.session.get("user_id"):
         return RedirectResponse("/login?next=/onboarding", status_code=303)
@@ -39,12 +42,9 @@ def _require_logged_in_admin(request: Request) -> RedirectResponse | None:
 
 
 def _onboarding_status(db: Session) -> dict:
-    """Return a small, human-readable readiness snapshot for onboarding."""
     mealie_ok = check_connectivity()
     default_list_id = get_default_shopping_list_id(db)
     tokens = db.query(ApiToken).filter(ApiToken.scanner_version.isnot(None)).all()
-    # A freshly created token has no scanner_version yet, so count every token for
-    # the token step, but only telemetry-bearing tokens for online state.
     token_count = db.query(ApiToken.id).count()
     cutoff = utcnow().replace(tzinfo=None) - timedelta(minutes=3)
     disconnected_values = {"", "disconnected", "none", "offline", "unknown"}
@@ -74,9 +74,6 @@ def _onboarding_status(db: Session) -> dict:
     }
 
 
-# ── Login ────────────────────────────────────────────────────────────
-
-
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, next: str = Query("")):
     if request.session.get("user_id"):
@@ -94,34 +91,22 @@ def login_submit(
     db: Session = Depends(get_db),
 ):
     if len(password) > _MAX_PASSWORD_LENGTH:
-        return templates.TemplateResponse(
-            request, "login.html",
-            {"error": "Invalid username or password", "next": next},
-            status_code=401,
-        )
-
+        return templates.TemplateResponse(request, "login.html", {"error": "Invalid username or password", "next": next}, status_code=401)
     user = db.query(User).filter(User.username == username).first()
     if not user:
         bcrypt.checkpw(b"dummy", bcrypt.hashpw(b"dummy", bcrypt.gensalt()))
-        return templates.TemplateResponse(
-            request, "login.html",
-            {"error": "Invalid username or password", "next": next},
-            status_code=401,
-        )
+        return templates.TemplateResponse(request, "login.html", {"error": "Invalid username or password", "next": next}, status_code=401)
     if not _verify_password(password, user.password_hash):
-        return templates.TemplateResponse(
-            request, "login.html",
-            {"error": "Invalid username or password", "next": next},
-            status_code=401,
-        )
+        return templates.TemplateResponse(request, "login.html", {"error": "Invalid username or password", "next": next}, status_code=401)
 
+    language = language_for_user(db, user.id, _preferred_language(request))
     request.session.clear()
     request.session["user_id"] = user.id
     request.session["username"] = user.username
     request.session["is_admin"] = user.is_admin
+    request.session["ui_language"] = language
     if remember:
         request.session["_remember"] = True
-
     redirect_to = unquote(next) if next and next.startswith("/") and not next.startswith("//") else "/"
     return RedirectResponse(redirect_to, status_code=303)
 
@@ -132,13 +117,11 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
-# ── First-run account setup ──────────────────────────────────────────
-
-
 @router.get("/setup", response_class=HTMLResponse)
 def setup_page(request: Request, db: Session = Depends(get_db)):
     if db.query(User.id).first() is not None:
         return RedirectResponse("/", status_code=303)
+    request.session["ui_language"] = _preferred_language(request)
     return templates.TemplateResponse(request, "setup.html", {"error": None})
 
 
@@ -152,7 +135,6 @@ def setup_submit(
 ):
     if db.query(User.id).first() is not None:
         return RedirectResponse("/", status_code=303)
-
     errors = []
     username = username.strip()
     if len(username) < 3:
@@ -163,35 +145,25 @@ def setup_submit(
         errors.append(f"Password must be at most {_MAX_PASSWORD_LENGTH} characters.")
     if password != password_confirm:
         errors.append("Passwords do not match.")
-
     if errors:
-        return templates.TemplateResponse(
-            request, "setup.html",
-            {"error": " ".join(errors)},
-            status_code=400,
-        )
+        return templates.TemplateResponse(request, "setup.html", {"error": " ".join(errors)}, status_code=400)
 
-    user = User(
-        username=username,
-        password_hash=_hash_password(password),
-        is_admin=True,
-    )
+    user = User(username=username, password_hash=_hash_password(password), is_admin=True)
     db.add(user)
     try:
         db.commit()
+        db.refresh(user)
     except IntegrityError:
         db.rollback()
         return RedirectResponse("/", status_code=303)
 
+    language = save_language(db, user.id, _preferred_language(request))
     request.session.clear()
     request.session["user_id"] = user.id
     request.session["username"] = user.username
     request.session["is_admin"] = user.is_admin
-
+    request.session["ui_language"] = language
     return RedirectResponse("/onboarding", status_code=303)
-
-
-# ── Guided onboarding ────────────────────────────────────────────────
 
 
 @router.get("/onboarding", response_class=HTMLResponse)
