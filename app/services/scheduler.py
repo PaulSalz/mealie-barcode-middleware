@@ -9,11 +9,12 @@ from app.database import SessionLocal
 from app.events import scan_events
 from app.models import Activity, Item, RetryQueue
 from app.services.mealie_extras import sync_items_enhanced
-from app.services.scan_stats import ensure_scan_stats_backfilled
+from app.services.scan_stats import ensure_scan_stats_backfilled, purge_raw_scan_history
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
+_RAW_SCAN_RETENTION_DAYS = 365
 
 
 def _run_item_sync():
@@ -125,7 +126,7 @@ def _create_retry_failed_activity(item: RetryQueue, db):
 
 
 def _purge_old_activities():
-    """Delete old read notification activities while preserving scan history used by statistics."""
+    """Bound notification/raw-scan rows after durable scan aggregates exist."""
     db = SessionLocal()
     try:
         cutoff = utcnow() - timedelta(days=7)
@@ -141,8 +142,16 @@ def _purge_old_activities():
         db.commit()
         if deleted:
             logger.info("Purged %d old read notification activities", deleted)
+
+        scan_deleted = purge_raw_scan_history(db, _RAW_SCAN_RETENTION_DAYS)
+        if scan_deleted:
+            logger.info(
+                "Purged %d raw scan activities older than %d days; compact statistics were retained",
+                scan_deleted, _RAW_SCAN_RETENTION_DAYS,
+            )
     except Exception as e:
-        logger.error("Activity purge failed: %s", e)
+        db.rollback()
+        logger.error("Activity/history purge failed: %s", e)
     finally:
         db.close()
 
@@ -192,7 +201,7 @@ def start_scheduler():
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("Scheduler started (item sync + retry queue + activity purge)")
+    logger.info("Scheduler started (item sync + retry queue + bounded history purge)")
 
 
 def stop_scheduler():
