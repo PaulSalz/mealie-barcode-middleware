@@ -13,9 +13,11 @@ def read(path: str) -> str:
 
 def test_v30_assets_are_bundled_and_versioned():
     assert "js/ui-fixes-v30.js" in GLOBAL_JS
-    assert "js/shopping-fixes-v30.js" in GLOBAL_JS
+    # Shopping Print is being consolidated back to one controller in v31.
+    # Keep the v30 source for regression/reference tests, but do not execute it.
+    assert "js/shopping-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-fixes-v30.js" in LABEL_JS
-    assert APP_VERSION == "2026.09.23.4"
+    assert APP_VERSION == "2026.09.23.5"
 
 
 def test_label_queue_uses_one_native_multipage_job():
