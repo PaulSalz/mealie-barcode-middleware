@@ -21,6 +21,7 @@ GLOBAL_CSS = (
     "css/ui-v27.css",
     "css/ui-v28.css",
     "css/ui-v29.css",
+    "css/theme-live-v33.css",
 )
 LABEL_CSS = ("css/ui-v13.css",)
 
