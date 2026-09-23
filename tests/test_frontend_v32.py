@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.frontend_assets import GLOBAL_JS, LABEL_JS
+from app.frontend_assets import GLOBAL_CSS, GLOBAL_JS, LABEL_JS
 from app.version import APP_VERSION
 
 
@@ -13,6 +13,7 @@ def read(path: str) -> str:
 
 def test_v33_theme_asset_replaces_duplicate_theme_runtime():
     assert "js/theme-controls-v33.js" in GLOBAL_JS
+    assert "css/theme-live-v33.css" in GLOBAL_CSS
     assert "js/theme-controls-v32.js" not in GLOBAL_JS
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-scope-v32.js" in LABEL_JS
@@ -30,15 +31,18 @@ def test_navbar_mode_uses_personal_theme_endpoint_and_live_state():
     assert "save_personal_theme" in router
 
 
-def test_appearance_preview_is_synchronous_and_has_one_controller():
+def test_appearance_preview_is_synchronous_csp_safe_and_has_one_controller():
     theme = read("app/static/js/theme-controls-v33.js")
+    live_css = read("app/static/css/theme-live-v33.css")
     legacy = read("app/static/js/profile-live-v27.js")
     profile = read("app/static/js/profile-v23.js")
     assert "/api/appearance-v24/preview" not in theme
-    assert "buildThemeCss" in theme
+    assert "document.createElement('style')" not in theme
+    assert "root.style.setProperty" in theme
     assert "renderProfilePreview" in theme
-    assert "b2m-epaper-v9" in theme
-    assert "data-bs-theme" in theme
+    assert "b2m-theme-live-epaper" in theme
+    assert "html.b2m-theme-live-epaper" in live_css
+    assert "b2m-rainbow-accent" in live_css
     assert "window.__b2mThemeV32Loaded = true" in theme
     assert "window.__b2mThemeV32Loaded" in legacy
     assert "window.__b2mThemeV32Loaded" in profile
