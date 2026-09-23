@@ -49,7 +49,9 @@ def main() -> None:
         local_advanced.wait_for(state="attached", timeout=5_000)
         assert not local_advanced.is_visible()
 
-        tools = page.locator('a[data-bs-toggle="dropdown"][title="Tools"]')
+        # Select the desktop Tools dropdown structurally instead of relying on a
+        # localized title/aria label.
+        tools = page.locator('.d-none.d-md-flex a[data-bs-toggle="dropdown"]').first
         tools.wait_for(state="visible", timeout=5_000)
         tools.click()
         global_advanced = page.locator("#b2m-global-advanced-toggle")
