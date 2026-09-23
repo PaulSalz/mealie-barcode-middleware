@@ -20,6 +20,15 @@ def main() -> None:
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.on("console", lambda message: console_messages.append(f"{message.type}: {message.text}"))
 
+        def wait_until(predicate, message: str, timeout_ms: int = 5_000, step_ms: int = 100) -> None:
+            elapsed = 0
+            while elapsed < timeout_ms:
+                if predicate():
+                    return
+                page.wait_for_timeout(step_ms)
+                elapsed += step_ms
+            raise AssertionError(message)
+
         page.goto(f"{BASE_URL}/setup", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="Welcome").wait_for(timeout=5_000)
         assert page.get_by_role("button", name="Create account").is_visible()
@@ -35,32 +44,61 @@ def main() -> None:
 
         # Navbar light/dark must update immediately and persist as the personal mode.
         page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
+        html = page.locator("html")
         with page.expect_response(lambda r: r.url.endswith("/api/appearance-v24/mode") and r.request.method == "POST", timeout=5_000) as dark_response:
             page.locator("#theme-toggle-dark").click(force=True)
         assert dark_response.value.ok
-        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'dark'", timeout=3_000)
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "dark",
+            "Navbar did not switch to dark mode immediately.",
+            timeout_ms=3_000,
+        )
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'dark'", timeout=3_000)
+        html = page.locator("html")
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "dark",
+            "Personal dark mode was not retained after reload.",
+            timeout_ms=3_000,
+        )
 
         with page.expect_response(lambda r: r.url.endswith("/api/appearance-v24/mode") and r.request.method == "POST", timeout=5_000) as light_response:
             page.locator("#theme-toggle-light").click(force=True)
         assert light_response.value.ok
-        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'light'", timeout=3_000)
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "light",
+            "Navbar did not switch back to light mode immediately.",
+            timeout_ms=3_000,
+        )
 
         # Appearance preview must apply light/dark and e-paper before Save.
         page.goto(f"{BASE_URL}/profile/appearance", wait_until="domcontentloaded", timeout=20_000)
         page.locator('form[action="/profile/appearance"]').wait_for(state="visible", timeout=5_000)
+        html = page.locator("html")
         epaper = page.locator('input[name="theme_epaper"]')
         epaper.check()
-        page.wait_for_function("document.documentElement.classList.contains('b2m-epaper')", timeout=3_000)
-        page.wait_for_function(
-            "document.querySelector('#b2m-theme-v32-preview') && document.querySelector('#b2m-theme-v32-preview').textContent.includes('grayscale(1)')",
-            timeout=5_000,
+        wait_until(
+            lambda: "b2m-epaper" in (html.get_attribute("class") or "").split(),
+            "E-paper class was not applied before Save.",
+            timeout_ms=3_000,
+        )
+        preview = page.locator("#b2m-theme-v32-preview")
+        wait_until(
+            lambda: preview.count() == 1 and "grayscale(1)" in (preview.text_content() or ""),
+            "E-paper preview CSS was not applied before Save.",
+            timeout_ms=5_000,
         )
         page.locator('input[name="theme_mode"][value="dark"]').check()
-        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'dark'", timeout=3_000)
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "dark",
+            "Appearance form did not preview dark mode immediately.",
+            timeout_ms=3_000,
+        )
         page.locator('input[name="theme_mode"][value="light"]').check()
-        page.wait_for_function("document.documentElement.getAttribute('data-bs-theme') === 'light'", timeout=3_000)
+        wait_until(
+            lambda: html.get_attribute("data-bs-theme") == "light",
+            "Appearance form did not preview light mode immediately.",
+            timeout_ms=3_000,
+        )
 
         # Build a deterministic two-label queue for editor/live-layer tests.
         page.goto(f"{BASE_URL}/labels", wait_until="domcontentloaded", timeout=20_000)
@@ -75,12 +113,13 @@ def main() -> None:
         page.locator("#label-queue").wait_for(state="attached", timeout=5_000)
         page.locator("#label-editor-mode").wait_for(state="visible", timeout=5_000)
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
-        page.locator('#b21-label-stage [data-element-id="label"]').wait_for(state="attached", timeout=5_000)
+        label_element = page.locator('#b21-label-stage [data-element-id="label"]')
+        label_element.wait_for(state="attached", timeout=5_000)
 
         layer_switch = page.locator('[data-layer-visible="label"]')
         assert layer_switch.is_checked()
         layer_switch.uncheck()
-        page.wait_for_function("!document.querySelector('#b21-label-stage [data-element-id=\"label\"]')", timeout=3_000)
+        label_element.wait_for(state="detached", timeout=3_000)
         assert not page.get_by_text("Label / calibration", exact=True).is_visible()
 
         # Current label only must use the canonical job endpoint, never v30 batch queue.
@@ -209,17 +248,15 @@ def main() -> None:
 
         page.goto(f"{BASE_URL}/shopping-print", wait_until="domcontentloaded", timeout=20_000)
         select = page.locator("#shopping-print-list")
+        status = page.locator("#shopping-print-status")
         try:
             select.wait_for(state="attached", timeout=2_000)
-            page.wait_for_function(
-                """() => {
-                    const el = document.querySelector('#shopping-print-list');
-                    const status = document.querySelector('#shopping-print-status');
-                    return !!el && !el.disabled && !!status && status.textContent.includes('Preview uses');
-                }""",
-                timeout=3_000,
+            wait_until(
+                lambda: not select.is_disabled() and "Preview uses" in (status.text_content() or ""),
+                "Shopping Print did not settle.",
+                timeout_ms=3_000,
             )
-        except PlaywrightTimeoutError as exc:
+        except (PlaywrightTimeoutError, AssertionError) as exc:
             try:
                 state = page.evaluate(
                     """() => {
