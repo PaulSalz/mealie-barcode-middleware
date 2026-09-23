@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_token, require_token_no_telemetry
 from app.database import get_db
-from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget
+from app.models import Activity, BarcodeCache, BarcodeTarget
 from app.models_scan_delivery import ScanDelivery
 from app.routers import barcodes as barcode_routes
 from app.routers import scan as legacy_scan
@@ -23,24 +23,17 @@ _DELIVERY_RETENTION = timedelta(days=7)
 
 
 def _has_local_barcode_state(barcode: str, db: Session) -> bool:
-    if db.get(BarcodeMapping, barcode):
-        return True
     if db.query(BarcodeTarget.id).filter(BarcodeTarget.barcode == barcode).first():
         return True
     return db.query(Activity.id).filter(Activity.barcode == barcode).first() is not None
 
 
 def _has_routable_barcode_state(barcode: str, db: Session) -> bool:
-    """Return True only for state that can route without a provider lookup.
-
-    Activity rows are deliberately excluded: /scanner/received creates a local
-    processing Activity before /scan starts. Treating that Activity as a known
-    barcode used to create an empty BarcodeCache shell and prevented the normal
-    first-scan OpenFoodFacts/UPC lookup from running.
-    """
-    if db.get(BarcodeMapping, barcode):
-        return True
-    return db.query(BarcodeTarget.id).filter(BarcodeTarget.barcode == barcode).first() is not None
+    """Return True only for canonical target state that can route locally."""
+    return db.query(BarcodeTarget.id).filter(
+        BarcodeTarget.barcode == barcode,
+        BarcodeTarget.enabled == True,
+    ).first() is not None
 
 
 def _drop_stale_lookup_shell(barcode: str, db: Session) -> None:
@@ -56,12 +49,7 @@ def _drop_stale_lookup_shell(barcode: str, db: Session) -> None:
 
 
 def _ensure_cache_shell(barcode: str, db: Session, *, only_if_known: bool = False) -> BarcodeCache | None:
-    """Restore the local cache identity without doing any external product lookup.
-
-    Barcode targets/mappings deliberately live independently from BarcodeCache, so
-    clearing lookup cache must not make an otherwise valid mapped barcode disappear
-    from the UI. A physical scan is enough to recreate a minimal cache shell.
-    """
+    """Restore local cache identity without doing an external product lookup."""
     cached = db.get(BarcodeCache, barcode)
     if cached:
         return cached
@@ -81,8 +69,6 @@ def _ensure_cache_shell(barcode: str, db: Session, *, only_if_known: bool = Fals
         db.refresh(cached)
         return cached
     except IntegrityError:
-        # /scanner/received and /scan can arrive almost simultaneously. If both
-        # try to rebuild the same row after a cache reset, keep the winner.
         db.rollback()
         return db.get(BarcodeCache, barcode)
 
@@ -132,8 +118,6 @@ def _reserve_delivery(db: Session, delivery_id: str, barcode: str):
                 headers={"Retry-After": "1"},
             )
 
-        # The previous worker disappeared while the delivery was processing.
-        # Reclaim it after a bounded lease rather than leaving the scanner stuck.
         db.delete(existing)
         db.commit()
 
@@ -147,8 +131,6 @@ def _reserve_delivery(db: Session, delivery_id: str, barcode: str):
         db.commit()
     except IntegrityError:
         db.rollback()
-        # A concurrent retry won the reservation race. Let the bridge retry
-        # shortly instead of ever running the same physical scan twice at once.
         return JSONResponse(
             {"detail": "Scan delivery is already processing"},
             status_code=409,
@@ -193,8 +175,6 @@ def scanner_received_with_cache_recovery(
     barcode = body.barcode.strip()
     if not barcode:
         raise HTTPException(status_code=422, detail="Barcode cannot be empty")
-    # Only mapped/known local barcodes need a cache shell at receipt time. New
-    # product barcodes must stay cache-missing so /scan performs provider lookup.
     if _has_routable_barcode_state(barcode, db):
         _ensure_cache_shell(barcode, db)
     return scan_fast_v11.fast_scanner_received(body=body, _token=token, db=db)
@@ -218,8 +198,6 @@ def scan_with_cache_recovery(
         return replay
 
     try:
-        # Heal shells produced by the older recovery wrapper. Once removed, the
-        # legacy scan code sees cache=None and performs the configured provider lookup.
         _drop_stale_lookup_shell(barcode, db)
         if _has_routable_barcode_state(barcode, db):
             _ensure_cache_shell(barcode, db)
@@ -232,8 +210,6 @@ def scan_with_cache_recovery(
         _complete_delivery(db, delivery_id, barcode, response)
         return response
     except Exception:
-        # Do not permanently poison the delivery ID on a request that did not
-        # reach a normal response. A retry can reclaim it immediately.
         db.rollback()
         _release_delivery(db, delivery_id)
         raise
@@ -245,7 +221,5 @@ def barcode_detail_with_cache_recovery(
     barcode: str,
     db: Session = Depends(get_db),
 ):
-    # Self-heal barcodes that already have targets/mappings/history from before a
-    # lookup-cache reset. Do not create rows for arbitrary manually typed URLs.
     _ensure_cache_shell(barcode, db, only_if_known=True)
     return barcode_routes.barcode_detail(request=request, barcode=barcode, db=db)

@@ -10,9 +10,9 @@ from app.auth import require_token_no_telemetry
 from app.config import settings
 from app.database import get_db
 from app.events import scan_events
-from app.models import Action, ActionExecution, Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, Item, RetryQueue
+from app.models import Action, ActionExecution, Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
 from app.services.multitarget import route_targets
-from app.services.targets import ensure_targets, sync_legacy_primary
+from app.services.targets import ensure_targets
 from app.templating import set_cached_theme
 from app.theme import build_theme_css, get_theme, save_theme
 
@@ -102,14 +102,9 @@ async def preview_accessibility_theme(request: Request, db: Session = Depends(ge
 
 def _remove_local_item(item: Item, db: Session) -> None:
     targets = db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item.id).all()
-    mappings = db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food", BarcodeMapping.target_id == item.id).all()
-    affected = {row.barcode for row in targets} | {row.barcode for row in mappings}
     db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item.id).delete(synchronize_session=False)
-    db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food", BarcodeMapping.target_id == item.id).delete(synchronize_session=False)
     db.delete(item)
     db.flush()
-    for barcode in affected:
-        sync_legacy_primary(barcode, db)
 
 
 def _delete_mealie_item_upstream(item: Item) -> str | None:
@@ -163,7 +158,6 @@ def bulk_delete(body: BulkDeleteRequest, request: Request, db: Session = Depends
         db.query(Activity).filter(Activity.barcode.in_(ids)).delete(synchronize_session=False)
         db.query(RetryQueue).filter(RetryQueue.barcode.in_(ids)).delete(synchronize_session=False)
         db.query(BarcodeTarget).filter(BarcodeTarget.barcode.in_(ids)).delete(synchronize_session=False)
-        db.query(BarcodeMapping).filter(BarcodeMapping.barcode.in_(ids)).delete(synchronize_session=False)
         deleted = db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(ids)).delete(synchronize_session=False)
     elif body.kind == "activities":
         numeric_ids=[]

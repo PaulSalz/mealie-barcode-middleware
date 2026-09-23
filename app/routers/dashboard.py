@@ -12,10 +12,11 @@ from starlette.responses import StreamingResponse
 from app.config import settings
 from app.database import get_db
 from app.events import scan_events
-from app.models import Activity, ApiToken, BarcodeCache, BarcodeMapping, Item, RetryQueue
+from app.models import Activity, ApiToken, BarcodeCache, BarcodeTarget, Item, RetryQueue
 from app.services.mealie import check_connectivity
 from app.services.scan_stats import frequent_targets as frequent_target_stats
 from app.services.shopping import get_default_shopping_list_id, get_shopping_list_counts
+from app.services.targets import primary_targets_by_barcode
 from app.templating import _localtime, _relative_time, templates
 from app.utils import utcnow
 
@@ -25,7 +26,6 @@ _mealie_health_cache: tuple[float, bool] | None = None
 
 
 def _cached_mealie_reachable(ttl_seconds: float = 20.0) -> bool:
-    """Avoid blocking every dashboard render on a fresh Mealie network request."""
     global _mealie_health_cache
     now = time.monotonic()
     with _mealie_health_lock:
@@ -66,11 +66,11 @@ def _recent_scans(db: Session, limit: int = 25) -> list[dict]:
     if not activities: return []
     barcode_ids = list({a.barcode for a in activities})
     caches = {bc.barcode: bc for bc in db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(barcode_ids)).all()}
-    mappings = {m.barcode: m for m in db.query(BarcodeMapping).filter(BarcodeMapping.barcode.in_(barcode_ids)).all()}
+    primaries = primary_targets_by_barcode(db, barcode_ids)
     rows = []
     for activity in activities:
         cached = caches.get(activity.barcode)
-        targets = _activity_targets(activity, mappings.get(activity.barcode))
+        targets = _activity_targets(activity, primaries.get(activity.barcode))
         first = targets[0] if targets else {}
         target_name = activity.target_name or first.get("name")
         rows.append({
@@ -98,9 +98,13 @@ def _frequent_targets(db: Session, limit_each: int = 6) -> tuple[list[dict], lis
 
 def _summary_counts(db: Session) -> tuple[int, int, int, int, int]:
     total_barcodes = db.query(BarcodeCache).count()
-    action_codes = db.query(BarcodeCache).filter(BarcodeCache.source == "action").count()
-    mapped_count = db.query(BarcodeMapping).count() + action_codes
-    mapped_sub = db.query(BarcodeMapping.barcode)
+    mapped_sub = db.query(BarcodeTarget.barcode).filter(BarcodeTarget.enabled == True).distinct()
+    mapped_target_count = db.query(BarcodeTarget.barcode).filter(BarcodeTarget.enabled == True).distinct().count()
+    action_codes = db.query(BarcodeCache).filter(
+        BarcodeCache.source == "action",
+        ~BarcodeCache.barcode.in_(mapped_sub),
+    ).count()
+    mapped_count = mapped_target_count + action_codes
     pending_count = db.query(BarcodeCache).filter(BarcodeCache.found == True, BarcodeCache.source != "action", ~BarcodeCache.barcode.in_(mapped_sub)).count()
     queue_depth = db.query(RetryQueue).count()
     unknown_count = db.query(BarcodeCache).filter(BarcodeCache.found == False, BarcodeCache.source != "action", ~BarcodeCache.barcode.in_(mapped_sub)).count()
@@ -108,7 +112,6 @@ def _summary_counts(db: Session) -> tuple[int, int, int, int, int]:
 
 
 def _scanner_summary(db: Session) -> tuple[int, int]:
-    """Return physically connected scanners / scanner bridges known to B2M."""
     tokens = db.query(ApiToken).filter(ApiToken.scanner_version.isnot(None)).all()
     cutoff = utcnow().replace(tzinfo=None) - timedelta(minutes=3)
     disconnected_values = {"", "disconnected", "none", "offline", "unknown"}
@@ -121,71 +124,20 @@ def _scanner_summary(db: Session) -> tuple[int, int]:
     return connected, len(tokens)
 
 
-def _readiness_issues(
-    *,
-    mealie_reachable: bool,
-    has_tokens: bool,
-    scanner_online: int,
-    scanner_total: int,
-    default_list_id: str | None,
-    queue_depth: int,
-) -> list[dict]:
-    """Translate technical health into user-facing next actions."""
+def _readiness_issues(*, mealie_reachable: bool, has_tokens: bool, scanner_online: int, scanner_total: int, default_list_id: str | None, queue_depth: int) -> list[dict]:
     issues: list[dict] = []
     if not mealie_reachable:
-        issues.append({
-            "severity": "danger",
-            "icon": "plug-connected-x",
-            "title": "Mealie is not reachable",
-            "message": "B2M cannot read or update your shopping lists right now.",
-            "href": "/settings?tab=mealie",
-            "action": "Check Mealie connection",
-        })
+        issues.append({"severity": "danger", "icon": "plug-connected-x", "title": "Mealie is not reachable", "message": "B2M cannot read or update your shopping lists right now.", "href": "/settings?tab=mealie", "action": "Check Mealie connection"})
     if not default_list_id:
-        issues.append({
-            "severity": "warning",
-            "icon": "list-check",
-            "title": "No default shopping list is selected",
-            "message": "Choose which Mealie list should receive scans when no list is specified.",
-            "href": "/settings?tab=mealie",
-            "action": "Choose shopping list",
-        })
+        issues.append({"severity": "warning", "icon": "list-check", "title": "No default shopping list is selected", "message": "Choose which Mealie list should receive scans when no list is specified.", "href": "/settings?tab=mealie", "action": "Choose shopping list"})
     if not has_tokens:
-        issues.append({
-            "severity": "warning",
-            "icon": "key",
-            "title": "No scanner access token exists",
-            "message": "Create one token before connecting a physical barcode scanner.",
-            "href": "/settings?tab=tokens",
-            "action": "Create scanner token",
-        })
+        issues.append({"severity": "warning", "icon": "key", "title": "No scanner access token exists", "message": "Create one token before connecting a physical barcode scanner.", "href": "/settings?tab=tokens", "action": "Create scanner token"})
     elif scanner_total == 0:
-        issues.append({
-            "severity": "warning",
-            "icon": "scan",
-            "title": "No scanner has connected yet",
-            "message": "B2M is ready for a scanner, but no scanner bridge has reported in yet.",
-            "href": "/settings?tab=scanning",
-            "action": "Open scanner setup",
-        })
+        issues.append({"severity": "warning", "icon": "scan", "title": "No scanner has connected yet", "message": "B2M is ready for a scanner, but no scanner bridge has reported in yet.", "href": "/settings?tab=scanning", "action": "Open scanner setup"})
     elif scanner_online == 0:
-        issues.append({
-            "severity": "warning",
-            "icon": "scan-eye",
-            "title": "Your scanner is offline",
-            "message": "A scanner is configured, but B2M has not seen it recently.",
-            "href": "/settings?tab=scanning",
-            "action": "Check scanner",
-        })
+        issues.append({"severity": "warning", "icon": "scan-eye", "title": "Your scanner is offline", "message": "A scanner is configured, but B2M has not seen it recently.", "href": "/settings?tab=scanning", "action": "Check scanner"})
     if queue_depth:
-        issues.append({
-            "severity": "warning",
-            "icon": "refresh",
-            "title": f"{queue_depth} scan{'s are' if queue_depth != 1 else ' is'} waiting for retry",
-            "message": "Nothing is lost. B2M will retry automatically when Mealie is available.",
-            "href": "/activities?result=queued",
-            "action": "View queued scans",
-        })
+        issues.append({"severity": "warning", "icon": "refresh", "title": f"{queue_depth} scan{'s are' if queue_depth != 1 else ' is'} waiting for retry", "message": "Nothing is lost. B2M will retry automatically when Mealie is available.", "href": "/activities?result=queued", "action": "View queued scans"})
     return issues
 
 
@@ -203,15 +155,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     shopping_list_url = f"{mealie_url}/shopping-lists/{default_list_id}" if default_list_id else f"{mealie_url}/shopping-lists"
     shopping_lists_status = get_shopping_list_counts()
     has_tokens = db.query(ApiToken).first() is not None
-    readiness_issues = _readiness_issues(
-        mealie_reachable=mealie_reachable,
-        has_tokens=has_tokens,
-        scanner_online=scanner_online,
-        scanner_total=scanner_total,
-        default_list_id=default_list_id,
-        queue_depth=queue_depth,
-    )
-
+    readiness_issues = _readiness_issues(mealie_reachable=mealie_reachable, has_tokens=has_tokens, scanner_online=scanner_online, scanner_total=scanner_total, default_list_id=default_list_id, queue_depth=queue_depth)
     return templates.TemplateResponse(request, "dashboard.html", {
         "total_barcodes": total_barcodes, "mapped_count": mapped_count,
         "pending_count": pending_count, "queue_depth": queue_depth, "unknown_count": unknown_count,
@@ -222,8 +166,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         "mealie_url": mealie_url, "shopping_list_url": shopping_list_url,
         "shopping_lists_status": shopping_lists_status,
         "scanner_online": scanner_online, "scanner_total": scanner_total,
-        "readiness_issues": readiness_issues,
-        "system_ready": not readiness_issues,
+        "readiness_issues": readiness_issues, "system_ready": not readiness_issues,
         "dashboard_poll_interval_seconds": settings.dashboard_poll_interval_seconds,
         "health_poll_interval_seconds": settings.health_poll_interval_seconds,
     })
@@ -241,8 +184,7 @@ def dashboard_api(db: Session = Depends(get_db)):
         "shopping_lists": get_shopping_list_counts(),
         "poll_interval_seconds": settings.dashboard_poll_interval_seconds,
         "recent_items": [{
-            "barcode": row["barcode"],
-            "product_name": row["title"] or "—",
+            "barcode": row["barcode"], "product_name": row["title"] or "—",
             "item_name": row["target_name"] if row["target_type"] == "food" else None,
             "item_id": row["target_id"] if row["target_type"] == "food" else None,
             "target_type": row["target_type"], "target_id": row["target_id"], "target_name": row["target_name"],
@@ -260,7 +202,8 @@ async def sse_stream():
     async def _generate():
         try:
             yield ": connected\n\n"
-            while True: yield await queue.get()
+            while True:
+                yield await queue.get()
         except asyncio.CancelledError:
             pass
         finally:

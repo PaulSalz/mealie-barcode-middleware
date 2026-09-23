@@ -11,7 +11,7 @@ from app.auth import require_token
 from app.config import settings
 from app.database import get_db
 from app.events import scan_events
-from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, Item
+from app.models import Activity, BarcodeCache, BarcodeTarget, Item
 from app.pause import is_paused
 from app.services.actions import execute_action, find_action
 from app.services.barcode_lookup import enrich_barcode_background, needs_background_enrich, perform_lookup
@@ -20,7 +20,7 @@ from app.services.homeassistant import notify_scan as ha_notify_scan, should_sen
 from app.services.mealie import add_shopping_note, enqueue_retry
 from app.services.multitarget import route_targets
 from app.services.shopping import get_default_shopping_list_id
-from app.services.targets import ensure_targets
+from app.services.targets import add_target, ensure_targets
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -458,21 +458,16 @@ def _save_activity(
     result: str,
     db: Session,
     *,
-    mapping: BarcodeMapping | None = None,
     target_type: str | None = None,
     target_id: str | None = None,
     target_name: str | None = None,
     targets: list[dict] | None = None,
 ):
-    if mapping:
-        target_type = mapping.target_type
-        target_id = mapping.target_id
-        target_name = mapping.target_name
+    snapshot = targets[0] if targets else {}
     if targets and not target_id:
-        first = targets[0]
-        target_type = first.get("type")
-        target_id = first.get("id")
-        target_name = first.get("name")
+        target_type = snapshot.get("type")
+        target_id = snapshot.get("id")
+        target_name = snapshot.get("name")
     db.add(Activity(
         barcode=barcode,
         title=title,
@@ -485,9 +480,9 @@ def _save_activity(
         target_id=target_id,
         target_name=target_name,
         targets_json=json.dumps(targets) if targets else None,
-        quantity_snapshot=(mapping.quantity if mapping and mapping.target_type == "food" else None),
-        unit_id_snapshot=(mapping.unit_id if mapping and mapping.target_type == "food" else None),
-        recipe_scale_snapshot=(mapping.recipe_scale if mapping and mapping.target_type == "recipe" else None),
+        quantity_snapshot=(snapshot.get("quantity") if snapshot.get("type") == "food" else None),
+        unit_id_snapshot=(snapshot.get("unit_id") if snapshot.get("type") == "food" else None),
+        recipe_scale_snapshot=(snapshot.get("recipe_scale") if snapshot.get("type") == "recipe" else None),
     ))
     db.commit()
 
@@ -526,18 +521,16 @@ def _handle_generic(term: str, barcode: str, db: Session, paused: bool = False) 
             best_item = item
 
     if best_item and best_score >= settings.fuzzy_match_threshold:
-        mapping = BarcodeMapping(
-            barcode=barcode,
-            target_type="food",
-            target_id=best_item.id,
-            target_name=best_item.name,
+        add_target(
+            barcode,
+            "food",
+            best_item.id,
+            best_item.name,
+            db,
             quantity=1.0,
             unit_id=best_item.default_unit_id,
-            recipe_scale=1.0,
             mapped_by="generic",
         )
-        db.add(mapping)
-        db.commit()
         targets = ensure_targets(barcode, db)
         routed = route_targets(barcode, targets, db, paused=paused)
         # Do not call _process_targets() here: the outer GENERIC branch owns the

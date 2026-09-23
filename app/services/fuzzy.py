@@ -6,7 +6,8 @@ from rapidfuzz import fuzz
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import BarcodeMapping, Item
+from app.models import Item
+from app.services.targets import add_target
 
 logger = logging.getLogger(__name__)
 
@@ -103,18 +104,16 @@ def try_auto_map(barcode: str, title: str, brand: str | None, db: Session) -> st
             )
             return None
 
-    existing = db.get(BarcodeMapping, barcode)
-    if not existing:
-        existing = BarcodeMapping(barcode=barcode, target_type="food", target_id=top["item_id"])
-        db.add(existing)
-    existing.target_type = "food"
-    existing.target_id = top["item_id"]
-    existing.target_name = top["item_name"]
-    existing.quantity = 1.0
-    existing.unit_id = top.get("default_unit_id")
-    existing.recipe_scale = 1.0
-    existing.mapped_by = "auto"
-    db.commit()
+    add_target(
+        barcode,
+        "food",
+        top["item_id"],
+        top["item_name"],
+        db,
+        quantity=1.0,
+        unit_id=top.get("default_unit_id"),
+        mapped_by="auto",
+    )
 
     logger.info("Auto-mapped %s -> %s (score=%s exact=%s)", barcode, top["item_name"], top["score"], top.get("exact"))
     return top["item_id"]
