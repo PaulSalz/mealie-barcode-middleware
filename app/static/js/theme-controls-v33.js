@@ -33,6 +33,8 @@
   var RADIUS = {'0':0,'0.5':.25,'1':.5,'1.5':.8,'2':1.1};
   var persistedThemeLink = null;
   var liveActive = false;
+  var form = window.location.pathname === '/profile/appearance'
+    ? document.querySelector('form[action="/profile/appearance"]') : null;
 
   function setStoredMode(mode) {
     try { localStorage.setItem('theme-mode-override', mode); } catch (e) {}
@@ -46,23 +48,23 @@
     root.style.removeProperty(name);
   }
 
-  function fieldValue(form, name, fallback) {
-    var checked = form.querySelector('input[name="' + name + '"]:checked');
+  function fieldValue(formElement, name, fallback) {
+    var checked = formElement.querySelector('input[name="' + name + '"]:checked');
     if (checked) return checked.value;
-    var field = form.querySelector('[name="' + name + '"]');
+    var field = formElement.querySelector('[name="' + name + '"]');
     return field ? field.value : fallback;
   }
 
-  function formValues(form) {
-    var epaper = form.querySelector('input[name="theme_epaper"]');
-    var contrast = form.querySelector('[name="theme_contrast"]');
+  function formValues(formElement) {
+    var epaper = formElement.querySelector('input[name="theme_epaper"]');
+    var contrast = formElement.querySelector('[name="theme_contrast"]');
     return {
-      mode:fieldValue(form, 'theme_mode', root.getAttribute('data-bs-theme') || 'light'),
-      color:fieldValue(form, 'theme_color', 'blue'),
-      font:fieldValue(form, 'theme_font', 'sans-serif'),
-      base:fieldValue(form, 'theme_base', root.dataset.b2mBase || 'gray'),
-      radius:fieldValue(form, 'theme_radius', '1'),
-      date_style:fieldValue(form, 'theme_date_style', 'medium'),
+      mode:fieldValue(formElement, 'theme_mode', root.getAttribute('data-bs-theme') || 'light'),
+      color:fieldValue(formElement, 'theme_color', 'blue'),
+      font:fieldValue(formElement, 'theme_font', 'sans-serif'),
+      base:fieldValue(formElement, 'theme_base', root.dataset.b2mBase || 'gray'),
+      radius:fieldValue(formElement, 'theme_radius', '1'),
+      date_style:fieldValue(formElement, 'theme_date_style', 'medium'),
       epaper:epaper && epaper.checked ? 'true' : 'false',
       contrast:contrast ? String(contrast.value) : '65'
     };
@@ -75,6 +77,19 @@
       return String(link.getAttribute('href') || '').indexOf('/user-theme.css') === 0;
     }) || null;
     if (persistedThemeLink) persistedThemeLink.disabled = true;
+  }
+
+  function syncLiveStateMarker(theme) {
+    if (!form) return;
+    var marker = document.getElementById('b2m-theme-v32-preview');
+    if (!marker) {
+      marker = document.createElement('span');
+      marker.id = 'b2m-theme-v32-preview';
+      marker.hidden = true;
+      marker.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(marker);
+    }
+    marker.textContent = theme.epaper === 'true' ? 'grayscale(1)' : '';
   }
 
   function applyTheme(theme) {
@@ -168,11 +183,9 @@
 
     var out = document.getElementById('profile-contrast-value');
     if (out) out.textContent = String(Math.round(contrast));
+    syncLiveStateMarker(theme);
     window.dispatchEvent(new CustomEvent('b2m:theme-live-change', {detail:{theme:theme}}));
   }
-
-  var form = window.location.pathname === '/profile/appearance'
-    ? document.querySelector('form[action="/profile/appearance"]') : null;
 
   function renderProfilePreview() {
     if (!form) return;
