@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_v29_assets_are_bundled():
     assert "css/ui-v29.css" in GLOBAL_CSS
     assert "js/ui-v29.js" in GLOBAL_JS
-    assert "js/shopping-fixes-v29.js" in GLOBAL_JS
+    # Keep the old source for reference, but do not execute its second Shopping
+    # Print bootstrap/controller alongside the current v30/v31 path.
+    assert "js/shopping-fixes-v29.js" not in GLOBAL_JS
 
 
 def test_global_advanced_switch_is_persistent_and_reuses_legacy_controls():
