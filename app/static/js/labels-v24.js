@@ -1,4 +1,4 @@
-/* v2026.09.22.4 — B21 editor layers, snap rotation and roll calibration. */
+/* B21 editor layers, snap rotation and roll calibration. */
 (function(){
   'use strict';
   if(window.location.pathname!=='/labels'||window.__b2mLabelsV24Loaded)return;
@@ -116,8 +116,14 @@
   }
 
   function install(){
-    if(!$('b21-v2-inspector')||!$('b21-label-stage')){setTimeout(install,120);return;}
+    if(!$('b21-v2-inspector')||!$('b21-label-stage'))return false;
     removeLegacyAppearance();installRotationSnap();installRollCalibration();installLayerInspector();installHandleTracking();
+    return true;
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,120),{once:true});else setTimeout(install,120);
+  function start(){
+    if(install())return;
+    const observer=new MutationObserver(function(){if(install())observer.disconnect();});
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
