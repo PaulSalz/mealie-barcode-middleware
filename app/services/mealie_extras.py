@@ -5,9 +5,8 @@ import time
 
 import httpx
 
-from app.config import settings
 from app.models import Activity, BarcodeMapping, BarcodeTarget, Item
-from app.services.mealie import get_labels, get_units
+from app.services import mealie_http
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -15,39 +14,7 @@ logger = logging.getLogger(__name__)
 _CACHE_TTL = 300.0
 _cache_lock = threading.Lock()
 _cache: dict[str, tuple[float, list[dict]]] = {}
-
-
-def _cached(name: str, loader) -> list[dict]:
-    now = time.monotonic()
-    with _cache_lock:
-        entry = _cache.get(name)
-        if entry and now - entry[0] < _CACHE_TTL:
-            return entry[1]
-    value = loader()
-    with _cache_lock:
-        _cache[name] = (now, value)
-    return value
-
-
-def cached_units() -> list[dict]:
-    return _cached("units", get_units)
-
-
-def cached_labels() -> list[dict]:
-    return _cached("labels", get_labels)
-
-
-def clear_catalog_cache() -> None:
-    with _cache_lock:
-        _cache.clear()
-
-
-def _headers() -> dict:
-    return {
-        "Authorization": f"Bearer {settings.mealie_api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+_refresh_locks: dict[str, threading.Lock] = {}
 
 
 def _items_from_response(data) -> list[dict]:
@@ -56,6 +23,63 @@ def _items_from_response(data) -> list[dict]:
     if isinstance(data, dict) and isinstance(data.get("items"), list):
         return data["items"]
     return []
+
+
+def _load_catalog(path: str, name: str) -> list[dict]:
+    try:
+        response = mealie_http.get(
+            path,
+            params={"perPage": -1, "orderBy": "name", "orderDirection": "asc"},
+            timeout=10,
+            log_name=f"load {name}",
+        )
+        response.raise_for_status()
+        return _items_from_response(response.json())
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Failed to load Mealie %s: %s", name, exc)
+        return []
+
+
+def _refresh_lock(name: str) -> threading.Lock:
+    with _cache_lock:
+        return _refresh_locks.setdefault(name, threading.Lock())
+
+
+def _cached(name: str, loader) -> list[dict]:
+    """Small read-through cache with one in-flight refresh per catalog.
+
+    Several open UI pages may request labels/units at once. Without the refresh
+    lock every caller that observes an expired entry performs the same remote GET.
+    """
+    now = time.monotonic()
+    with _cache_lock:
+        entry = _cache.get(name)
+        if entry and now - entry[0] < _CACHE_TTL:
+            return list(entry[1])
+
+    with _refresh_lock(name):
+        now = time.monotonic()
+        with _cache_lock:
+            entry = _cache.get(name)
+            if entry and now - entry[0] < _CACHE_TTL:
+                return list(entry[1])
+        value = loader()
+        with _cache_lock:
+            _cache[name] = (time.monotonic(), list(value))
+        return list(value)
+
+
+def cached_units() -> list[dict]:
+    return _cached("units", lambda: _load_catalog("/api/units", "units"))
+
+
+def cached_labels() -> list[dict]:
+    return _cached("labels", lambda: _load_catalog("/api/groups/labels", "labels"))
+
+
+def clear_catalog_cache() -> None:
+    with _cache_lock:
+        _cache.clear()
 
 
 def _food_label(food: dict) -> tuple[str | None, str | None]:
@@ -75,9 +99,11 @@ def _food_unit(food: dict) -> tuple[str | None, str | None]:
 def sync_items_enhanced(db) -> int:
     """Mirror Mealie Foods and track actual changes separately from sync time."""
     try:
-        resp = httpx.get(
-            f"{settings.mealie_url}/api/foods",
-            headers=_headers(), params={"perPage": -1}, timeout=30,
+        resp = mealie_http.get(
+            "/api/foods",
+            params={"perPage": -1},
+            timeout=30,
+            log_name="sync foods",
         )
         resp.raise_for_status()
         data = resp.json()
@@ -157,7 +183,8 @@ def sync_items_enhanced(db) -> int:
             logger.warning("Stale item '%s' removed, %d barcode(s) affected", stale.name, len(affected))
 
     db.commit()
-    clear_catalog_cache()
+    # A Food sync does not change the labels/units catalog. Keeping those caches
+    # avoids an unnecessary extra catalog round-trip immediately after each sync.
     logger.info("Synced %d items from Mealie", count)
     return count
 
@@ -165,9 +192,11 @@ def sync_items_enhanced(db) -> int:
 def refresh_open_shopping_items_for_food(food_id: str) -> int:
     """Touch every open shopping-list entry for *food_id* so Mealie rehydrates changed Food metadata."""
     try:
-        resp = httpx.get(
-            f"{settings.mealie_url}/api/households/shopping/items",
-            headers=_headers(), params={"perPage": -1}, timeout=10,
+        resp = mealie_http.get(
+            "/api/households/shopping/items",
+            params={"perPage": -1},
+            timeout=10,
+            log_name="load shopping items for food refresh",
         )
         resp.raise_for_status()
         items = _items_from_response(resp.json())
@@ -200,9 +229,11 @@ def refresh_open_shopping_items_for_food(food_id: str) -> int:
             "note": item.get("note") or "",
         }
         try:
-            put = httpx.put(
-                f"{settings.mealie_url}/api/households/shopping/items/{item_id}",
-                headers=_headers(), json=payload, timeout=10,
+            put = mealie_http.put(
+                f"/api/households/shopping/items/{item_id}",
+                json=payload,
+                timeout=10,
+                log_name="refresh shopping item",
             )
             if put.status_code in (200, 201):
                 updated += 1

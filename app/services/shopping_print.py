@@ -8,9 +8,9 @@ from uuid import uuid4
 import httpx
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models import SystemState
-from app.services.mealie import get_labels
+from app.services import mealie_http
+from app.services.mealie_extras import cached_labels
 from app.services.shopping import get_shopping_lists
 
 logger = logging.getLogger(__name__)
@@ -49,18 +49,6 @@ DEFAULT_PRINT_SETTINGS = {
     "show_category_dividers": True,
     "category_divider_style": "solid",
 }
-
-_http = httpx.Client(
-    limits=httpx.Limits(max_connections=10, max_keepalive_connections=5, keepalive_expiry=60.0),
-)
-
-
-def _headers() -> dict:
-    return {
-        "Authorization": f"Bearer {settings.mealie_api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
 
 
 def _items(data) -> list[dict]:
@@ -403,17 +391,19 @@ def get_open_shopping_items(list_id: str) -> list[dict]:
     if not list_id:
         return []
 
+    # Labels change rarely; cache them for five minutes while shopping items stay
+    # live and are still fetched on every configured Shopping Print poll.
     label_names = {
         str(row.get("id")): str(row.get("name") or "").strip()
-        for row in get_labels()
+        for row in cached_labels()
         if isinstance(row, dict) and row.get("id") and row.get("name")
     }
     try:
-        response = _http.get(
-            f"{settings.mealie_url.rstrip('/')}/api/households/shopping/items",
-            headers=_headers(),
+        response = mealie_http.get(
+            "/api/households/shopping/items",
             params={"perPage": -1, "checked": "false", "shoppingListId": list_id},
             timeout=15,
+            log_name="shopping print items",
         )
         response.raise_for_status()
         payload = response.json()
