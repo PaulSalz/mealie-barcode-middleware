@@ -16,3 +16,19 @@ def ensure_performance_indexes() -> None:
             "CREATE INDEX IF NOT EXISTS ix_action_executions_action_created "
             "ON action_executions (action_id, created_at DESC)"
         ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_activities_created_at "
+            "ON activities (created_at DESC)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_activities_notification_feed "
+            "ON activities (is_dismissed, created_at DESC)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_activities_unread_feed "
+            "ON activities (is_read, is_dismissed, created_at DESC)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_activities_scan_result "
+            "ON activities (is_scan_event, result, created_at DESC)"
+        ))
