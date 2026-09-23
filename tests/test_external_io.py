@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-from app.config import settings
 from app.services import barcode_lookup, mealie_health
 
 
@@ -39,8 +38,11 @@ def test_failover_does_not_call_secondary_when_primary_succeeds(monkeypatch):
         calls.append("secondary")
         return {"title": "Secondary product", "source": "secondary"}
 
-    monkeypatch.setattr(settings, "lookup_strategy", "failover")
-    monkeypatch.setattr(settings, "lookup_enrich_in_background", False)
+    monkeypatch.setattr(
+        barcode_lookup,
+        "settings",
+        SimpleNamespace(lookup_strategy="failover", lookup_enrich_in_background=False),
+    )
 
     first, second = barcode_lookup._lookup_with_budget("1234567890123", primary, secondary)
     assert first and first["source"] == "primary"
@@ -65,8 +67,11 @@ def test_background_complement_keeps_secondary_out_of_hot_path(monkeypatch):
         calls.append("secondary")
         return {"title": "Secondary product", "brand": "Brand", "source": "secondary"}
 
-    monkeypatch.setattr(settings, "lookup_strategy", "complement")
-    monkeypatch.setattr(settings, "lookup_enrich_in_background", True)
+    monkeypatch.setattr(
+        barcode_lookup,
+        "settings",
+        SimpleNamespace(lookup_strategy="complement", lookup_enrich_in_background=True),
+    )
 
     first, second = barcode_lookup._lookup_with_budget("1234567890123", primary, secondary)
     assert first and first["source"] == "primary"
