@@ -31,6 +31,7 @@ jobs:
           import app.models_scan_delivery
           import app.services.actions
           import app.services.barcode_lookup
+          import app.services.barcode_state
           import app.services.bounded_executor
           import app.services.database_backup
           import app.services.mealie_extras
@@ -41,7 +42,6 @@ jobs:
           import app.services.targets
           import app.routers.actions
           import app.routers.barcodes
-          import app.routers.cache_recovery_v15
           import app.routers.dashboard
           import app.routers.database_backup
           import app.routers.integrations
@@ -51,6 +51,7 @@ jobs:
           import app.routers.recipes
           import app.routers.runtime_features
           import app.routers.scan
+          import app.routers.scan_gateway
           import app.routers.scanner
           import app.routers.shopping_print
           print('imports ok')
