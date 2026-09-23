@@ -11,6 +11,7 @@ from app.events import scan_events
 from app.models import Activity, Item, RetryQueue
 from app.services import mealie_http
 from app.services.action_stats import ensure_action_stats_backfilled, purge_action_executions
+from app.services.barcode_stats import barcode_stats_ready, ensure_barcode_stats_backfilled
 from app.services.mealie_extras import sync_items_enhanced
 from app.services.performance_indexes import ensure_performance_indexes
 from app.services.scan_stats import ensure_scan_stats_backfilled, purge_raw_scan_history
@@ -153,12 +154,15 @@ def _purge_old_activities():
         if deleted:
             logger.info("Purged %d old read notification activities", deleted)
 
-        scan_deleted = purge_raw_scan_history(db, _RAW_SCAN_RETENTION_DAYS)
-        if scan_deleted:
-            logger.info(
-                "Purged %d raw scan activities older than %d days; compact statistics were retained",
-                scan_deleted, _RAW_SCAN_RETENTION_DAYS,
-            )
+        if barcode_stats_ready(db):
+            scan_deleted = purge_raw_scan_history(db, _RAW_SCAN_RETENTION_DAYS)
+            if scan_deleted:
+                logger.info(
+                    "Purged %d raw scan activities older than %d days; compact statistics were retained",
+                    scan_deleted, _RAW_SCAN_RETENTION_DAYS,
+                )
+        else:
+            logger.warning("Skipping raw scan purge because per-barcode aggregate backfill is incomplete")
 
         action_deleted = purge_action_executions(db, _ACTION_EXECUTION_RETENTION_DAYS)
         if action_deleted:
@@ -180,7 +184,12 @@ def start_scheduler():
     try:
         ensure_scan_stats_backfilled()
     except Exception:
-        logger.exception("Could not backfill compact scan statistics")
+        logger.exception("Could not backfill compact target scan statistics")
+
+    try:
+        ensure_barcode_stats_backfilled()
+    except Exception:
+        logger.exception("Could not backfill compact per-barcode scan statistics")
 
     try:
         ensure_action_stats_backfilled()
