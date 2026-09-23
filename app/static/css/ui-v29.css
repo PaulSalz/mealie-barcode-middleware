@@ -1,8 +1,7 @@
 /* v2026.09.23.29 — stronger appearance differentiation and consistent radius. */
 
 /* Apply the selected radius to normal interactive surfaces, including Tabler
-   choice fields used heavily by Personal Appearance. Radius preview chips keep
-   their own sample radius by opting out with .b2m-radius-preview. */
+   choice fields used heavily by Personal Appearance. */
 .btn,
 .card,
 .modal-content,
@@ -10,7 +9,7 @@
 .form-control,
 .form-select,
 .input-group-text,
-.form-selectgroup-label:not(.b2m-radius-preview),
+.form-selectgroup-label,
 .alert,
 .list-group-item,
 .b2m-choice-card,
@@ -26,6 +25,14 @@
 .form-select-sm {
   border-radius: var(--tblr-border-radius-sm) !important;
 }
+
+/* Radius choices are previews and must remain visibly different from each
+   other even while the rest of the UI follows the selected global radius. */
+input[name="theme_radius"][value="0"] + .form-selectgroup-label { border-radius: 0 !important; }
+input[name="theme_radius"][value="0.5"] + .form-selectgroup-label { border-radius: .125rem !important; }
+input[name="theme_radius"][value="1"] + .form-selectgroup-label { border-radius: .25rem !important; }
+input[name="theme_radius"][value="1.5"] + .form-selectgroup-label { border-radius: .5rem !important; }
+input[name="theme_radius"][value="2"] + .form-selectgroup-label { border-radius: 1rem !important; }
 
 /* Keep joined controls joined while respecting the outer global radius. */
 .input-group > :first-child:not(:last-child),
