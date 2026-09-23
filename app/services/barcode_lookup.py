@@ -2,18 +2,19 @@ import json
 import logging
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import TimeoutError as FutureTimeoutError
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import BarcodeCache
+from app.services.bounded_executor import BoundedExecutor
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
 
-_LOOKUP_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="barcode-lookup")
+_LOOKUP_POOL = BoundedExecutor(max_workers=8, max_pending=16, thread_name_prefix="barcode-lookup")
 _LOOKUP_TIMEOUT = httpx.Timeout(3.0, connect=1.0)
 _LOOKUP_BUDGET_SECONDS = 3.25
 _http = httpx.Client(
@@ -119,37 +120,54 @@ def _merge_gaps(base: dict, supplement: dict) -> bool:
     return changed
 
 
+def _await_lookup(future, barcode: str, label: str, timeout: float):
+    try:
+        return future.result(timeout=max(0.05, timeout))
+    except FutureTimeoutError:
+        logger.warning("%s barcode lookup exceeded scan budget for %s", label, barcode)
+        return None
+    except Exception:
+        logger.exception("%s barcode lookup failed for %s", label, barcode)
+        return None
+
+
 def _lookup_with_budget(barcode: str, primary_fn, secondary_fn) -> tuple[dict | None, dict | None]:
-    """Run providers concurrently so failover latency is bounded by one provider timeout."""
+    """Lookup within a bounded scan budget without unnecessary provider calls.
+
+    Failover is sequential: the secondary provider is not contacted when primary
+    succeeds. Complement mode runs providers concurrently only when the secondary
+    result is required synchronously. Background enrichment keeps the secondary
+    provider completely out of the scan hot path.
+    """
     started = time.monotonic()
     if primary_fn is None:
         return None, None
+
+    primary_future = _LOOKUP_POOL.submit(primary_fn, barcode, block=True)
+
     if secondary_fn is None:
-        return primary_fn(barcode), None
+        return _await_lookup(primary_future, barcode, "Primary", _LOOKUP_BUDGET_SECONDS), None
 
-    primary_future = _LOOKUP_POOL.submit(primary_fn, barcode)
-    secondary_future = _LOOKUP_POOL.submit(secondary_fn, barcode)
-    primary_result = None
-    secondary_result = None
-    try:
-        primary_result = primary_future.result(timeout=_LOOKUP_BUDGET_SECONDS)
-    except FutureTimeoutError:
-        logger.warning("Primary barcode lookup exceeded %.2fs for %s", _LOOKUP_BUDGET_SECONDS, barcode)
-    except Exception:
-        logger.exception("Primary barcode lookup failed for %s", barcode)
-
-    if not primary_result or (
+    synchronous_complement = (
         settings.lookup_strategy == "complement"
         and not settings.lookup_enrich_in_background
-        and _result_has_gaps(primary_result)
-    ):
-        remaining = max(0.05, _LOOKUP_BUDGET_SECONDS - (time.monotonic() - started))
-        try:
-            secondary_result = secondary_future.result(timeout=remaining)
-        except FutureTimeoutError:
-            logger.warning("Secondary barcode lookup exceeded remaining scan budget for %s", barcode)
-        except Exception:
-            logger.exception("Secondary barcode lookup failed for %s", barcode)
+    )
+
+    if synchronous_complement:
+        secondary_future = _LOOKUP_POOL.submit(secondary_fn, barcode, block=True)
+        primary_result = _await_lookup(primary_future, barcode, "Primary", _LOOKUP_BUDGET_SECONDS)
+        secondary_result = None
+        if not primary_result or _result_has_gaps(primary_result):
+            remaining = _LOOKUP_BUDGET_SECONDS - (time.monotonic() - started)
+            secondary_result = _await_lookup(secondary_future, barcode, "Secondary", remaining)
+    else:
+        primary_result = _await_lookup(primary_future, barcode, "Primary", _LOOKUP_BUDGET_SECONDS)
+        secondary_result = None
+        if not primary_result:
+            remaining = _LOOKUP_BUDGET_SECONDS - (time.monotonic() - started)
+            if remaining > 0.05:
+                secondary_future = _LOOKUP_POOL.submit(secondary_fn, barcode, block=True)
+                secondary_result = _await_lookup(secondary_future, barcode, "Secondary", remaining)
 
     elapsed_ms = int((time.monotonic() - started) * 1000)
     if elapsed_ms >= 1000:
