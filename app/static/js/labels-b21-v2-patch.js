@@ -2,11 +2,15 @@
   'use strict';
   if(window.location.pathname!=='/labels')return;
 
-  function wait(){
+  let installed=false;
+
+  function install(){
+    if(installed)return true;
     const stage=document.getElementById('b21-label-stage');
     const w=document.getElementById('b21-v2-w');
     const h=document.getElementById('b21-v2-h');
-    if(!stage||!w||!h){setTimeout(wait,160);return;}
+    if(!stage||!w||!h)return false;
+    installed=true;
 
     function installCodeHandle(){
       const selected=stage.querySelector('img.b21-v2-element-selected, img.b21-code.b21-v2-element-selected');
@@ -51,18 +55,23 @@
       if(pending)return;pending=true;
       requestAnimationFrame(function(){pending=false;installCodeHandle();});
     }).observe(stage,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
-    stage.addEventListener('click',function(){setTimeout(installCodeHandle,0);});
+    stage.addEventListener('click',function(){requestAnimationFrame(installCodeHandle);});
     document.querySelectorAll('input[name="label-output"]').forEach(function(input){
       input.addEventListener('change',function(){
         if(input.checked&&input.value==='b21'){
-          setTimeout(function(){
+          requestAnimationFrame(function(){
             const select=document.getElementById('b21-entry-select');if(select)select.dispatchEvent(new Event('change',{bubbles:true}));
             installCodeHandle();
-          },20);
+          });
         }
       });
     });
     installCodeHandle();
+    return true;
   }
-  wait();
+
+  if(!install()){
+    const observer=new MutationObserver(function(){if(install())observer.disconnect();});
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
 })();
