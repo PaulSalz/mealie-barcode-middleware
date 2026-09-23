@@ -152,7 +152,12 @@ def main() -> None:
                 page.locator("#label-niim-print").dispatch_event("click")
         except PlaywrightTimeoutError as exc:
             raise AssertionError(f"Current-label print did not reach canonical job endpoint; hits={label_hits!r}") from exc
-        assert label_hits["jobs_post"] == 1, label_hits
+        wait_until(
+            lambda: label_hits["jobs_post"] == 1,
+            f"Current-label job route callback did not complete; hits={label_hits!r}",
+            timeout_ms=2_000,
+            step_ms=25,
+        )
         assert label_hits["batch"] == 0, label_hits
 
         page.goto(f"{BASE_URL}/actions/new", wait_until="domcontentloaded", timeout=20_000)
