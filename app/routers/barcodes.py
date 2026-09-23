@@ -11,14 +11,14 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, Item, RetryQueue
+from app.models import Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
 from app.services.barcode_lookup import perform_lookup
 from app.services.fuzzy import fuzzy_match
 from app.services.homeassistant import dismiss_notification as ha_dismiss
 from app.services.mealie import create_food, find_food_by_name, reconcile_linked_barcode, search_recipes
 from app.services.mealie_extras import cached_labels, cached_units
 from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
-from app.services.targets import add_target, ensure_targets, list_ids, set_list_ids, sync_legacy_primary
+from app.services.targets import add_target, ensure_targets, list_ids, primary_targets_by_barcode, set_list_ids
 from app.templating import templates
 from app.utils import utcnow
 
@@ -62,9 +62,7 @@ def _naive_utc(value):
 
 
 def _mark_notifications_read(barcode: str, db: Session):
-    db.query(Activity).filter(Activity.barcode == barcode, Activity.is_read == False).update(
-        {"is_read": True}, synchronize_session=False
-    )
+    db.query(Activity).filter(Activity.barcode == barcode, Activity.is_read == False).update({"is_read": True}, synchronize_session=False)
 
 
 def _resolve_activity_state(barcode: str, target_name: str | None, db: Session) -> None:
@@ -82,9 +80,6 @@ def _resolve_activity_state(barcode: str, target_name: str | None, db: Session) 
 
 
 def _resolve_notifications_async(barcode: str, target_name: str | None, background_tasks: BackgroundTasks, db: Session):
-    # These activity changes are housekeeping around an already-committed target.
-    # Commit them before background HTTP/Mealie work starts so this request never
-    # carries an SQLite writer lock into Starlette background tasks.
     try:
         _mark_notifications_read(barcode, db)
         _resolve_activity_state(barcode, target_name, db)
@@ -156,6 +151,10 @@ def _barcode_stats(db: Session, barcode: str) -> dict:
     }
 
 
+def _mapped_subquery(db: Session):
+    return db.query(BarcodeTarget.barcode).filter(BarcodeTarget.enabled == True).distinct()
+
+
 def _apply_status_filter(query, status: str, mapped_sub):
     if status == "mapped":
         return query.filter((BarcodeCache.barcode.in_(mapped_sub)) | (BarcodeCache.source == "action"))
@@ -169,9 +168,9 @@ def _apply_status_filter(query, status: str, mapped_sub):
 @router.get("/barcodes", response_class=HTMLResponse)
 def barcodes_list(request: Request, status: str = Query(default="all"), db: Session = Depends(get_db)):
     query = db.query(BarcodeCache).order_by(BarcodeCache.created_at.desc())
-    mapped_sub = db.query(BarcodeMapping.barcode)
+    mapped_sub = _mapped_subquery(db)
     barcodes = _apply_status_filter(query, status, mapped_sub).all()
-    mappings = {m.barcode: m for m in db.query(BarcodeMapping).all()}
+    mappings = primary_targets_by_barcode(db)
     target_counts = Counter(row.barcode for row in db.query(BarcodeTarget).filter(BarcodeTarget.enabled == True).all())
     queued_barcodes = {r.barcode for r in db.query(RetryQueue).all()}
     food_ids = [m.target_id for m in mappings.values() if m.target_type == "food"]
@@ -226,10 +225,8 @@ def barcode_create_manual(code: str = Form(...), title: str = Form(""), brand: s
 def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)):
     cached = db.get(BarcodeCache, barcode)
     targets = ensure_targets(barcode, db)
-    mapping = db.get(BarcodeMapping, barcode)
+    mapping = next((target for target in targets if target.enabled), targets[0] if targets else None)
     mapped_item = db.get(Item, mapping.target_id) if mapping and mapping.target_type == "food" else None
-    # Reading a barcode page must never fail because notification housekeeping
-    # briefly collides with scanner/background writes.
     try:
         _mark_notifications_read(barcode, db)
         db.commit()
@@ -240,7 +237,7 @@ def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)
         logger.warning("Barcode %s rendered while SQLite was busy; notification read mark deferred", barcode)
 
     candidates = fuzzy_match(cached.display_title, cached.display_brand, db)[:6] if cached and cached.display_title else []
-    mapped_barcodes = [m.barcode for m in db.query(BarcodeMapping).all()]
+    mapped_barcodes = _mapped_subquery(db)
     next_unmapped = (
         db.query(BarcodeCache)
         .filter(~BarcodeCache.barcode.in_(mapped_barcodes))
@@ -252,8 +249,7 @@ def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)
     target_views = []
     for target in targets:
         item = db.get(Item, target.target_id) if target.target_type == "food" else None
-        selected_ids = list_ids(target)
-        target_views.append({"target": target, "item": item, "list_ids": selected_ids})
+        target_views.append({"target": target, "item": item, "list_ids": list_ids(target)})
 
     return templates.TemplateResponse(request, "barcode_detail.html", {
         "cached": cached,
@@ -282,9 +278,6 @@ async def barcode_metadata(request: Request, barcode: str, db: Session = Depends
     if cached:
         cached.custom_title = str(form.get("title") or "").strip() or None
         cached.custom_brand = str(form.get("brand") or "").strip() or None
-        # A manually supplied product title is a valid local identification even
-        # when external providers returned no product. Such barcodes are known but
-        # still unmapped, so the existing status logic presents them as pending.
         cached.found = bool(cached.display_title)
         db.commit()
     if request.headers.get("x-requested-with") == "fetch":
@@ -319,11 +312,7 @@ def barcode_map(
     if not item or item.source != "mealie":
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
     effective_unit = item.default_unit_id if unit_id in {"", "__item_default__"} else unit_id
-    target = add_target(
-        barcode, "food", item.id, item.name, db,
-        route=route, list_ids_value=shopping_list_ids,
-        quantity=_parse_optional_quantity(quantity), unit_id=effective_unit,
-    )
+    target = add_target(barcode, "food", item.id, item.name, db, route=route, list_ids_value=shopping_list_ids, quantity=_parse_optional_quantity(quantity), unit_id=effective_unit)
     _resolve_notifications_async(barcode, target.target_name, background_tasks, db)
     background_tasks.add_task(reconcile_linked_barcode, barcode)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
@@ -354,11 +343,7 @@ def barcode_create_and_map(
             duplicate = True
     item = _cache_food(food, db)
     effective_unit = item.default_unit_id if unit_id in {"", "__item_default__"} else unit_id
-    target = add_target(
-        barcode, "food", item.id, item.name, db,
-        route=route, list_ids_value=shopping_list_ids,
-        quantity=_parse_optional_quantity(quantity), unit_id=effective_unit,
-    )
+    target = add_target(barcode, "food", item.id, item.name, db, route=route, list_ids_value=shopping_list_ids, quantity=_parse_optional_quantity(quantity), unit_id=effective_unit)
     _resolve_notifications_async(barcode, target.target_name, background_tasks, db)
     background_tasks.add_task(reconcile_linked_barcode, barcode)
     suffix = "?duplicate_food=1" if duplicate else ""
@@ -376,11 +361,7 @@ def barcode_map_recipe(
     recipe_id = recipe_id.strip()
     if not recipe_id:
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
-    target = add_target(
-        barcode, "recipe", recipe_id, recipe_name.strip() or recipe_id, db,
-        route=route, list_ids_value=shopping_list_ids,
-        quantity=None, recipe_scale=_parse_positive_float(recipe_scale),
-    )
+    target = add_target(barcode, "recipe", recipe_id, recipe_name.strip() or recipe_id, db, route=route, list_ids_value=shopping_list_ids, quantity=None, recipe_scale=_parse_positive_float(recipe_scale))
     _resolve_notifications_async(barcode, target.target_name, background_tasks, db)
     background_tasks.add_task(reconcile_linked_barcode, barcode)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
@@ -405,7 +386,6 @@ def barcode_target_settings(
         else:
             target.recipe_scale = _parse_positive_float(recipe_scale)
         db.commit()
-        sync_legacy_primary(barcode, db)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
 
@@ -415,7 +395,6 @@ def barcode_target_delete(barcode: str, target_id: int, db: Session = Depends(ge
     if target and target.barcode == barcode:
         db.delete(target)
         db.commit()
-        sync_legacy_primary(barcode, db)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
 
@@ -435,19 +414,22 @@ def barcode_mapping_settings(
             target.recipe_scale = _parse_positive_float(recipe_scale)
             set_list_ids(target, [shopping_list_id] if shopping_list_id else [])
         db.commit()
-        sync_legacy_primary(barcode, db)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
 
 @router.post("/barcodes/{barcode:path}/confirm")
 def barcode_confirm(barcode: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    existing = db.get(BarcodeMapping, barcode)
-    if existing and existing.mapped_by == "auto":
-        existing.mapped_by = "auto_confirmed"
-        for target in ensure_targets(barcode, db):
-            if target.mapped_by == "auto": target.mapped_by = "auto_confirmed"
-        _resolve_notifications_async(barcode, existing.target_name, background_tasks, db)
+    targets = ensure_targets(barcode, db)
+    changed = False
+    target_name = None
+    for target in targets:
+        if target.mapped_by == "auto":
+            target.mapped_by = "auto_confirmed"
+            target_name = target_name or target.target_name
+            changed = True
+    if changed:
         db.commit()
+        _resolve_notifications_async(barcode, target_name, background_tasks, db)
         background_tasks.add_task(reconcile_linked_barcode, barcode)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
@@ -455,15 +437,14 @@ def barcode_confirm(barcode: str, background_tasks: BackgroundTasks, db: Session
 @router.post("/barcodes/{barcode:path}/unmap")
 def barcode_unmap(barcode: str, db: Session = Depends(get_db)):
     db.query(BarcodeTarget).filter(BarcodeTarget.barcode == barcode).delete()
-    existing = db.get(BarcodeMapping, barcode)
-    if existing: db.delete(existing)
     db.commit()
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
 
 @router.post("/barcodes/{barcode:path}/retry-lookup")
 def barcode_retry_lookup(barcode: str, db: Session = Depends(get_db)):
-    if barcode.isdigit(): perform_lookup(barcode, db)
+    if barcode.isdigit():
+        perform_lookup(barcode, db)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
 
 
@@ -471,10 +452,9 @@ def barcode_retry_lookup(barcode: str, db: Session = Depends(get_db)):
 def barcode_delete(barcode: str, db: Session = Depends(get_db)):
     db.query(RetryQueue).filter(RetryQueue.barcode == barcode).delete()
     db.query(BarcodeTarget).filter(BarcodeTarget.barcode == barcode).delete()
-    mapping = db.get(BarcodeMapping, barcode)
-    if mapping: db.delete(mapping)
     cached = db.get(BarcodeCache, barcode)
-    if cached: db.delete(cached)
+    if cached:
+        db.delete(cached)
     db.commit()
     return RedirectResponse("/barcodes", status_code=303)
 
@@ -500,9 +480,9 @@ def recipes_search(q: str = Query(default="")):
 def barcodes_api(status: str = "all", db: Session = Depends(get_db)):
     from app.templating import _localtime
     query = db.query(BarcodeCache).order_by(BarcodeCache.created_at.desc())
-    mapped_sub = db.query(BarcodeMapping.barcode)
+    mapped_sub = _mapped_subquery(db)
     barcodes = _apply_status_filter(query, status, mapped_sub).limit(200).all()
-    mappings = {m.barcode: m for m in db.query(BarcodeMapping).all()}
+    mappings = primary_targets_by_barcode(db)
     target_counts = Counter(row.barcode for row in db.query(BarcodeTarget).filter(BarcodeTarget.enabled == True).all())
     queued_barcodes = {r.barcode for r in db.query(RetryQueue).all()}
     result_items = []
