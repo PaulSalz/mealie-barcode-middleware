@@ -10,9 +10,11 @@
     var epaper = form.querySelector('input[name="theme_epaper"]');
     var contrast = document.getElementById('profile-contrast');
     var contrastOut = document.getElementById('profile-contrast-value');
-    var base = form.querySelector('select[name="theme_base"]');
     var userThemeLink = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find(function (link) {
       return String(link.getAttribute('href') || '').indexOf('/user-theme.css') === 0;
+    });
+    var globalThemeLink = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find(function (link) {
+      return String(link.getAttribute('href') || '').indexOf('/theme.css') === 0;
     });
     var previewStyle = document.createElement('style');
     previewStyle.id = 'b2m-personal-theme-live-preview';
@@ -44,13 +46,20 @@
       var values = payload();
       root.setAttribute('data-bs-theme', values.mode);
       root.dataset.b2mBase = values.base;
-      root.classList.toggle('b2m-epaper-v9', values.epaper === 'true');
+      var mono = values.epaper === 'true';
+      root.classList.toggle('b2m-epaper-v9', mono);
+      root.classList.toggle('b2m-epaper', mono);
       if (contrastOut && contrast) contrastOut.textContent = contrast.value;
+    }
+
+    function setSavedStylesEnabled(enabled) {
+      if (userThemeLink) userThemeLink.disabled = !enabled;
+      if (globalThemeLink) globalThemeLink.disabled = !enabled;
     }
 
     async function renderExactPreview(disableSavedImmediately) {
       applyImmediateState();
-      if (disableSavedImmediately && userThemeLink) userThemeLink.disabled = true;
+      if (disableSavedImmediately) setSavedStylesEnabled(false);
       var id = ++requestId;
       try {
         var response = await fetch('/api/appearance-v24/preview', {
@@ -63,9 +72,16 @@
         var css = await response.text();
         if (id !== requestId) return;
         previewStyle.textContent = css;
-        if (userThemeLink) userThemeLink.disabled = true;
+        /* The response is the complete effective personal theme. Disabling both
+           persisted layers is required for defaults such as gray/epaper=false to
+           remove a saved/global override instead of being stacked on top of it. */
+        setSavedStylesEnabled(false);
+        applyImmediateState();
       } catch (error) {
-        if (userThemeLink) userThemeLink.disabled = false;
+        if (id !== requestId) return;
+        previewStyle.textContent = '';
+        setSavedStylesEnabled(true);
+        applyImmediateState();
       }
     }
 
@@ -74,7 +90,7 @@
       clearTimeout(previewTimer);
       previewTimer = window.setTimeout(function () {
         renderExactPreview(disableSavedImmediately);
-      }, 45);
+      }, 25);
     }
 
     form.addEventListener('input', function (event) {
@@ -86,12 +102,19 @@
       schedulePreview(true);
     });
 
-    /* Cache only values that are actually being submitted. Unsaved previews do not
-       leak to the next page when the user navigates away without saving. */
+    if (contrast) {
+      contrast.addEventListener('input', function () {
+        if (contrastOut) contrastOut.textContent = contrast.value;
+        schedulePreview(true);
+      });
+    }
+    if (epaper) epaper.addEventListener('change', function () { schedulePreview(true); });
+
     form.addEventListener('submit', function () {
       var values = payload();
       localStorage.setItem('theme-mode-override', values.mode);
       localStorage.setItem('theme-base-override', values.base);
+      localStorage.setItem('theme-epaper-override', values.epaper);
     });
 
     applyImmediateState();
