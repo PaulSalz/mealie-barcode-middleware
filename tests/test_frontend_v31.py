@@ -23,9 +23,12 @@ def test_v31_redirects_only_shopping_bootstrap_and_preserves_autosave_controls()
     assert "'/api/shopping-print/bootstrap-v31'" in source
     assert "shopping-print-connect-header" in source
     assert "shopping-print-override-hide-unit" in source
+    assert "shopping-print-override-hide-quantity" in source
+    assert "shopping-print-reset-v31" in source
     assert "sp-top-margin" in source
     assert "Saving automatically" in source
     assert "settingsReady" in source
+    assert "MutationObserver" not in source
 
 
 def test_fast_bootstrap_avoids_full_printer_status_diagnostics():
