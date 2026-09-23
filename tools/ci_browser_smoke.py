@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 
@@ -15,7 +16,9 @@ def main() -> None:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         page_errors: list[str] = []
+        console_messages: list[str] = []
         page.on("pageerror", lambda error: page_errors.append(str(error)))
+        page.on("console", lambda message: console_messages.append(f"{message.type}: {message.text}"))
 
         page.goto(f"{BASE_URL}/setup", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="Welcome").wait_for(timeout=5_000)
@@ -55,7 +58,7 @@ def main() -> None:
         # Shopping Print historically accumulated multiple controller layers. Mock
         # external data so CI can assert the page itself settles promptly and does
         # not enter a bootstrap/list-request loop.
-        shopping_hits = {"lists": 0, "legacy_bootstrap": 0}
+        shopping_hits = {"bootstrap_v31": 0, "lists": 0, "legacy_bootstrap": 0}
         bootstrap_payload = {
             "lists": [{"id": "ci-list", "name": "CI Shopping"}],
             "default_list_id": "ci-list",
@@ -113,6 +116,10 @@ def main() -> None:
         def fulfill_json(route, payload):
             route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
 
+        def handle_bootstrap_v31(route):
+            shopping_hits["bootstrap_v31"] += 1
+            fulfill_json(route, bootstrap_payload)
+
         def handle_list(route):
             shopping_hits["lists"] += 1
             fulfill_json(route, list_payload)
@@ -121,18 +128,51 @@ def main() -> None:
             shopping_hits["legacy_bootstrap"] += 1
             route.abort()
 
-        page.route("**/api/shopping-print/bootstrap-v31*", lambda route: fulfill_json(route, bootstrap_payload))
+        page.route("**/api/shopping-print/bootstrap-v31", handle_bootstrap_v31)
+        page.route("**/api/shopping-print/bootstrap-v31?*", handle_bootstrap_v31)
         page.route("**/api/shopping-print/bootstrap", handle_legacy_bootstrap)
         page.route("**/api/shopping-print/bootstrap?*", handle_legacy_bootstrap)
         page.route("**/api/access/me*", lambda route: fulfill_json(route, {"is_admin": True, "permissions": {"printer": True}}))
         page.route("**/api/shopping-print/lists/ci-list*", handle_list)
 
         page.goto(f"{BASE_URL}/shopping-print", wait_until="domcontentloaded", timeout=20_000)
-        page.locator("#shopping-print-list").wait_for(state="visible", timeout=5_000)
-        page.wait_for_function("document.querySelector('#shopping-print-status').textContent.includes('Preview uses')", timeout=5_000)
-        assert page.locator("#shopping-print-list").input_value() == "ci-list"
+        select = page.locator("#shopping-print-list")
+        select.wait_for(state="attached", timeout=5_000)
+        try:
+            page.wait_for_function(
+                """() => {
+                    const el = document.querySelector('#shopping-print-list');
+                    const status = document.querySelector('#shopping-print-status');
+                    return !!el && !el.disabled && !!status && status.textContent.includes('Preview uses');
+                }""",
+                timeout=5_000,
+            )
+        except PlaywrightTimeoutError as exc:
+            state = page.evaluate(
+                """() => {
+                    const list = document.querySelector('#shopping-print-list');
+                    const status = document.querySelector('#shopping-print-status');
+                    return {
+                        pathname: location.pathname,
+                        v31Loaded: !!window.__b2mShoppingV31Loaded,
+                        v30Loaded: !!window.__b2mShoppingV30Loaded,
+                        listDisabled: list ? list.disabled : null,
+                        listValue: list ? list.value : null,
+                        listOptions: list ? Array.from(list.options).map(o => ({value:o.value,text:o.textContent})) : [],
+                        status: status ? status.textContent : null,
+                    };
+                }"""
+            )
+            raise AssertionError(
+                "Shopping Print did not settle. "
+                f"state={state!r} hits={shopping_hits!r} "
+                f"page_errors={page_errors!r} console={console_messages[-12:]!r}"
+            ) from exc
+
+        assert select.input_value() == "ci-list"
         assert page.locator("#shopping-print-canvas").get_attribute("data-height-mm")
         page.wait_for_timeout(700)
+        assert shopping_hits["bootstrap_v31"] == 1, shopping_hits
         assert shopping_hits["legacy_bootstrap"] == 0, shopping_hits
         assert 1 <= shopping_hits["lists"] <= 3, shopping_hits
 
