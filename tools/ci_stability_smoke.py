@@ -27,8 +27,8 @@ from app.events import EventBus  # noqa: E402
 from app.models import ActionExecution, Activity  # noqa: E402
 from app.models_action_stats import ActionAggregate  # noqa: E402
 from app.models_scan_stats import ScanDailyStat  # noqa: E402
-from app.routers import shopping_print as shopping_print_router  # noqa: E402
 from app.services import mealie_extras  # noqa: E402
+from app.services import shopping_print as shopping_print_service  # noqa: E402
 from app.services.action_stats import (  # noqa: E402
     action_stats,
     ensure_action_stats_backfilled,
@@ -224,7 +224,7 @@ def smoke_catalog_cache() -> None:
     assert all(rows == [{"id": "ci-label", "name": "CI Label"}] for rows in results)
     # Shopping Print must consume the cached catalog rather than the direct
     # Mealie get_labels() helper on every five-second list poll.
-    assert shopping_print_router.cached_labels is mealie_extras.cached_labels
+    assert shopping_print_service.cached_labels is mealie_extras.cached_labels
 
 
 async def _event_bus_case() -> None:
