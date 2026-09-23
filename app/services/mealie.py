@@ -4,20 +4,13 @@ import logging
 import httpx
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models import Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
+from app.services import mealie_http
+from app.services.mealie_health import mealie_reachable
 from app.services.targets import primary_target
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
-
-
-def _headers() -> dict:
-    return {
-        "Authorization": f"Bearer {settings.mealie_api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
 
 
 def _items_from_response(data) -> list[dict]:
@@ -38,25 +31,22 @@ def _default_shopping_list_id(db=None) -> str:
 
 
 def check_connectivity() -> bool:
-    try:
-        resp = httpx.get(
-            f"{settings.mealie_url}/api/app/about",
-            headers=_headers(),
-            timeout=5,
-        )
-        return resp.status_code == 200
-    except httpx.HTTPError:
-        return False
+    """Compatibility wrapper for callers that explicitly need a fresh probe."""
+    return mealie_reachable(force=True)
 
 
 def sync_items(db: Session) -> int:
     """Mirror Mealie Foods into the local searchable cache."""
-    url = f"{settings.mealie_url}/api/foods"
     try:
-        resp = httpx.get(url, headers=_headers(), params={"perPage": -1}, timeout=30)
+        resp = mealie_http.get(
+            "/api/foods",
+            params={"perPage": -1},
+            timeout=30,
+            log_name="sync foods",
+        )
         resp.raise_for_status()
-    except httpx.HTTPError as e:
-        logger.error("Failed to sync items from Mealie: %s", e)
+    except httpx.HTTPError as exc:
+        logger.error("Failed to sync items from Mealie: %s", exc)
         raise
 
     data = resp.json()
@@ -66,7 +56,6 @@ def sync_items(db: Session) -> int:
 
     sync_started = utcnow()
     count = 0
-
     for food in items:
         item_id = food.get("id")
         if not item_id:
@@ -87,7 +76,6 @@ def sync_items(db: Session) -> int:
         count += 1
 
     db.flush()
-
     stale_items = db.query(Item).filter(Item.source == "mealie", Item.synced_at < sync_started).all()
     for stale in stale_items:
         targets = db.query(BarcodeTarget).filter(
@@ -116,50 +104,50 @@ def sync_items(db: Session) -> int:
 def get_units() -> list[dict]:
     """Return Mealie units for quantity/unit selection."""
     try:
-        resp = httpx.get(
-            f"{settings.mealie_url}/api/units",
-            headers=_headers(),
+        resp = mealie_http.get(
+            "/api/units",
             params={"perPage": -1, "orderBy": "name", "orderDirection": "asc"},
             timeout=10,
+            log_name="load units",
         )
         resp.raise_for_status()
         return _items_from_response(resp.json())
-    except (httpx.HTTPError, ValueError) as e:
-        logger.warning("Failed to load Mealie units: %s", e)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Failed to load Mealie units: %s", exc)
         return []
 
 
 def get_labels() -> list[dict]:
     """Return Mealie multi-purpose labels used as Food categories."""
     try:
-        resp = httpx.get(
-            f"{settings.mealie_url}/api/groups/labels",
-            headers=_headers(),
+        resp = mealie_http.get(
+            "/api/groups/labels",
             params={"perPage": -1, "orderBy": "name", "orderDirection": "asc"},
             timeout=10,
+            log_name="load labels",
         )
         resp.raise_for_status()
         return _items_from_response(resp.json())
-    except (httpx.HTTPError, ValueError) as e:
-        logger.warning("Failed to load Mealie labels: %s", e)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Failed to load Mealie labels: %s", exc)
         return []
 
 
 def get_food(item_id: str) -> dict | None:
     """Fetch one Food directly from Mealie."""
     try:
-        resp = httpx.get(
-            f"{settings.mealie_url}/api/foods/{item_id}",
-            headers=_headers(),
+        resp = mealie_http.get(
+            f"/api/foods/{item_id}",
             timeout=10,
+            log_name="load food",
         )
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
         data = resp.json()
         return data if isinstance(data, dict) else None
-    except (httpx.HTTPError, ValueError) as e:
-        logger.warning("Failed to load Mealie Food %s: %s", item_id, e)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Failed to load Mealie Food %s: %s", item_id, exc)
         return None
 
 
@@ -169,11 +157,11 @@ def find_food_by_name(name: str) -> dict | None:
     if not name:
         return None
     try:
-        resp = httpx.get(
-            f"{settings.mealie_url}/api/foods",
-            headers=_headers(),
+        resp = mealie_http.get(
+            "/api/foods",
             params={"search": name, "perPage": 100, "orderBy": "name", "orderDirection": "asc"},
             timeout=15,
+            log_name="search foods",
         )
         resp.raise_for_status()
         wanted = name.casefold()
@@ -181,8 +169,8 @@ def find_food_by_name(name: str) -> dict | None:
             if str(food.get("name") or "").strip().casefold() == wanted:
                 return food
         return None
-    except (httpx.HTTPError, ValueError) as e:
-        logger.warning("Failed to search Mealie Food '%s': %s", name, e)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Failed to search Mealie Food '%s': %s", name, exc)
         return None
 
 
@@ -239,11 +227,11 @@ def update_food(
         description=description,
         label_id=label_id,
     )
-    resp = httpx.put(
-        f"{settings.mealie_url}/api/foods/{item_id}",
-        headers=_headers(),
+    resp = mealie_http.put(
+        f"/api/foods/{item_id}",
         json=payload,
         timeout=15,
+        log_name="update food",
     )
     if resp.status_code not in (200, 201):
         raise RuntimeError(f"Mealie food update returned {resp.status_code}: {resp.text}")
@@ -263,11 +251,11 @@ def search_recipes(query: str = "", limit: int = 20) -> list[dict]:
     if query:
         params["search"] = query
     try:
-        resp = httpx.get(
-            f"{settings.mealie_url}/api/recipes",
-            headers=_headers(),
+        resp = mealie_http.get(
+            "/api/recipes",
             params=params,
             timeout=15,
+            log_name="search recipes",
         )
         resp.raise_for_status()
         recipes = _items_from_response(resp.json())
@@ -280,8 +268,8 @@ def search_recipes(query: str = "", limit: int = 20) -> list[dict]:
             for recipe in recipes
             if recipe.get("id")
         ]
-    except (httpx.HTTPError, ValueError) as e:
-        logger.warning("Failed to search Mealie recipes: %s", e)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Failed to search Mealie recipes: %s", exc)
         return []
 
 
@@ -299,11 +287,11 @@ def create_food(
         "labelId": label_id or None,
         "aliases": [],
     }
-    resp = httpx.post(
-        f"{settings.mealie_url}/api/foods",
-        headers=_headers(),
+    resp = mealie_http.post(
+        "/api/foods",
         json=payload,
         timeout=15,
+        log_name="create food",
     )
     if resp.status_code not in (200, 201):
         raise RuntimeError(f"Mealie food create returned {resp.status_code}: {resp.text}")
@@ -349,16 +337,20 @@ def add_recipe_to_shopping_list(recipe_id: str, recipe_scale: float = 1.0) -> bo
     if not list_id:
         logger.error("Cannot add recipe to shopping list: no Mealie shopping list is available")
         return False
-    url = f"{settings.mealie_url}/api/households/shopping/lists/{list_id}/recipe"
     payload = [{"recipeId": recipe_id, "recipeIncrementQuantity": recipe_scale}]
     try:
-        resp = httpx.post(url, headers=_headers(), json=payload, timeout=20)
+        resp = mealie_http.post(
+            f"/api/households/shopping/lists/{list_id}/recipe",
+            json=payload,
+            timeout=20,
+            log_name="add recipe to shopping list",
+        )
         if resp.status_code in (200, 201):
             return True
         logger.warning("Mealie add-recipe POST returned %s: %s", resp.status_code, resp.text)
         return False
-    except httpx.HTTPError as e:
-        logger.error("Mealie add-recipe POST failed: %s", e)
+    except httpx.HTTPError as exc:
+        logger.error("Mealie add-recipe POST failed: %s", exc)
         return False
 
 
@@ -375,9 +367,13 @@ def add_to_shopping_list_by_note(note: str) -> bool:
 
 
 def _post_shopping_item(payload: dict) -> tuple[bool, str | None]:
-    url = f"{settings.mealie_url}/api/households/shopping/items"
     try:
-        resp = httpx.post(url, headers=_headers(), json=payload, timeout=5)
+        resp = mealie_http.post(
+            "/api/households/shopping/items",
+            json=payload,
+            timeout=5,
+            log_name="add shopping item",
+        )
         if resp.status_code in (200, 201):
             item_id = None
             try:
@@ -389,48 +385,58 @@ def _post_shopping_item(payload: dict) -> tuple[bool, str | None]:
             return True, item_id
         logger.warning("Mealie shopping POST returned %s: %s", resp.status_code, resp.text)
         return False, None
-    except httpx.HTTPError as e:
-        logger.error("Mealie shopping POST failed: %s", e)
+    except httpx.HTTPError as exc:
+        logger.error("Mealie shopping POST failed: %s", exc)
         return False, None
 
 
 def _get_shopping_item(item_id: str) -> dict | None:
-    url = f"{settings.mealie_url}/api/households/shopping/items/{item_id}"
     try:
-        resp = httpx.get(url, headers=_headers(), timeout=5)
+        resp = mealie_http.get(
+            f"/api/households/shopping/items/{item_id}",
+            timeout=5,
+            log_name="load shopping item",
+        )
         if resp.status_code == 200:
             return resp.json()
         if resp.status_code != 404:
             logger.warning("Mealie shopping GET %s returned %s", item_id, resp.status_code)
         return None
-    except (httpx.HTTPError, ValueError) as e:
-        logger.error("Mealie shopping GET %s failed: %s", item_id, e)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.error("Mealie shopping GET %s failed: %s", item_id, exc)
         return None
 
 
 def _put_shopping_item(item_id: str, payload: dict) -> bool:
-    url = f"{settings.mealie_url}/api/households/shopping/items/{item_id}"
     try:
-        resp = httpx.put(url, headers=_headers(), json=payload, timeout=5)
+        resp = mealie_http.put(
+            f"/api/households/shopping/items/{item_id}",
+            json=payload,
+            timeout=5,
+            log_name="update shopping item",
+        )
         if resp.status_code in (200, 201):
             return True
         logger.warning("Mealie shopping PUT %s returned %s: %s", item_id, resp.status_code, resp.text)
         return False
-    except httpx.HTTPError as e:
-        logger.error("Mealie shopping PUT %s failed: %s", item_id, e)
+    except httpx.HTTPError as exc:
+        logger.error("Mealie shopping PUT %s failed: %s", item_id, exc)
         return False
 
 
 def _delete_shopping_item(item_id: str) -> bool:
-    url = f"{settings.mealie_url}/api/households/shopping/items/{item_id}"
     try:
-        resp = httpx.delete(url, headers=_headers(), timeout=5)
+        resp = mealie_http.delete(
+            f"/api/households/shopping/items/{item_id}",
+            timeout=5,
+            log_name="delete shopping item",
+        )
         if resp.status_code in (200, 204):
             return True
         logger.warning("Mealie shopping DELETE %s returned %s: %s", item_id, resp.status_code, resp.text)
         return False
-    except httpx.HTTPError as e:
-        logger.error("Mealie shopping DELETE %s failed: %s", item_id, e)
+    except httpx.HTTPError as exc:
+        logger.error("Mealie shopping DELETE %s failed: %s", item_id, exc)
         return False
 
 
