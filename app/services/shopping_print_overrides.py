@@ -47,11 +47,16 @@ def save_marker_style(db: Session, value: str) -> str:
 
 
 def item_override_key(item: dict) -> str:
-    food_id = str(item.get("food_id") or "").strip()
-    if food_id:
-        return f"food:{food_id}"
+    """Use the concrete Mealie shopping-item id whenever possible.
+
+    A food may occur multiple times on the same shopping list with different
+    quantities or units, so food ids are not unique enough for print overrides.
+    """
     item_id = str(item.get("id") or "").strip()
-    return f"item:{item_id}" if item_id else ""
+    if item_id:
+        return f"item:{item_id}"
+    food_id = str(item.get("food_id") or "").strip()
+    return f"food:{food_id}" if food_id else ""
 
 
 def load_item_overrides(db: Session) -> dict[str, dict[str, dict]]:
@@ -71,13 +76,16 @@ def load_item_overrides(db: Session) -> dict[str, dict[str, dict]]:
                 continue
             name_alias = str(entry.get("name_alias") or "").strip()[:160]
             quantity_alias = str(entry.get("quantity_alias") or "").strip()[:60]
-            if not name_alias and not quantity_alias:
+            unit_alias = str(entry.get("unit_alias") or "").strip()[:60]
+            if not name_alias and not quantity_alias and not unit_alias:
                 continue
             clean[override_key] = {
                 "name_alias": name_alias,
                 "quantity_alias": quantity_alias,
+                "unit_alias": unit_alias,
                 "source_name": str(entry.get("source_name") or "").strip()[:160],
                 "source_quantity_text": str(entry.get("source_quantity_text") or "").strip()[:60],
+                "source_unit_text": str(entry.get("source_unit_text") or "").strip()[:60],
             }
         result[str(list_id)] = clean
     return result
@@ -89,33 +97,41 @@ def save_item_override(
     override_key: str,
     name_alias: str,
     quantity_alias: str,
+    unit_alias: str = "",
     source_name: str = "",
     source_quantity_text: str = "",
+    source_unit_text: str = "",
 ) -> dict | None:
     list_id = str(list_id or "").strip()
     override_key = str(override_key or "").strip()
     name_alias = str(name_alias or "").strip()
     quantity_alias = str(quantity_alias or "").strip()
+    unit_alias = str(unit_alias or "").strip()
     source_name = str(source_name or "").strip()
     source_quantity_text = str(source_quantity_text or "").strip()
+    source_unit_text = str(source_unit_text or "").strip()
     if not list_id or not override_key:
         raise ValueError("Shopping list id and item key are required")
     if len(override_key) > 200 or len(name_alias) > 160 or len(source_name) > 160:
         raise ValueError("Item override name is too long")
     if len(quantity_alias) > 60 or len(source_quantity_text) > 60:
         raise ValueError("Item override quantity is too long")
+    if len(unit_alias) > 60 or len(source_unit_text) > 60:
+        raise ValueError("Item override unit is too long")
 
     all_rows = load_item_overrides(db)
     rows = dict(all_rows.get(list_id, {}))
-    if not name_alias and not quantity_alias:
+    if not name_alias and not quantity_alias and not unit_alias:
         rows.pop(override_key, None)
         saved = None
     else:
         saved = {
             "name_alias": name_alias,
             "quantity_alias": quantity_alias,
+            "unit_alias": unit_alias,
             "source_name": source_name,
             "source_quantity_text": source_quantity_text,
+            "source_unit_text": source_unit_text,
         }
         rows[override_key] = saved
     all_rows[list_id] = rows
@@ -124,7 +140,7 @@ def save_item_override(
 
 
 def delete_item_override(db: Session, list_id: str, override_key: str) -> None:
-    save_item_override(db, list_id, override_key, "", "")
+    save_item_override(db, list_id, override_key, "", "", "")
 
 
 def apply_item_overrides(db: Session, list_id: str, payload: dict) -> dict:
@@ -137,25 +153,36 @@ def apply_item_overrides(db: Session, list_id: str, payload: dict) -> dict:
             continue
         key = item_override_key(item)
         original_name = str(item.get("name") or "")
-        original_quantity = str(item.get("quantity_text") or "")
+        original_quantity_value = str(item.get("quantity_value_text") or "")
+        original_unit = str(item.get("unit_text") or "")
+        original_quantity_display = str(item.get("quantity_text") or "")
         item["override_key"] = key
         item["original_name"] = original_name
-        item["original_quantity_text"] = original_quantity
+        item["original_quantity_value_text"] = original_quantity_value
+        item["original_unit_text"] = original_unit
+        item["original_quantity_text"] = original_quantity_display
+
         override = overrides.get(key) if key else None
-        if override:
-            active_keys.add(key)
-            if override.get("name_alias"):
-                item["name"] = override["name_alias"]
-            if override.get("quantity_alias"):
-                item["quantity_text"] = override["quantity_alias"]
+        if not override:
+            continue
+        active_keys.add(key)
+        if override.get("name_alias"):
+            item["name"] = override["name_alias"]
+        effective_quantity = override.get("quantity_alias") or original_quantity_value
+        effective_unit = override.get("unit_alias") or original_unit
+        item["quantity_value_text"] = effective_quantity
+        item["unit_text"] = effective_unit
+        item["quantity_text"] = f"{effective_quantity} {effective_unit}".strip()
 
     payload["item_overrides"] = [
         {
             "key": key,
             "name_alias": entry.get("name_alias") or "",
             "quantity_alias": entry.get("quantity_alias") or "",
+            "unit_alias": entry.get("unit_alias") or "",
             "source_name": entry.get("source_name") or key,
             "source_quantity_text": entry.get("source_quantity_text") or "",
+            "source_unit_text": entry.get("source_unit_text") or "",
             "active": key in active_keys,
         }
         for key, entry in sorted(
