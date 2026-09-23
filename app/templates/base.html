@@ -14,10 +14,18 @@
             if (mode === 'light' || mode === 'dark') document.documentElement.setAttribute('data-bs-theme', mode);
             var base = localStorage.getItem('theme-base-override');
             if (base) document.documentElement.dataset.b2mBase = base;
+            var epaper = localStorage.getItem('theme-epaper-override');
+            if (epaper === 'true' || epaper === 'false') {
+                document.documentElement.classList.toggle('b2m-epaper-v9', epaper === 'true');
+                document.documentElement.classList.toggle('b2m-epaper', epaper === 'true');
+            }
         } catch (e) {}
     })();
     </script>
+    <style>html{overflow-y:scroll;scrollbar-gutter:stable}</style>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="preload" href="/static/vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/static/vendor/tabler-icons/fonts/tabler-icons.woff2?v3.44.0" as="font" type="font/woff2" crossorigin>
     <!-- Inter font (bundled for offline use) -->
     <link rel="stylesheet" href="/static/vendor/inter/inter.css">
     <link rel="stylesheet" href="/static/vendor/tabler/css/tabler.min.css">
@@ -31,6 +39,21 @@
          global theme.css underneath it prevents default personal values such as
          gray or epaper=false from resetting a non-default global theme. -->
     <link rel="stylesheet" href="/user-theme.css?v={{ v }}">
+    {% endif %}
+    <!-- Historical UI layers are still kept separate for now, but CSS is loaded
+         synchronously so it cannot mutate dimensions after the first paint. -->
+    <link rel="stylesheet" href="/static/css/ui-v2.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/ui-v4.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/ui-v6.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/ui-v9.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/ui-v17.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/ui-v22.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/ui-v23.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/ui-v24.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/ui-v25.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/ui-v27.css?v={{ v }}">
+    {% if request.url.path == '/labels' %}
+    <link rel="stylesheet" href="/static/css/ui-v13.css?v={{ v }}">
     {% endif %}
     <script src="/static/js/theme-init.js?v={{ v }}"></script>
 </head>
@@ -93,8 +116,7 @@
                                     <i class="ti ti-settings icon dropdown-item-icon"></i> Settings
                                 </a>
                                 <div class="dropdown-divider"></div>
-                                <a class="dropdown-item" href="#" id="pause-menu-item"
-                                   data-action="pause">
+                                <a class="dropdown-item" href="#" id="pause-menu-item" data-action="pause">
                                     <i class="ti ti-link-plus icon dropdown-item-icon"></i>
                                     <span id="pause-menu-text">Scan & Link Mode</span>
                                 </a>
