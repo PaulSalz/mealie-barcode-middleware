@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
 from types import SimpleNamespace
 
 from app.models import BarcodeTarget, Item
+from app.services.bounded_executor import BoundedExecutor
 from app.services.homeassistant import notify_shopping_route
 from app.services.shopping import add_recipe_to_list, effective_list_ids, route_item_scan
 from app.services.targets import list_ids
 
 logger = logging.getLogger(__name__)
-_ROUTE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="target-route")
-_SUBROUTE_POOL = ThreadPoolExecutor(max_workers=12, thread_name_prefix="target-subroute")
+_ROUTE_POOL = BoundedExecutor(max_workers=8, max_pending=32, thread_name_prefix="target-route")
+_SUBROUTE_POOL = BoundedExecutor(max_workers=12, max_pending=64, thread_name_prefix="target-subroute")
 
 
 def _effective_route(target: BarcodeTarget, item: Item | None) -> str:
@@ -93,7 +94,13 @@ def _route_recipe(plan: dict) -> dict:
     ha_future = None
     if route in {"mealie", "both"}:
         mealie_futures = [
-            _SUBROUTE_POOL.submit(add_recipe_to_list, plan["target_id"], plan["scale"], list_id)
+            _SUBROUTE_POOL.submit(
+                add_recipe_to_list,
+                plan["target_id"],
+                plan["scale"],
+                list_id,
+                block=True,
+            )
             for list_id in ids
         ]
     if route in {"homeassistant", "both"}:
@@ -105,6 +112,7 @@ def _route_recipe(plan: dict) -> dict:
             quantity=plan["scale"],
             unit_id=None,
             route=route,
+            block=True,
         )
 
     if route in {"mealie", "both"}:
@@ -141,8 +149,8 @@ def route_targets(barcode: str, targets: list[BarcodeTarget], db, *, paused: boo
     DB-backed target resolution happens on the request thread. Independent
     network routes then run concurrently so several slow Mealie/HA targets cost
     roughly the slowest target latency instead of the sum of all target latencies.
-    Recipe fan-out inside one target is parallelized separately to avoid nested
-    executor starvation.
+    The worker queues are bounded; internal routing waits for a slot rather than
+    retaining an unbounded number of callables in memory.
     """
     slots: list[dict | None] = []
     jobs: list[tuple[int, BarcodeTarget, dict, object]] = []
@@ -187,7 +195,7 @@ def route_targets(barcode: str, targets: list[BarcodeTarget], db, *, paused: boo
                 "quantity": target.quantity,
                 "unit_id": target.unit_id or item.default_unit_id,
             }
-            future = _ROUTE_POOL.submit(_route_food, plan)
+            future = _ROUTE_POOL.submit(_route_food, plan, block=True)
             jobs.append((slot_index, target, plan, future))
             continue
 
@@ -214,7 +222,7 @@ def route_targets(barcode: str, targets: list[BarcodeTarget], db, *, paused: boo
                 "list_ids": ids,
                 "scale": target.recipe_scale or 1.0,
             }
-            future = _ROUTE_POOL.submit(_route_recipe, plan)
+            future = _ROUTE_POOL.submit(_route_recipe, plan, block=True)
             jobs.append((slot_index, target, plan, future))
             continue
 
