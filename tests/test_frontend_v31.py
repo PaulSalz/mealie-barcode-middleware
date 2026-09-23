@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 from app.frontend_assets import GLOBAL_JS
@@ -31,11 +32,19 @@ def test_fast_bootstrap_avoids_full_printer_status_diagnostics():
     router = read("app/routers/v30_fixes.py")
     assert '"/api/shopping-print/bootstrap-v31"' in router
     assert "niim_connected(timeout=0.8)" in router
-    start = router.index("def shopping_print_bootstrap_v31")
-    end = router.index('@router.post("/labels/b21/print-batch-v30")')
-    body = router[start:end]
-    assert "printer_status(" not in body
-    assert '"status_mode": "fast"' in body
+    tree = ast.parse(router)
+    function = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "shopping_print_bootstrap_v31"
+    )
+    called_names = {
+        node.func.id
+        for node in ast.walk(function)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "printer_status" not in called_names
+    assert "niim_connected" in called_names
+    assert '"status_mode": "fast"' in router
 
 
 def test_browser_smoke_exercises_shopping_print_and_bounds_list_requests():
