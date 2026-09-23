@@ -44,7 +44,21 @@
                 {% if current_status not in ('pending', 'unknown') %}<td class="sort-mapped">{% if item.item %}<a href="/items/{{ item.item.id }}">{{ item.item.name }}</a>{% elif item.target_name %}{% if item.target_type == 'recipe' %}<span class="badge bg-purple text-purple-fg me-1">Recipe</span>{% endif %}{{ item.target_name }}{% elif item.status == 'action' and item.barcode.barcode.upper().startswith('ACTION:') %}<a href="/actions/{{ item.barcode.barcode[7:]|urlencode }}">{{ item.barcode.display_title or item.barcode.barcode[7:] }}</a>{% else %}<span class="text-secondary">—</span>{% endif %}</td>{% endif %}
                 <td class="sort-source">{{ item.barcode.source or '—' }}</td><td class="sort-scanned text-secondary text-nowrap" data-sort-value="{{ item.barcode.created_at.timestamp() }}" title="{{ item.barcode.created_at|localtime }}">{{ item.barcode.created_at|relative_time }}</td>
             </tr>{% endfor %}
-            {% if not items %}<tr class="barcodes-empty-row"><td colspan="{{ 7 if current_status not in ('pending', 'unknown') else 6 }}"><div class="empty py-4"><div class="empty-icon"><i class="ti ti-barcode-off icon icon-lg"></i></div><p class="empty-title">No barcodes yet</p></div></td></tr>{% endif %}
+            {% if not items %}
+            <tr class="barcodes-empty-row"><td colspan="{{ 7 if current_status not in ('pending', 'unknown') else 6 }}">
+              <div class="empty py-5"><div class="empty-icon"><i class="ti ti-barcode-off icon icon-lg"></i></div>
+                {% if current_status == 'all' %}
+                  <p class="empty-title">{{ tr('empty.barcodes_title') }}</p>
+                  <p class="empty-subtitle text-secondary">{{ tr('empty.barcodes_text') }}</p>
+                  <div class="empty-action"><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#modal-new-barcode"><i class="ti ti-plus icon"></i>{{ tr('common.create') }}</button></div>
+                {% else %}
+                  <p class="empty-title">{{ tr('empty.barcodes_filtered_title') }}</p>
+                  <p class="empty-subtitle text-secondary">{{ tr('empty.barcodes_filtered_text') }}</p>
+                  <div class="empty-action"><a class="btn" href="/barcodes?status=all">{{ tr('common.clear_filters') }}</a></div>
+                {% endif %}
+              </div>
+            </td></tr>
+            {% endif %}
             </tbody>
         </table></div>
         <div class="card-footer d-flex align-items-center"><div class="dropdown"><a class="btn dropdown-toggle" data-bs-toggle="dropdown"><span id="bc-page-size-label">20</span>&nbsp;records</a><div class="dropdown-menu"><a class="dropdown-item" href="#" data-page-size="10">10 records</a><a class="dropdown-item" href="#" data-page-size="20">20 records</a><a class="dropdown-item" href="#" data-page-size="50">50 records</a><a class="dropdown-item" href="#" data-page-size="100">100 records</a></div></div><ul class="pagination m-0 ms-auto" id="barcodes-pagination"></ul></div></div>

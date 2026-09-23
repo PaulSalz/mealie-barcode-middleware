@@ -24,7 +24,16 @@
           <td>{% if last %}<span class="badge {{ 'bg-green text-green-fg' if last.status == 'success' else 'bg-yellow text-yellow-fg' if last.status == 'ignored_cooldown' else 'bg-red text-red-fg' }}">{{ last.status }}</span><div class="text-secondary small">{{ last.created_at|localtime }}</div>{% else %}<span class="text-secondary">Never</span>{% endif %}</td>
         </tr>
       {% endfor %}
-      {% if not actions %}<tr><td colspan="7" class="text-center text-secondary py-4">No actions configured yet.</td></tr>{% endif %}
+      {% if not actions %}
+        <tr><td colspan="7">
+          <div class="empty py-5">
+            <div class="empty-icon"><i class="ti ti-bolt-off icon icon-lg"></i></div>
+            <p class="empty-title">{{ tr('empty.actions_title') }}</p>
+            <p class="empty-subtitle text-secondary">{{ tr('empty.actions_text') }}</p>
+            <div class="empty-action"><a class="btn btn-primary" href="/actions/new"><i class="ti ti-plus icon"></i>{{ tr('empty.actions_action') }}</a></div>
+          </div>
+        </td></tr>
+      {% endif %}
       </tbody>
     </table>
   </div>
