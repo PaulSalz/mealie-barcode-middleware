@@ -9,7 +9,9 @@ from app.config import settings
 from app.database import SessionLocal
 from app.events import scan_events
 from app.models import Activity, Item, RetryQueue
+from app.services import mealie_http
 from app.services.action_stats import ensure_action_stats_backfilled, purge_action_executions
+from app.services.barcode_stats import barcode_stats_ready, ensure_barcode_stats_backfilled
 from app.services.mealie_extras import sync_items_enhanced
 from app.services.performance_indexes import ensure_performance_indexes
 from app.services.scan_stats import ensure_scan_stats_backfilled, purge_raw_scan_history
@@ -71,41 +73,37 @@ def _process_retry_queue():
             return
 
         logger.info("Processing retry queue batch: %d item(s)", len(pending))
-        headers = {
-            "Authorization": f"Bearer {settings.mealie_api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-        url = f"{settings.mealie_url}/api/households/shopping/items"
-        limits = httpx.Limits(max_connections=4, max_keepalive_connections=2, keepalive_expiry=30.0)
-
-        with httpx.Client(headers=headers, timeout=10.0, limits=limits) as client:
-            for item in pending:
-                try:
-                    payload = json.loads(item.payload)
-                    if not isinstance(payload, dict):
-                        raise ValueError("retry payload must be a JSON object")
-                except (json.JSONDecodeError, TypeError, ValueError) as exc:
-                    item.attempts = max(item.attempts, settings.max_retry_attempts - 1)
-                    _retry_failed(item, db, now, f"invalid stored payload ({exc})")
-                    db.commit()
-                    continue
-
-                try:
-                    resp = client.post(url, json=payload)
-                except httpx.HTTPError as exc:
-                    _retry_failed(item, db, now, str(exc))
-                    db.commit()
-                    continue
-
-                if resp.status_code in (200, 201):
-                    db.delete(item)
-                    db.commit()
-                    logger.info("Retry success for barcode=%s", item.barcode)
-                    continue
-
-                _retry_failed(item, db, now, f"HTTP {resp.status_code}")
+        for item in pending:
+            try:
+                payload = json.loads(item.payload)
+                if not isinstance(payload, dict):
+                    raise ValueError("retry payload must be a JSON object")
+            except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                item.attempts = max(item.attempts, settings.max_retry_attempts - 1)
+                _retry_failed(item, db, now, f"invalid stored payload ({exc})")
                 db.commit()
+                continue
+
+            try:
+                resp = mealie_http.post(
+                    "/api/households/shopping/items",
+                    json=payload,
+                    timeout=10,
+                    log_name="retry shopping item",
+                )
+            except httpx.HTTPError as exc:
+                _retry_failed(item, db, now, str(exc))
+                db.commit()
+                continue
+
+            if resp.status_code in (200, 201):
+                db.delete(item)
+                db.commit()
+                logger.info("Retry success for barcode=%s", item.barcode)
+                continue
+
+            _retry_failed(item, db, now, f"HTTP {resp.status_code}")
+            db.commit()
     except Exception:
         db.rollback()
         logger.exception("Retry queue batch failed unexpectedly")
@@ -156,12 +154,15 @@ def _purge_old_activities():
         if deleted:
             logger.info("Purged %d old read notification activities", deleted)
 
-        scan_deleted = purge_raw_scan_history(db, _RAW_SCAN_RETENTION_DAYS)
-        if scan_deleted:
-            logger.info(
-                "Purged %d raw scan activities older than %d days; compact statistics were retained",
-                scan_deleted, _RAW_SCAN_RETENTION_DAYS,
-            )
+        if barcode_stats_ready(db):
+            scan_deleted = purge_raw_scan_history(db, _RAW_SCAN_RETENTION_DAYS)
+            if scan_deleted:
+                logger.info(
+                    "Purged %d raw scan activities older than %d days; compact statistics were retained",
+                    scan_deleted, _RAW_SCAN_RETENTION_DAYS,
+                )
+        else:
+            logger.warning("Skipping raw scan purge because per-barcode aggregate backfill is incomplete")
 
         action_deleted = purge_action_executions(db, _ACTION_EXECUTION_RETENTION_DAYS)
         if action_deleted:
@@ -183,7 +184,12 @@ def start_scheduler():
     try:
         ensure_scan_stats_backfilled()
     except Exception:
-        logger.exception("Could not backfill compact scan statistics")
+        logger.exception("Could not backfill compact target scan statistics")
+
+    try:
+        ensure_barcode_stats_backfilled()
+    except Exception:
+        logger.exception("Could not backfill compact per-barcode scan statistics")
 
     try:
         ensure_action_stats_backfilled()

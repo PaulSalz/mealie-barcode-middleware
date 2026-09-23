@@ -11,6 +11,7 @@ from app.config import settings
 from app.database import get_db
 from app.events import scan_events
 from app.models import Action, ActionExecution, Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
+from app.services import mealie_http
 from app.services.multitarget import route_targets
 from app.services.targets import ensure_targets
 from app.templating import set_cached_theme
@@ -101,7 +102,6 @@ async def preview_accessibility_theme(request: Request, db: Session = Depends(ge
 
 
 def _remove_local_item(item: Item, db: Session) -> None:
-    targets = db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item.id).all()
     db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item.id).delete(synchronize_session=False)
     db.delete(item)
     db.flush()
@@ -111,10 +111,10 @@ def _delete_mealie_item_upstream(item: Item) -> str | None:
     if item.source != "mealie":
         return None
     try:
-        response = httpx.delete(
-            f"{settings.mealie_url.rstrip('/')}/api/foods/{item.id}",
-            headers={"Authorization":f"Bearer {settings.mealie_api_key}","Accept":"application/json"},
+        response = mealie_http.delete(
+            f"/api/foods/{item.id}",
             timeout=12,
+            log_name="delete food",
         )
     except httpx.HTTPError as exc:
         return f"Mealie delete failed: {exc}"

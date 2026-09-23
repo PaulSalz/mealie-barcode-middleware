@@ -25,3 +25,15 @@ class ScanDailyStat(Base):
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     first_scan: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     last_scan: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class BarcodeDailyStat(Base):
+    """One durable counter per physical barcode/day, independent of target fan-out."""
+
+    __tablename__ = "barcode_daily_stats"
+
+    barcode: Mapped[str] = mapped_column(String, primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    first_scan: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_scan: Mapped[datetime] = mapped_column(DateTime, nullable=False)
