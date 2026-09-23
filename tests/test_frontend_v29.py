@@ -25,7 +25,9 @@ def test_radius_covers_selectgroup_and_normal_form_controls():
     source = (ROOT / "app/static/css/ui-v29.css").read_text(encoding="utf-8")
     assert ".form-control" in source
     assert ".form-select" in source
-    assert ".form-selectgroup-label:not(.b2m-radius-preview)" in source
+    assert ".form-selectgroup-label" in source
+    assert '.form-selectgroup-input[name="theme_radius"]' not in source
+    assert 'input[name="theme_radius"][value="2"] + .form-selectgroup-label' in source
     assert ".input-group-text" in source
 
 
@@ -36,6 +38,19 @@ def test_shopping_v29_has_header_connect_unit_hide_and_stable_local_mutations():
     assert "hide_unit" in source
     assert "/api/shopping-print/local-content" in source
     assert "window.location.reload()" in source
+
+
+def test_shopping_receipt_settings_autosave_and_top_margin():
+    source = (ROOT / "app/static/js/shopping-fixes-v29.js").read_text(encoding="utf-8")
+    router = (ROOT / "app/routers/shopping_print.py").read_text(encoding="utf-8")
+    assert "sp-top-margin" in source
+    assert "top_margin_mm" in source
+    assert "scheduleReceiptSettingsSave" in source
+    assert "Saving automatically" in source
+    assert "shopping-print-save-settings" in source
+    assert "classList.add('d-none')" in source
+    assert "_TOP_MARGIN_KEY" in router
+    assert 'print_settings["top_margin_mm"]' in router
 
 
 def test_shopping_router_canonicalizes_categories_and_supports_atomic_entry_routes():
