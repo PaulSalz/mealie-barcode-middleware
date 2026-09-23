@@ -108,13 +108,15 @@ def load_item_overrides(db: Session) -> dict[str, dict[str, dict]]:
             quantity_alias = str(entry.get("quantity_alias") or "").strip()[:60]
             unit_alias = str(entry.get("unit_alias") or "").strip()[:60]
             hide_unit = _bool(entry.get("hide_unit", False))
-            if not name_alias and not quantity_alias and not unit_alias and not hide_unit:
+            hide_quantity = _bool(entry.get("hide_quantity", False))
+            if not name_alias and not quantity_alias and not unit_alias and not hide_unit and not hide_quantity:
                 continue
             clean[override_key] = {
                 "name_alias": name_alias,
                 "quantity_alias": quantity_alias,
                 "unit_alias": unit_alias,
                 "hide_unit": hide_unit,
+                "hide_quantity": hide_quantity,
                 "source_name": str(entry.get("source_name") or "").strip()[:160],
                 "source_quantity_text": str(entry.get("source_quantity_text") or "").strip()[:60],
                 "source_unit_text": str(entry.get("source_unit_text") or "").strip()[:60],
@@ -134,6 +136,7 @@ def save_item_override(
     source_quantity_text: str = "",
     source_unit_text: str = "",
     hide_unit: bool = False,
+    hide_quantity: bool = False,
 ) -> dict | None:
     list_id = str(list_id or "").strip()
     override_key = str(override_key or "").strip()
@@ -144,6 +147,7 @@ def save_item_override(
     source_quantity_text = str(source_quantity_text or "").strip()
     source_unit_text = str(source_unit_text or "").strip()
     hide_unit = _bool(hide_unit)
+    hide_quantity = _bool(hide_quantity)
     if not list_id or not override_key:
         raise ValueError("Shopping list id and item key are required")
     if len(override_key) > 200 or len(name_alias) > 160 or len(source_name) > 160:
@@ -158,7 +162,7 @@ def save_item_override(
 
     all_rows = load_item_overrides(db)
     rows = dict(all_rows.get(list_id, {}))
-    if not name_alias and not quantity_alias and not unit_alias and not hide_unit:
+    if not name_alias and not quantity_alias and not unit_alias and not hide_unit and not hide_quantity:
         rows.pop(override_key, None)
         saved = None
     else:
@@ -167,6 +171,7 @@ def save_item_override(
             "quantity_alias": quantity_alias,
             "unit_alias": unit_alias,
             "hide_unit": hide_unit,
+            "hide_quantity": hide_quantity,
             "source_name": source_name,
             "source_quantity_text": source_quantity_text,
             "source_unit_text": source_unit_text,
@@ -221,11 +226,15 @@ def apply_item_overrides(db: Session, list_id: str, payload: dict) -> dict:
             active_keys.add(active_key)
             if override.get("name_alias"):
                 item["name"] = override["name_alias"]
-            quantity_display = str(override.get("quantity_alias") or quantity_value).strip()
-            if _bool(override.get("hide_unit", False)):
+            if _bool(override.get("hide_quantity", False)):
+                quantity_display = ""
                 unit_display = ""
             else:
-                unit_display = str(override.get("unit_alias") or unit_value).strip()
+                quantity_display = str(override.get("quantity_alias") or quantity_value).strip()
+                if _bool(override.get("hide_unit", False)):
+                    unit_display = ""
+                else:
+                    unit_display = str(override.get("unit_alias") or unit_value).strip()
             item["quantity_text"] = " ".join(part for part in (quantity_display, unit_display) if part).strip()
 
     payload["item_overrides"] = [
@@ -235,6 +244,7 @@ def apply_item_overrides(db: Session, list_id: str, payload: dict) -> dict:
             "quantity_alias": entry.get("quantity_alias") or "",
             "unit_alias": entry.get("unit_alias") or "",
             "hide_unit": _bool(entry.get("hide_unit", False)),
+            "hide_quantity": _bool(entry.get("hide_quantity", False)),
             "source_name": entry.get("source_name") or key,
             "source_quantity_text": entry.get("source_quantity_text") or "",
             "source_unit_text": entry.get("source_unit_text") or "",
