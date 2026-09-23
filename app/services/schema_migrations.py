@@ -14,11 +14,12 @@ Migration = tuple[str, Callable[[Connection], None]]
 
 
 def _forward_barcode_targets(conn: Connection) -> None:
-    """Materialize legacy primary mappings as additive targets once.
+    """Materialize legacy primary mappings as additive targets.
 
     BarcodeTarget is the canonical runtime representation. BarcodeMapping remains
-    temporarily as a compatibility mirror for old routes/imports, but startup no
-    longer recreates that mirror from targets in both directions.
+    temporarily as a compatibility mirror for older writers/imports. This helper
+    is intentionally one-way: startup no longer recreates BarcodeMapping rows from
+    targets, which removes the previous two-source-of-truth cycle.
     """
     tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
     if not {"barcode_mappings", "barcode_targets"}.issubset(tables):
@@ -50,7 +51,7 @@ MIGRATIONS: tuple[Migration, ...] = (
 
 
 def run_schema_migrations() -> list[str]:
-    """Run ordered, transactional, once-only data migrations."""
+    """Run ordered data migrations and temporary one-way compatibility repair."""
     applied_now: list[str] = []
     with engine.begin() as conn:
         conn.execute(text("""
@@ -59,20 +60,20 @@ def run_schema_migrations() -> list[str]:
                 applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """))
-        applied = {
-            row[0]
-            for row in conn.execute(text("SELECT name FROM schema_migrations"))
-        }
+        applied = {row[0] for row in conn.execute(text("SELECT name FROM schema_migrations"))}
         for name, migration in MIGRATIONS:
             if name in applied:
                 continue
             logger.info("Applying database migration %s", name)
             migration(conn)
-            conn.execute(
-                text("INSERT INTO schema_migrations (name) VALUES (:name)"),
-                {"name": name},
-            )
+            conn.execute(text("INSERT INTO schema_migrations (name) VALUES (:name)"), {"name": name})
             applied_now.append(name)
+
+        # Transitional compatibility only: some old writers may still create a
+        # BarcodeMapping after the migration marker exists. Reconcile those rows
+        # forward without ever rebuilding the legacy table from BarcodeTarget.
+        _forward_barcode_targets(conn)
+
     if applied_now:
         logger.info("Applied %d database migration(s): %s", len(applied_now), ", ".join(applied_now))
     return applied_now
