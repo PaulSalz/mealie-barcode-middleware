@@ -11,6 +11,7 @@ is not using it.
 from __future__ import annotations
 
 import os
+import threading
 import time
 
 import httpx
@@ -18,6 +19,10 @@ import httpx
 _http = httpx.Client(
     limits=httpx.Limits(max_connections=10, max_keepalive_connections=5, keepalive_expiry=60.0),
 )
+# A physical printer can execute only one print stream at a time. Keep this at
+# the adapter layer so queued label jobs, shopping receipts and direct print
+# requests can never race each other even if they arrive through different APIs.
+_print_lock = threading.Lock()
 
 
 def _env(name: str, default: str = "") -> str:
@@ -248,6 +253,8 @@ def print_image_base64(
 
     Connection state is intentionally manual; this function refuses to print when
     the printer is disconnected instead of silently claiming the BLE connection.
+    All callers share one process-wide print lock because the physical B21 cannot
+    execute overlapping print streams.
     """
     cfg = config()
     if width_mm <= 0 or height_mm <= 0:
@@ -257,7 +264,6 @@ def print_image_base64(
             f"Label is {width_mm:g} mm wide, but the configured printer limit is "
             f"{cfg['max_label_width_mm']:g} mm"
         )
-    _require_connected()
 
     resolved_dpi = max(100, min(int(dpi or cfg["dpi"]), 1200))
     resolved_density = max(1, min(int(density or cfg["density"]), 5))
@@ -277,10 +283,12 @@ def print_image_base64(
         "imagePosition": "centre",
         "threshold": resolved_threshold,
     }
-    try:
-        response = _request("POST", "/print", json=payload, timeout=cfg["timeout"])
-    except httpx.HTTPError as exc:
-        raise RuntimeError(_http_error_message(exc, action="print")) from exc
+    with _print_lock:
+        _require_connected()
+        try:
+            response = _request("POST", "/print", json=payload, timeout=cfg["timeout"])
+        except httpx.HTTPError as exc:
+            raise RuntimeError(_http_error_message(exc, action="print")) from exc
     try:
         data = response.json()
     except ValueError:
