@@ -1,5 +1,3 @@
-from fastapi.routing import APIRoute
-
 from app.main import app
 
 
@@ -8,9 +6,8 @@ def _count(path: str, method: str) -> int:
     return sum(
         1
         for route in app.routes
-        if isinstance(route, APIRoute)
-        and route.path == path
-        and method in (route.methods or set())
+        if getattr(route, "path", None) == path
+        and method in (getattr(route, "methods", None) or set())
     )
 
 
