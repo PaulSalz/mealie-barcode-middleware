@@ -1,4 +1,4 @@
-/* v2026.09.23.29 — robust print-only entries, unit hiding and header printer control. */
+/* v2026.09.23.29 — robust print-only entries, unit hiding, printer control and autosaved receipt settings. */
 (function () {
   'use strict';
   if (window.location.pathname !== '/shopping-print' || window.__b2mShoppingV29Loaded) return;
@@ -6,6 +6,8 @@
 
   var payloadCache = null;
   var payloadListId = '';
+  var settingsSaveTimer = null;
+  var settingsBootstrapped = false;
 
   function $(id) { return document.getElementById(id); }
 
@@ -36,6 +38,13 @@
 
   function setOverrideStatus(text, tone) {
     var el = $('shopping-print-override-status');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'form-hint' + (tone ? ' text-' + tone : '');
+  }
+
+  function setSettingsStatus(text, tone) {
+    var el = $('shopping-print-settings-status');
     if (!el) return;
     el.textContent = text || '';
     el.className = 'form-hint' + (tone ? ' text-' + tone : '');
@@ -218,10 +227,183 @@
     }
   }
 
+  function selectedRadio(name, fallback) {
+    var input = document.querySelector('input[name="' + name + '"]:checked');
+    return input ? input.value : fallback;
+  }
+
+  function ensureTopMarginControl() {
+    var existing = $('sp-top-margin');
+    if (existing) return existing;
+    var bottom = $('sp-bottom-margin');
+    if (!bottom) return null;
+    var bottomCol = bottom.closest('[class*="col-"]');
+    if (!bottomCol || !bottomCol.parentElement) return null;
+    var col = document.createElement('div');
+    col.className = bottomCol.className || 'col-6';
+    col.innerHTML = '<label class="form-label">Top margin</label><div class="input-group"><input class="form-control" type="number" min="0" max="20" step="0.1" id="sp-top-margin"><span class="input-group-text">mm</span></div>';
+    bottomCol.parentElement.insertBefore(col, bottomCol);
+    return col.querySelector('input');
+  }
+
+  function receiptSettingsPayload() {
+    var marker = selectedRadio('sp-item-marker-style', 'checkbox');
+    return {
+      paper_width_mm: Number(($('sp-width') || {}).value || 50),
+      margin_mm: Number(($('sp-margin') || {}).value || 0),
+      top_margin_mm: Number(($('sp-top-margin') || {}).value || 0),
+      body_font_mm: Number(($('sp-font') || {}).value || 3),
+      line_gap_mm: Number(($('sp-line-gap') || {}).value || 0),
+      category_gap_mm: Number(($('sp-category-gap') || {}).value || 0),
+      bottom_margin_mm: Number(($('sp-bottom-margin') || {}).value || 0),
+      density: Number(($('sp-density') || {}).value || 3),
+      threshold: Number(($('sp-threshold') || {}).value || 145),
+      dpi: Number(($('sp-dpi') || {}).value || 300),
+      label_type: Number(($('sp-label-type') || {}).value || 3),
+      show_checkboxes: marker === 'checkbox',
+      item_marker_style: marker,
+      show_items: !!($('sp-show-items') && $('sp-show-items').checked),
+      show_quantities: !!($('sp-show-quantities') && $('sp-show-quantities').checked),
+      show_item_dividers: !!($('sp-show-item-dividers') && $('sp-show-item-dividers').checked),
+      show_category_dividers: !!($('sp-show-category-dividers') && $('sp-show-category-dividers').checked),
+      category_divider_style: selectedRadio('sp-category-divider-style', 'solid')
+    };
+  }
+
+  function updateTopMarginPreview() {
+    var input = $('sp-top-margin');
+    var canvas = $('shopping-print-canvas');
+    if (!input || !canvas) return;
+    var mm = Math.max(0, Number(input.value || 0));
+    var dpi = Math.max(100, Number(($('sp-dpi') || {}).value || 300));
+    var sourceWidth = Math.max(1, Number(canvas.width || 1));
+    var displayWidth = canvas.getBoundingClientRect().width || sourceWidth;
+    var cssPixels = Math.round((mm * dpi / 25.4) * (displayWidth / sourceWidth));
+    canvas.style.marginTop = cssPixels > 0 ? cssPixels + 'px' : '';
+
+    var badge = $('shopping-print-paper-size');
+    if (badge) {
+      var match = badge.textContent.match(/^(.*?×\s*)([0-9]+(?:\.[0-9]+)?)(\s*mm)$/);
+      var base = Number(canvas.dataset.b2mBaseHeightMm || 0);
+      if (!base && match) {
+        base = Math.max(0, Number(match[2]) - Number(canvas.dataset.b2mLastTopMarginMm || 0));
+        canvas.dataset.b2mBaseHeightMm = String(base);
+      }
+      if (base) badge.textContent = match ? match[1] + (base + mm).toFixed(1) + match[3] : badge.textContent;
+    }
+    canvas.dataset.b2mLastTopMarginMm = String(mm);
+  }
+
+  function installTopMarginExport() {
+    var canvas = $('shopping-print-canvas');
+    if (!canvas || canvas.dataset.b2mTopMarginExport === '1') return;
+    canvas.dataset.b2mTopMarginExport = '1';
+    var nativeToDataURL = canvas.toDataURL.bind(canvas);
+    canvas.toDataURL = function () {
+      var args = arguments;
+      var mm = Math.max(0, Number(($('sp-top-margin') || {}).value || 0));
+      var dpi = Math.max(100, Number(($('sp-dpi') || {}).value || 300));
+      var topPx = Math.max(0, Math.round(mm * dpi / 25.4));
+      if (!topPx) return nativeToDataURL.apply(canvas, args);
+      var out = document.createElement('canvas');
+      out.width = canvas.width;
+      out.height = canvas.height + topPx;
+      var ctx = out.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(canvas, 0, topPx);
+      canvas.dataset.heightMm = (out.height / dpi * 25.4).toFixed(2);
+      return out.toDataURL.apply(out, args);
+    };
+  }
+
+  async function bootstrapReceiptSettings() {
+    var top = ensureTopMarginControl();
+    if (!top) return;
+    try {
+      var data = await json('/api/shopping-print/bootstrap?_=' + Date.now());
+      var settings = data.settings || {};
+      top.value = settings.top_margin_mm == null ? 2.2 : settings.top_margin_mm;
+    } catch (e) {
+      if (!top.value) top.value = '2.2';
+    }
+    settingsBootstrapped = true;
+    updateTopMarginPreview();
+  }
+
+  async function saveReceiptSettings() {
+    if (!settingsBootstrapped) return;
+    var saveButton = $('shopping-print-save-settings');
+    if (saveButton && saveButton.disabled) return;
+    setSettingsStatus('Saving automatically…', 'secondary');
+    try {
+      var data = await json('/api/shopping-print/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(receiptSettingsPayload())
+      });
+      if (data.settings && $('sp-top-margin')) $('sp-top-margin').value = data.settings.top_margin_mm;
+      setSettingsStatus('Saved automatically.', 'success');
+      window.setTimeout(function () {
+        var status = $('shopping-print-settings-status');
+        if (status && status.textContent === 'Saved automatically.') status.textContent = '';
+      }, 1800);
+    } catch (error) {
+      setSettingsStatus(error.message, 'danger');
+    }
+  }
+
+  function scheduleReceiptSettingsSave() {
+    if (!settingsBootstrapped) return;
+    clearTimeout(settingsSaveTimer);
+    setSettingsStatus('Unsaved changes…', 'yellow');
+    settingsSaveTimer = window.setTimeout(saveReceiptSettings, 450);
+  }
+
+  function installReceiptAutosave() {
+    var saveButton = $('shopping-print-save-settings');
+    if (saveButton) saveButton.classList.add('d-none');
+    var footer = saveButton && saveButton.closest('.card-footer');
+    if (footer) footer.classList.add('justify-content-end');
+
+    var selector = [
+      '#sp-width','#sp-margin','#sp-top-margin','#sp-font','#sp-line-gap','#sp-category-gap','#sp-bottom-margin',
+      '#sp-density','#sp-threshold','#sp-dpi','#sp-label-type','#sp-show-items','#sp-show-quantities',
+      '#sp-show-item-dividers','#sp-show-category-dividers','input[name="sp-category-divider-style"]',
+      'input[name="sp-item-marker-style"]'
+    ].join(',');
+    document.querySelectorAll(selector).forEach(function (input) {
+      if (input.dataset.b2mAutoSaveBound === '1') return;
+      input.dataset.b2mAutoSaveBound = '1';
+      input.addEventListener('input', function () {
+        if (input.id === 'sp-top-margin' || input.id === 'sp-dpi') window.setTimeout(updateTopMarginPreview, 0);
+        scheduleReceiptSettingsSave();
+      });
+      input.addEventListener('change', function () {
+        if (input.id === 'sp-top-margin' || input.id === 'sp-dpi') window.setTimeout(updateTopMarginPreview, 0);
+        scheduleReceiptSettingsSave();
+      });
+    });
+  }
+
   function bind() {
     ensureHeaderConnect();
     ensureHideUnitControl();
+    installTopMarginExport();
+    bootstrapReceiptSettings().then(function () {
+      installReceiptAutosave();
+      window.setTimeout(updateTopMarginPreview, 150);
+    });
     syncHideUnit();
+
+    var canvas = $('shopping-print-canvas');
+    if (canvas && canvas.dataset.b2mTopMarginObserved !== '1') {
+      canvas.dataset.b2mTopMarginObserved = '1';
+      new MutationObserver(function () {
+        canvas.dataset.b2mBaseHeightMm = canvas.dataset.heightMm || '';
+        window.setTimeout(updateTopMarginPreview, 0);
+      }).observe(canvas, {attributes: true, attributeFilter: ['width', 'height', 'data-height-mm']});
+    }
 
     var list = $('shopping-print-list');
     if (list && list.dataset.b2mV29Bound !== '1') {
