@@ -239,12 +239,15 @@
     applyExactTopMargin();
 
     new MutationObserver(function (mutations) {
-      canvas.style.marginTop = '';
+      // Never observe style here: clearing the legacy v29 CSS margin from a
+      // style observer schedules another style mutation and can starve the
+      // shopping-list loader in an endless MutationObserver microtask loop.
+      if (canvas.style.marginTop) canvas.style.marginTop = '';
       var external = mutations.some(function (m) {
         return m.attributeName === 'data-height-mm' && String(canvas.dataset.heightMm || '') !== adjustedHeightMm;
       });
       if (external) window.setTimeout(captureRawReceipt, 0);
-    }).observe(canvas, {attributes:true, attributeFilter:['width','height','data-height-mm','style']});
+    }).observe(canvas, {attributes:true, attributeFilter:['width','height','data-height-mm']});
 
     ['sp-top-margin','sp-margin','sp-dpi'].forEach(function (id) {
       var input = $(id);
