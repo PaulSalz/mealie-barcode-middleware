@@ -51,10 +51,9 @@
     const buttons=$('b21-v2-reset-cal')?.closest('.d-flex')||$('b21-v2-test-cal')?.closest('.d-flex');
     if(buttons){buttons.classList.add('col-12','mt-1');row.appendChild(buttons);}
     (editor.querySelector('.row')||editor).appendChild(wrap);
-    if(oldSection){
-      const useful=Array.from(oldSection.querySelectorAll('input,select,button')).some(el=>!el.classList.contains('d-none')&&!el.closest('.d-none'));
-      if(!useful)oldSection.remove();
-    }
+    /* Keep legacy frame/threshold inputs in the DOM for the canonical controller,
+       but remove the obsolete "Label / calibration" block from the visible UI. */
+    if(oldSection){oldSection.classList.add('d-none');oldSection.setAttribute('aria-hidden','true');}
     removeLegacyAppearance();
   }
 
@@ -62,9 +61,17 @@
   function layerName(element){return element.name||(element.type==='code'?'Code':element.type==='line'?'Line':'Text');}
   function selectLayer(id){const select=$('b21-v2-element-select');if(!select)return;select.value=String(id);refreshEditor();renderLayers();}
   function setVisible(id,visible){
-    const c=context();if(!c||!Array.isArray(c.state.elements))return;
-    const element=c.state.elements.find(row=>String(row.id)===String(id));if(!element)return;
-    element.visible=!!visible;persist(c);refreshEditor();renderLayers();
+    /* Do not write localStorage behind the canonical editor's back. Its entryStates
+       object is intentionally kept in memory, so direct storage writes only become
+       visible after reload. Drive the hidden canonical Visible control instead. */
+    const select=$('b21-v2-element-select'),input=$('b21-v2-visible');
+    if(!select||!input)return;
+    const previous=String(select.value||'');
+    if(previous!==String(id)){select.value=String(id);refreshEditor();}
+    input.checked=!!visible;
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+    if(previous&&previous!==String(id)){select.value=previous;refreshEditor();}
+    requestAnimationFrame(renderLayers);
   }
   function moveLayer(id,direction){
     const c=context();if(!c||!Array.isArray(c.state.elements))return;
