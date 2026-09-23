@@ -20,15 +20,12 @@ _CATEGORY_ORDERS_KEY = "shopping_print.category_orders"
 _CATEGORY_ALIASES_KEY = "shopping_print.category_aliases"
 _LOCAL_CONTENT_KEY = "shopping_print.local_content"
 
+# Shopping receipts have a variable rendered length. Fixed-gap/mark media makes
+# the printer search for a physical boundary after the job, which can cause
+# excessive feed or a printer-side media error. Shopping Print therefore uses
+# continuous media exclusively.
 LABEL_TYPES = {
-    1: "With gaps",
-    2: "Black mark",
     3: "Continuous",
-    4: "Perforated",
-    5: "Transparent",
-    6: "PVC tag",
-    10: "Black mark + gap",
-    11: "Heat-shrink tube",
 }
 
 DEFAULT_PRINT_SETTINGS = {
@@ -135,9 +132,10 @@ def validate_print_settings(values: dict) -> dict:
     if divider_style not in {"solid", "dashed"}:
         raise ValueError("category_divider_style must be solid or dashed")
 
-    label_type = integer("label_type", 1, 255)
-    if label_type not in LABEL_TYPES:
-        raise ValueError("Unsupported NIIM label type")
+    # Variable-length receipts are always continuous. Ignore stale persisted
+    # values from older releases so a previously selected gap/mark media type
+    # cannot make the B21 over-feed or reject the job.
+    label_type = 3
 
     return {
         "paper_width_mm": round(number("paper_width_mm", 20, 80), 1),
