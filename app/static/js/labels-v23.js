@@ -1,4 +1,4 @@
-/* v2026.09.22.2 — small B21 editor cleanup after v22. */
+/* B21 editor cleanup after the canonical v22 controller. */
 (function(){
   'use strict';
   if(window.location.pathname!=='/labels')return;
@@ -6,8 +6,8 @@
 
   function install(){
     const align=document.getElementById('b21-v2-align');
-    if(!align){setTimeout(install,120);return;}
-    if(align.dataset.b2mV23==='1')return;align.dataset.b2mV23='1';
+    if(!align)return false;
+    if(align.dataset.b2mV23==='1')return true;align.dataset.b2mV23='1';
 
     // These align the object box on the physical label, not text inside it.
     const icons={left:'layout-align-left',hcenter:'layout-align-center',right:'layout-align-right'};
@@ -18,8 +18,7 @@
     });
 
     // v4 created a Label appearance wrapper for Frame + Threshold. v22 moved
-    // Frame into its prominent own control and Threshold into roll settings,
-    // so the legacy wrapper is now deliberately empty and should disappear.
+    // both controls elsewhere, so remove the wrapper when it has no useful UI.
     const appearance=document.getElementById('b21-v4-label-appearance');
     if(appearance){
       const useful=Array.from(appearance.querySelectorAll('input,select,button')).some(function(el){
@@ -31,6 +30,13 @@
         if(!visible)appearance.remove();
       }
     }
+    return true;
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(install,100);},{once:true});else setTimeout(install,100);
+
+  function start(){
+    if(install())return;
+    const observer=new MutationObserver(function(){if(install())observer.disconnect();});
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
