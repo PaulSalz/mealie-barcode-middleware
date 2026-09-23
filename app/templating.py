@@ -104,4 +104,5 @@ templates.env.filters["fromjson"] = _fromjson
 templates.env.globals["v"] = ASSET_VERSION
 templates.env.globals["get_theme"] = get_cached_theme
 templates.env.globals["t"] = template_translate
+templates.env.globals["tr"] = template_translate
 templates.env.globals["ui_language"] = template_language
