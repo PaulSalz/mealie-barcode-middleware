@@ -30,17 +30,8 @@
     <link rel="stylesheet" href="/static/vendor/tabler-icons/tabler-icons.min.css">
     <link rel="stylesheet" href="/static/css/app.css?v={{ v }}">
     {% if request.session.get('user_id') %}<link rel="stylesheet" href="/user-theme.css?v={{ v }}">{% endif %}
-    <link rel="stylesheet" href="/static/css/ui-v2.css?v={{ v }}">
-    <link rel="stylesheet" href="/static/css/ui-v4.css?v={{ v }}">
-    <link rel="stylesheet" href="/static/css/ui-v6.css?v={{ v }}">
-    <link rel="stylesheet" href="/static/css/ui-v9.css?v={{ v }}">
-    <link rel="stylesheet" href="/static/css/ui-v17.css?v={{ v }}">
-    <link rel="stylesheet" href="/static/css/ui-v22.css?v={{ v }}">
-    <link rel="stylesheet" href="/static/css/ui-v23.css?v={{ v }}">
-    <link rel="stylesheet" href="/static/css/ui-v24.css?v={{ v }}">
-    <link rel="stylesheet" href="/static/css/ui-v25.css?v={{ v }}">
-    <link rel="stylesheet" href="/static/css/ui-v27.css?v={{ v }}">
-    {% if request.url.path == '/labels' %}<link rel="stylesheet" href="/static/css/ui-v13.css?v={{ v }}">{% endif %}
+    <link rel="stylesheet" href="/static/generated/global-ui.css?v={{ v }}">
+    {% if request.url.path == '/labels' %}<link rel="stylesheet" href="/static/generated/labels-ui.css?v={{ v }}">{% endif %}
     <script src="/static/js/theme-init.js?v={{ v }}"></script>
 </head>
 <body>
@@ -112,19 +103,11 @@
 
     <script src="/static/vendor/tabler/js/tabler.min.js"></script>
     <script src="/static/js/localization.js?v={{ v }}"></script>
-    <script src="/static/js/ui-v4.js?v={{ v }}"></script>
-    <script src="/static/js/ui-v6.js?v={{ v }}"></script>
-    <script src="/static/js/ui-v9.js?v={{ v }}"></script>
-    <script src="/static/js/ui-v23.js?v={{ v }}"></script>
-    <script src="/static/js/ui-v24.js?v={{ v }}"></script>
-    <script src="/static/js/ui-v25.js?v={{ v }}"></script>
-    <script src="/static/js/ui-v26.js?v={{ v }}"></script>
-    <script src="/static/js/ui-v27.js?v={{ v }}"></script>
-    <script src="/static/js/ui-v12-bell.js?v={{ v }}"></script>
+    <script src="/static/generated/global-ui.js?v={{ v }}"></script>
     {% if request.url.path == '/profile/appearance' %}<script src="/static/js/profile-live-v27.js?v={{ v }}"></script>{% endif %}
     {% if request.url.path == '/settings' %}<script src="/static/js/theme-live-v2.js?v={{ v }}"></script>{% endif %}
-    {% if request.url.path == '/actions/new' or request.url.path.startswith('/actions/') %}<script src="/static/js/action-v22.js?v={{ v }}"></script><script src="/static/js/action-v23.js?v={{ v }}"></script><script src="/static/js/action-v24.js?v={{ v }}"></script>{% endif %}
-    {% if request.url.path == '/labels' %}<script src="/static/js/labels-b21-v2.js?v={{ v }}"></script><script src="/static/js/labels-b21-v2-patch.js?v={{ v }}"></script><script src="/static/js/labels-b21-v4.js?v={{ v }}"></script><script src="/static/js/ui-v13-fixes.js?v={{ v }}"></script><script src="/static/js/labels-v18.js?v={{ v }}"></script><script src="/static/js/labels-v22.js?v={{ v }}"></script><script src="/static/js/labels-v23.js?v={{ v }}"></script><script src="/static/js/labels-v24.js?v={{ v }}"></script>{% endif %}
+    {% if request.url.path == '/actions/new' or request.url.path.startswith('/actions/') %}<script src="/static/js/action-v22.js?v={{ v }}"></script>{% endif %}
+    {% if request.url.path == '/labels' %}<script src="/static/generated/labels-ui.js?v={{ v }}"></script>{% endif %}
     {% if request.url.path.startswith('/barcodes/') %}<script src="/static/js/barcode-targets-v6.js?v={{ v }}"></script>{% endif %}
     <script src="/static/js/app.js?v={{ v }}"></script>
     <script src="/static/js/confirm-actions.js?v={{ v }}"></script>
