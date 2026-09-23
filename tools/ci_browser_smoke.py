@@ -33,13 +33,15 @@ def main() -> None:
         # or printer services may be unavailable in CI; the pages themselves must
         # still render and their controllers must initialize without JS crashes.
         page.goto(f"{BASE_URL}/labels", wait_until="domcontentloaded", timeout=20_000)
-        page.get_by_role("heading", name="Code Generator").wait_for(timeout=5_000)
+        page.locator("#label-queue").wait_for(timeout=5_000)
+        page.locator("#label-editor-mode").wait_for(timeout=5_000)
         assert page.locator("#label-queue").is_visible()
+        assert page.locator("#label-editor-mode").is_visible()
 
         page.goto(f"{BASE_URL}/actions/new", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="New action").wait_for(timeout=5_000)
         page.locator('input[name="name"]').fill("CI action")
-        page.wait_for_timeout(300)
+        page.locator("#action-v22-builder").wait_for(timeout=5_000)
         assert page.locator("#action-v22-builder").is_visible()
         assert page.locator("#action-advanced-toggle").is_visible()
 
