@@ -1,1 +1,0 @@
-Shopping Print v31 hotfix scope: prevent the v30 canvas MutationObserver from observing style changes, because its own margin cleanup can otherwise retrigger the observer indefinitely while a list is loading.
