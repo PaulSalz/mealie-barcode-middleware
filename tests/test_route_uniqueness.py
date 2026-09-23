@@ -1,9 +1,34 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+
 from app.main import app
+
+
+def _walk_routes(routes: Iterable, seen: set[int] | None = None):
+    """Yield concrete routes across FastAPI/Starlette nested router wrappers."""
+    seen = seen or set()
+    for route in routes:
+        marker = id(route)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        yield route
+
+        nested = getattr(route, "routes", None)
+        if nested:
+            yield from _walk_routes(nested, seen)
+            continue
+
+        router = getattr(route, "router", None)
+        router_routes = getattr(router, "routes", None) if router is not None else None
+        if router_routes:
+            yield from _walk_routes(router_routes, seen)
 
 
 def _routes() -> list[tuple[str | None, str | None, tuple[str, ...]]]:
     rows = []
-    for route in app.router.routes:
+    for route in _walk_routes(app.router.routes):
         rows.append((
             type(route).__name__,
             getattr(route, "path", None) or getattr(route, "path_format", None),
