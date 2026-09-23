@@ -1,14 +1,13 @@
 import json
 import logging
-from collections import Counter, defaultdict
-from datetime import timedelta
+from collections import defaultdict
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, Item
+from app.models import BarcodeCache, BarcodeMapping, BarcodeTarget, Item
 from app.services.mealie import get_food, update_food
 from app.services.mealie_extras import (
     cached_labels,
@@ -16,6 +15,7 @@ from app.services.mealie_extras import (
     refresh_open_shopping_items_for_food,
     sync_items_enhanced,
 )
+from app.services.scan_stats import target_scan_stats, target_usage_summary
 from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
 from app.services.targets import sync_legacy_primary
 from app.templating import _localtime, _relative_time, templates
@@ -25,47 +25,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _activity_food_ids(row: Activity) -> set[str]:
-    result = set()
-    if row.target_type == "food" and row.target_id:
-        result.add(str(row.target_id))
-    if row.targets_json:
-        try:
-            for target in json.loads(row.targets_json):
-                if isinstance(target, dict) and target.get("type") == "food" and target.get("id"):
-                    result.add(str(target["id"]))
-        except (TypeError, ValueError):
-            pass
-    return result
-
-
 def _item_scan_stats(db: Session, item_id: str) -> dict:
-    candidates = (
-        db.query(Activity)
-        .filter(Activity.is_scan_event == True)
-        .order_by(Activity.created_at.desc())
-        .all()
-    )
-    scans = [row for row in candidates if item_id in _activity_food_ids(row)]
-    now = utcnow().replace(tzinfo=None)
-    by_barcode = Counter()
-    last_by_barcode = {}
-    for row in scans:
-        by_barcode[row.barcode] += 1
-        if row.barcode not in last_by_barcode:
-            last_by_barcode[row.barcode] = row.created_at
-    return {
-        "total": len(scans),
-        "days_7": sum(1 for row in scans if row.created_at and row.created_at >= now - timedelta(days=7)),
-        "days_30": sum(1 for row in scans if row.created_at and row.created_at >= now - timedelta(days=30)),
-        "last_scan": scans[0].created_at if scans else None,
-        "first_scan": scans[-1].created_at if scans else None,
-        "recent": scans[:25],
-        "by_barcode": [
-            {"barcode": barcode, "count": count, "last_scan": last_by_barcode.get(barcode)}
-            for barcode, count in by_barcode.most_common()
-        ],
-    }
+    return target_scan_stats(db, "food", item_id, recent_limit=25)
 
 
 def _stats_json(stats: dict) -> dict:
@@ -109,18 +70,14 @@ def _item_list_entries(db: Session, q: str, filter_value: str, label: str) -> tu
     for mapping in db.query(BarcodeMapping).filter(BarcodeMapping.target_type == "food").all():
         barcode_sets[str(mapping.target_id)].add(mapping.barcode)
 
-    scan_counts = Counter()
-    last_scans = {}
-    for row in db.query(Activity).filter(Activity.is_scan_event == True).order_by(Activity.created_at.desc()).all():
-        for item_id in _activity_food_ids(row):
-            scan_counts[item_id] += 1
-            if item_id not in last_scans:
-                last_scans[item_id] = row.created_at
+    scan_stats = target_usage_summary(db, "food")
 
     entries = []
     for item in all_items:
         mapping_count = len(barcode_sets.get(str(item.id), set()))
-        scan_count = scan_counts.get(str(item.id), 0)
+        usage = scan_stats.get(str(item.id), {})
+        scan_count = int(usage.get("count") or 0)
+        last_scan = usage.get("last_scan")
         if filter_value == "linked" and mapping_count == 0:
             continue
         if filter_value == "unlinked" and mapping_count > 0:
@@ -139,7 +96,7 @@ def _item_list_entries(db: Session, q: str, filter_value: str, label: str) -> tu
             "item": item,
             "mapping_count": mapping_count,
             "scan_count": scan_count,
-            "last_scan": last_scans.get(str(item.id)),
+            "last_scan": last_scan,
         })
     return entries, all_items
 
