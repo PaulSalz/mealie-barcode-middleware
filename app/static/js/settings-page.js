@@ -1,5 +1,159 @@
 /** Settings page client behavior. */
 
+(function settingsBasicAdvancedUx() {
+    'use strict';
+    if (window.location.pathname !== '/settings') return;
+
+    var form = document.querySelector('form[action="/settings/configuration"]');
+    if (!form) return;
+    var body = form.querySelector('.card-body');
+    if (!body) return;
+
+    var advancedFields = [
+        'lookup_primary', 'lookup_strategy', 'lookup_enrich_in_background',
+        'fuzzy_match_threshold', 'fuzzy_ambiguity_gap', 'item_sync_interval_hours',
+        'lookup_ttl_days', 'max_retry_attempts', 'notification_toast_seconds',
+        'notification_group_window_seconds', 'dashboard_poll_interval_seconds',
+        'health_poll_interval_seconds', 'shopping_print_poll_interval_seconds',
+        'log_level', 'middleware_base_url'
+    ];
+    var advancedNodes = [];
+
+    function fieldContainer(field) {
+        return field.closest('.col-md-6, .col-12, .card-actions') || field.parentElement;
+    }
+
+    advancedFields.forEach(function(name) {
+        var field = document.getElementById('setting_' + name);
+        if (!field) return;
+        var node = fieldContainer(field);
+        if (!node || advancedNodes.indexOf(node) !== -1) return;
+        node.classList.add('b2m-advanced-setting');
+        node.dataset.advancedSetting = '1';
+        advancedNodes.push(node);
+    });
+
+    // Read-only implementation details are useful for troubleshooting, but they
+    // should not dominate the normal configuration view.
+    Array.from(form.querySelectorAll('.card')).forEach(function(card) {
+        var title = card.querySelector('.card-title');
+        if (title && title.textContent.trim() === 'Infrastructure') {
+            card.classList.add('b2m-advanced-section');
+            card.dataset.advancedSetting = '1';
+            advancedNodes.push(card);
+        }
+    });
+    Array.from(form.querySelectorAll('label.form-label')).forEach(function(label) {
+        if (label.textContent.trim().replace(/\s+/g, ' ') !== 'API endpoint') return;
+        var node = label.closest('.col-md-6');
+        if (node && advancedNodes.indexOf(node) === -1) {
+            node.classList.add('b2m-advanced-setting');
+            node.dataset.advancedSetting = '1';
+            advancedNodes.push(node);
+        }
+    });
+
+    var toolbar = document.createElement('div');
+    toolbar.className = 'card bg-muted-lt mb-3';
+    toolbar.id = 'settings-view-tools';
+    toolbar.innerHTML =
+        '<div class="card-body py-3"><div class="row g-3 align-items-center">' +
+        '<div class="col-md"><div class="input-icon"><span class="input-icon-addon"><i class="ti ti-search"></i></span>' +
+        '<input type="search" class="form-control" id="settings-search" placeholder="Search settings on this page…" autocomplete="off"></div></div>' +
+        '<div class="col-md-auto"><label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="settings-show-advanced">' +
+        '<span class="form-check-label"><strong>Advanced settings</strong><span class="d-block text-secondary small">Technical tuning and diagnostics</span></span></label></div>' +
+        '</div><div class="text-secondary small mt-2" id="settings-search-state"></div></div>';
+
+    var firstSection = body.querySelector('.card.mt-3');
+    if (firstSection) body.insertBefore(toolbar, firstSection);
+    else body.appendChild(toolbar);
+
+    var advancedToggle = document.getElementById('settings-show-advanced');
+    var search = document.getElementById('settings-search');
+    var searchState = document.getElementById('settings-search-state');
+    var storageKey = 'b2m-settings-advanced-v1';
+    try { advancedToggle.checked = localStorage.getItem(storageKey) === '1'; } catch (e) {}
+
+    function normalized(value) {
+        return String(value || '').toLocaleLowerCase().trim();
+    }
+
+    function isSearchMatch(node, query) {
+        return !query || normalized(node.textContent).indexOf(query) !== -1;
+    }
+
+    function refreshView() {
+        var query = normalized(search.value);
+        var showAdvanced = advancedToggle.checked;
+        var matches = 0;
+
+        advancedNodes.forEach(function(node) {
+            var show = showAdvanced || (query && isSearchMatch(node, query));
+            node.classList.toggle('d-none', !show);
+        });
+
+        Array.from(form.querySelectorAll('.card.mt-3')).forEach(function(card) {
+            if (card.id === 'settings-view-tools') return;
+            var matchesSearch = isSearchMatch(card, query);
+            var advancedSection = card.classList.contains('b2m-advanced-section');
+            var visibleForMode = !advancedSection || showAdvanced || (query && matchesSearch);
+            card.classList.toggle('d-none', !(visibleForMode && matchesSearch));
+            if (visibleForMode && matchesSearch) matches += 1;
+        });
+
+        if (query) {
+            searchState.textContent = matches ? matches + ' matching section' + (matches === 1 ? '' : 's') + '.' : 'No settings match this search.';
+        } else if (!showAdvanced && advancedNodes.length) {
+            searchState.textContent = advancedNodes.length + ' technical setting' + (advancedNodes.length === 1 ? '' : 's') + ' hidden. Enable Advanced settings to show them.';
+        } else {
+            searchState.textContent = '';
+        }
+    }
+
+    advancedToggle.addEventListener('change', function() {
+        try { localStorage.setItem(storageKey, advancedToggle.checked ? '1' : '0'); } catch (e) {}
+        refreshView();
+    });
+    search.addEventListener('input', refreshView);
+    refreshView();
+
+    // Make explicit-save forms predictable: users can always see whether they
+    // have local changes that are not persisted yet.
+    var submit = form.querySelector('button[type="submit"]');
+    if (submit) {
+        var state = document.createElement('span');
+        state.id = 'settings-save-state';
+        state.className = 'text-secondary small me-3';
+        var footerRow = submit.parentElement;
+        if (footerRow) footerRow.insertBefore(state, submit);
+
+        var dirty = false;
+        function markDirty(event) {
+            if (event && event.target && !event.target.matches('input[name^="setting_"], select[name^="setting_"]')) return;
+            dirty = true;
+            state.className = 'text-warning small me-3';
+            state.textContent = 'Unsaved changes';
+        }
+        form.addEventListener('input', markDirty);
+        form.addEventListener('change', markDirty);
+        form.addEventListener('submit', function() {
+            dirty = false;
+            state.className = 'text-secondary small me-3';
+            state.textContent = 'Saving…';
+            submit.disabled = true;
+        });
+        window.addEventListener('beforeunload', function(event) {
+            if (!dirty) return;
+            event.preventDefault();
+            event.returnValue = '';
+        });
+        if (new URLSearchParams(window.location.search).get('saved') === '1') {
+            state.className = 'text-success small me-3';
+            state.textContent = 'Saved';
+        }
+    }
+})();
+
 (function prewarmMealieShoppingLists() {
     'use strict';
     if (window.location.pathname !== '/settings') return;
