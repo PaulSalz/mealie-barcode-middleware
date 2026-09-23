@@ -2,19 +2,24 @@ import json
 import logging
 from datetime import timedelta
 
+import httpx
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.config import settings
 from app.database import SessionLocal
 from app.events import scan_events
 from app.models import Activity, Item, RetryQueue
+from app.services.action_stats import ensure_action_stats_backfilled, purge_action_executions
 from app.services.mealie_extras import sync_items_enhanced
+from app.services.performance_indexes import ensure_performance_indexes
 from app.services.scan_stats import ensure_scan_stats_backfilled, purge_raw_scan_history
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
 _RAW_SCAN_RETENTION_DAYS = 365
+_ACTION_EXECUTION_RETENTION_DAYS = 180
+_RETRY_BATCH_SIZE = 50
 
 
 def _run_item_sync():
@@ -29,9 +34,23 @@ def _run_item_sync():
         db.close()
 
 
+def _retry_failed(item: RetryQueue, db, now, message: str) -> None:
+    item.attempts += 1
+    if item.attempts >= settings.max_retry_attempts:
+        _create_retry_failed_activity(item, db)
+        db.delete(item)
+        logger.warning(
+            "Retry permanently failed for %s after %d attempts: %s",
+            item.barcode, item.attempts, message,
+        )
+        return
+    backoff = min(2**item.attempts, 480)
+    item.next_retry_at = now + timedelta(minutes=backoff)
+    logger.warning("Retry failed for %s: %s, next in %dm", item.barcode, message, backoff)
+
+
 def _process_retry_queue():
-    """Background job: retry failed Mealie shopping list additions."""
-    import httpx
+    """Retry a bounded batch of failed Mealie shopping-list additions."""
     from app.pause import is_paused
 
     db = SessionLocal()
@@ -44,58 +63,52 @@ def _process_retry_queue():
         pending = (
             db.query(RetryQueue)
             .filter(RetryQueue.next_retry_at <= now)
-            .order_by(RetryQueue.next_retry_at.asc())
+            .order_by(RetryQueue.next_retry_at.asc(), RetryQueue.id.asc())
+            .limit(_RETRY_BATCH_SIZE)
             .all()
         )
         if not pending:
             return
 
-        logger.info("Processing %d retry queue items", len(pending))
+        logger.info("Processing retry queue batch: %d item(s)", len(pending))
         headers = {
             "Authorization": f"Bearer {settings.mealie_api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
         url = f"{settings.mealie_url}/api/households/shopping/items"
+        limits = httpx.Limits(max_connections=4, max_keepalive_connections=2, keepalive_expiry=30.0)
 
-        for item in pending:
-            try:
-                payload = json.loads(item.payload)
-                resp = httpx.post(url, headers=headers, json=payload, timeout=10)
+        with httpx.Client(headers=headers, timeout=10.0, limits=limits) as client:
+            for item in pending:
+                try:
+                    payload = json.loads(item.payload)
+                    if not isinstance(payload, dict):
+                        raise ValueError("retry payload must be a JSON object")
+                except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                    item.attempts = max(item.attempts, settings.max_retry_attempts - 1)
+                    _retry_failed(item, db, now, f"invalid stored payload ({exc})")
+                    db.commit()
+                    continue
+
+                try:
+                    resp = client.post(url, json=payload)
+                except httpx.HTTPError as exc:
+                    _retry_failed(item, db, now, str(exc))
+                    db.commit()
+                    continue
+
                 if resp.status_code in (200, 201):
                     db.delete(item)
+                    db.commit()
                     logger.info("Retry success for barcode=%s", item.barcode)
-                else:
-                    item.attempts += 1
-                    if item.attempts >= settings.max_retry_attempts:
-                        _create_retry_failed_activity(item, db)
-                        db.delete(item)
-                        logger.warning(
-                            "Retry permanently failed for %s after %d attempts (HTTP %d)",
-                            item.barcode, item.attempts, resp.status_code,
-                        )
-                    else:
-                        backoff = min(2**item.attempts, 480)
-                        item.next_retry_at = now + timedelta(minutes=backoff)
-                        logger.warning(
-                            "Retry failed for %s: HTTP %d, next retry in %dm",
-                            item.barcode, resp.status_code, backoff,
-                        )
-            except httpx.HTTPError as e:
-                item.attempts += 1
-                if item.attempts >= settings.max_retry_attempts:
-                    _create_retry_failed_activity(item, db)
-                    db.delete(item)
-                    logger.warning(
-                        "Retry permanently failed for %s after %d attempts: %s",
-                        item.barcode, item.attempts, e,
-                    )
-                else:
-                    backoff = min(2**item.attempts, 480)
-                    item.next_retry_at = now + timedelta(minutes=backoff)
-                    logger.warning("Retry error for %s: %s, next in %dm", item.barcode, e, backoff)
+                    continue
 
-        db.commit()
+                _retry_failed(item, db, now, f"HTTP {resp.status_code}")
+                db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Retry queue batch failed unexpectedly")
     finally:
         db.close()
 
@@ -105,7 +118,7 @@ def _create_retry_failed_activity(item: RetryQueue, db):
     try:
         payload = json.loads(item.payload)
         item_hint = payload.get("note") or payload.get("foodId") or item.barcode
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, AttributeError):
         item_hint = item.barcode
 
     title = "Failed to add to shopping list"
@@ -126,7 +139,7 @@ def _create_retry_failed_activity(item: RetryQueue, db):
 
 
 def _purge_old_activities():
-    """Bound notification/raw-scan rows after durable scan aggregates exist."""
+    """Bound raw notification, scan and ActionExecution history."""
     db = SessionLocal()
     try:
         cutoff = utcnow() - timedelta(days=7)
@@ -149,6 +162,13 @@ def _purge_old_activities():
                 "Purged %d raw scan activities older than %d days; compact statistics were retained",
                 scan_deleted, _RAW_SCAN_RETENTION_DAYS,
             )
+
+        action_deleted = purge_action_executions(db, _ACTION_EXECUTION_RETENTION_DAYS)
+        if action_deleted:
+            logger.info(
+                "Purged %d raw action executions older than %d days; all-time action statistics were retained",
+                action_deleted, _ACTION_EXECUTION_RETENTION_DAYS,
+            )
     except Exception as e:
         db.rollback()
         logger.error("Activity/history purge failed: %s", e)
@@ -157,16 +177,18 @@ def _purge_old_activities():
 
 
 def start_scheduler():
-    """Start the APScheduler with item sync, history aggregation and retry jobs."""
-    # Base.metadata.create_all() has already run before start_scheduler(). The
-    # scan-stats service is imported above so its aggregate model is registered
-    # before that create_all call, and legacy scan history can now be backfilled.
+    """Start background sync, bounded retry processing and history maintenance."""
+    ensure_performance_indexes()
+
     try:
         ensure_scan_stats_backfilled()
     except Exception:
-        # Raw Activity history remains intact. Do not prevent B2M from starting;
-        # a later restart will retry because the completion marker was not set.
         logger.exception("Could not backfill compact scan statistics")
+
+    try:
+        ensure_action_stats_backfilled()
+    except Exception:
+        logger.exception("Could not backfill durable action statistics")
 
     db = SessionLocal()
     try:
@@ -192,6 +214,8 @@ def start_scheduler():
         minutes=2,
         id="retry_queue",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
     scheduler.add_job(
         _purge_old_activities,
@@ -199,9 +223,11 @@ def start_scheduler():
         hours=24,
         id="activity_purge",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
     scheduler.start()
-    logger.info("Scheduler started (item sync + retry queue + bounded history purge)")
+    logger.info("Scheduler started (item sync + bounded retry queue + bounded history purge)")
 
 
 def stop_scheduler():
