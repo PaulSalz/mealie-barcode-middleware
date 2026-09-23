@@ -6,23 +6,13 @@ import httpx
 
 from app.config import settings
 from app.models import Item
+from app.services import mealie_http
 from app.services.homeassistant import notify_shopping_route
 
 logger = logging.getLogger(__name__)
 _list_cache_lock = threading.Lock()
 _list_cache: tuple[float, list[dict]] | None = None
 _counts_cache: tuple[float, list[dict]] | None = None
-_http = httpx.Client(
-    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10, keepalive_expiry=60.0),
-)
-
-
-def _headers() -> dict:
-    return {
-        "Authorization": f"Bearer {settings.mealie_api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
 
 
 def _items(data) -> list[dict]:
@@ -49,18 +39,14 @@ def _invalidate_counts_cache() -> None:
         _counts_cache = None
 
 
-def _log_slow(operation: str, started: float) -> None:
-    elapsed_ms = int((time.monotonic() - started) * 1000)
-    if elapsed_ms >= 1000:
-        logger.warning("Slow Mealie request: %s took %d ms", operation, elapsed_ms)
-
-
 def test_mealie_connection() -> dict:
     started = time.monotonic()
     try:
-        response = _http.get(
-            f"{settings.mealie_url.rstrip('/')}/api/households/shopping/lists",
-            headers=_headers(), params={"perPage": 1}, timeout=8,
+        response = mealie_http.get(
+            "/api/households/shopping/lists",
+            params={"perPage": 1},
+            timeout=8,
+            log_name="test shopping connection",
         )
         response.raise_for_status()
         return {"ok": True, "status": response.status_code, "latency_ms": int((time.monotonic() - started) * 1000)}
@@ -75,9 +61,11 @@ def get_shopping_lists(force: bool = False) -> list[dict]:
         if not force and _list_cache and now - _list_cache[0] < 120:
             return list(_list_cache[1])
     try:
-        response = _http.get(
-            f"{settings.mealie_url}/api/households/shopping/lists",
-            headers=_headers(), params={"perPage": -1}, timeout=10,
+        response = mealie_http.get(
+            "/api/households/shopping/lists",
+            params={"perPage": -1},
+            timeout=10,
+            log_name="shopping lists",
         )
         response.raise_for_status()
         rows = [
@@ -85,7 +73,7 @@ def get_shopping_lists(force: bool = False) -> list[dict]:
             for row in _items(response.json()) if row.get("id")
         ]
         with _list_cache_lock:
-            _list_cache = (now, rows)
+            _list_cache = (time.monotonic(), rows)
         return list(rows)
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("Could not load Mealie shopping lists: %s", exc)
@@ -156,11 +144,11 @@ def get_shopping_list_counts(force: bool = False) -> list[dict]:
     lists = get_shopping_lists(force=force)
     counts = {str(row["id"]): 0 for row in lists}
     try:
-        response = _http.get(
-            f"{settings.mealie_url}/api/households/shopping/items",
-            headers=_headers(),
+        response = mealie_http.get(
+            "/api/households/shopping/items",
             params={"perPage": -1, "checked": "false"},
             timeout=10,
+            log_name="shopping list counts",
         )
         response.raise_for_status()
         for row in _items(response.json()):
@@ -179,7 +167,7 @@ def get_shopping_list_counts(force: bool = False) -> list[dict]:
         for row in lists
     ]
     with _list_cache_lock:
-        _counts_cache = (now, result)
+        _counts_cache = (time.monotonic(), result)
     return list(result)
 
 
@@ -196,57 +184,52 @@ def add_food_to_list(food_id: str, quantity: float | None, unit_id: str | None, 
         payload["quantity"] = quantity
     if unit_id:
         payload["unitId"] = unit_id
-    started = time.monotonic()
     try:
-        response = _http.post(
-            f"{settings.mealie_url}/api/households/shopping/items",
-            headers=_headers(), json=payload, timeout=10,
+        response = mealie_http.post(
+            "/api/households/shopping/items",
+            json=payload,
+            timeout=10,
+            log_name="add food",
         )
-        _log_slow("add food", started)
         if response.status_code in (200, 201):
             _invalidate_counts_cache()
             return True
         logger.warning("Mealie add Food returned %s: %s", response.status_code, response.text[:300])
     except httpx.HTTPError as exc:
-        _log_slow("add food", started)
         logger.warning("Mealie add Food failed: %s", exc)
     return False
 
 
 def add_note_to_list(note: str, list_id: str) -> bool:
     payload = {"shoppingListId": list_id, "note": note, "quantity": 1}
-    started = time.monotonic()
     try:
-        response = _http.post(
-            f"{settings.mealie_url}/api/households/shopping/items",
-            headers=_headers(), json=payload, timeout=10,
+        response = mealie_http.post(
+            "/api/households/shopping/items",
+            json=payload,
+            timeout=10,
+            log_name="add note",
         )
-        _log_slow("add note", started)
         ok = response.status_code in (200, 201)
         if ok:
             _invalidate_counts_cache()
         return ok
     except httpx.HTTPError:
-        _log_slow("add note", started)
         return False
 
 
 def add_recipe_to_list(recipe_id: str, scale: float, list_id: str) -> bool:
-    started = time.monotonic()
     try:
-        response = _http.post(
-            f"{settings.mealie_url}/api/households/shopping/lists/{list_id}/recipe",
-            headers=_headers(),
+        response = mealie_http.post(
+            f"/api/households/shopping/lists/{list_id}/recipe",
             json=[{"recipeId": recipe_id, "recipeIncrementQuantity": scale or 1.0}],
             timeout=15,
+            log_name="add recipe",
         )
-        _log_slow("add recipe", started)
         if response.status_code in (200, 201):
             _invalidate_counts_cache()
             return True
         logger.warning("Mealie add Recipe returned %s: %s", response.status_code, response.text[:300])
     except httpx.HTTPError as exc:
-        _log_slow("add recipe", started)
         logger.warning("Mealie add Recipe failed: %s", exc)
     return False
 
