@@ -6,10 +6,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.auth import require_token_no_telemetry
 from app.config import settings
 from app.database import get_db
-from app.events import scan_events
 from app.models import Action, ActionExecution, Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
 from app.services import mealie_http
 from app.services.multitarget import route_targets
@@ -36,17 +34,6 @@ def test_ha_webhook():
         return JSONResponse({"ok":False,"error":"timeout after 3 s"}, status_code=504)
     except httpx.HTTPError as exc:
         return JSONResponse({"ok":False,"error":str(exc)}, status_code=502)
-
-
-class ScannerReceived(BaseModel):
-    barcode: str = Field(..., min_length=1, max_length=256)
-
-
-@router.post("/scanner/received")
-def scanner_received(body: ScannerReceived, _token=Depends(require_token_no_telemetry)):
-    barcode = body.barcode.strip()
-    scan_events.publish_threadsafe("received", {"barcode": barcode})
-    return {"ok": True}
 
 
 @router.post("/api/barcodes/{barcode:path}/test-route")
