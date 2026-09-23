@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -51,6 +52,27 @@ def _backup_response() -> FileResponse | JSONResponse:
     )
 
 
+def _allowed(request: Request, db: Session) -> bool:
+    user_id = request.session.get("user_id")
+    return bool(request.session.get("is_admin", False) or has_permission(db, user_id, "database"))
+
+
+@router.get("/api/database/backup-status")
+def backup_status(request: Request, db: Session = Depends(get_db)):
+    if not _allowed(request, db):
+        return JSONResponse({"error": "permission denied"}, status_code=403)
+    row = db.get(SystemState, _LAST_VERIFIED_BACKUP_KEY)
+    try:
+        size = os.path.getsize(settings.db_path)
+    except OSError:
+        size = 0
+    return {
+        "last_verified_backup": row.value if row and row.value else None,
+        "database_size_bytes": size,
+        "verified": bool(row and row.value),
+    }
+
+
 @router.post("/settings/admin/backup")
 def admin_backup(request: Request):
     """Create a WAL-safe verified backup for the admin settings page."""
@@ -62,7 +84,6 @@ def admin_backup(request: Request):
 @router.post("/database/backup")
 def database_backup(request: Request, db: Session = Depends(get_db)):
     """Create a WAL-safe verified backup for users with database permission."""
-    user_id = request.session.get("user_id")
-    if not request.session.get("is_admin", False) and not has_permission(db, user_id, "database"):
+    if not _allowed(request, db):
         return RedirectResponse("/", status_code=303)
     return _backup_response()
