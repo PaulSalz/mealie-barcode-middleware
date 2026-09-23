@@ -7,7 +7,6 @@ import httpx
 
 from app.models import Activity, BarcodeMapping, BarcodeTarget, Item
 from app.services import mealie_http
-from app.services.mealie import get_labels, get_units
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -16,6 +15,29 @@ _CACHE_TTL = 300.0
 _cache_lock = threading.Lock()
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _refresh_locks: dict[str, threading.Lock] = {}
+
+
+def _items_from_response(data) -> list[dict]:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        return data["items"]
+    return []
+
+
+def _load_catalog(path: str, name: str) -> list[dict]:
+    try:
+        response = mealie_http.get(
+            path,
+            params={"perPage": -1, "orderBy": "name", "orderDirection": "asc"},
+            timeout=10,
+            log_name=f"load {name}",
+        )
+        response.raise_for_status()
+        return _items_from_response(response.json())
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Failed to load Mealie %s: %s", name, exc)
+        return []
 
 
 def _refresh_lock(name: str) -> threading.Lock:
@@ -48,24 +70,16 @@ def _cached(name: str, loader) -> list[dict]:
 
 
 def cached_units() -> list[dict]:
-    return _cached("units", get_units)
+    return _cached("units", lambda: _load_catalog("/api/units", "units"))
 
 
 def cached_labels() -> list[dict]:
-    return _cached("labels", get_labels)
+    return _cached("labels", lambda: _load_catalog("/api/groups/labels", "labels"))
 
 
 def clear_catalog_cache() -> None:
     with _cache_lock:
         _cache.clear()
-
-
-def _items_from_response(data) -> list[dict]:
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict) and isinstance(data.get("items"), list):
-        return data["items"]
-    return []
 
 
 def _food_label(food: dict) -> tuple[str | None, str | None]:
