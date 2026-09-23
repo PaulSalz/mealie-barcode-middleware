@@ -16,6 +16,7 @@ from barcode.writer import SVGWriter
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import require_token
 from app.database import SessionLocal, get_db
@@ -81,9 +82,6 @@ def _require_admin(request: Request):
     return None
 
 
-# This router is registered before the legacy labels router. Keeping the endpoint
-# path identical fixes all existing previews without a JS migration. segno.make_qr
-# explicitly disables Micro-QR, which is much less reliably scanned on tiny labels.
 @router.get("/labels/code.svg")
 def stable_code_svg(
     value: str = Query(..., min_length=1, max_length=256),
@@ -305,7 +303,6 @@ def _run_print_job(job_id: str) -> None:
                 threshold=int(page.get("threshold") or 128),
             )
             printed += quantity
-            # Drop the largest object as soon as this page has left the process.
             page["image_base64"] = ""
             with _JOB_LOCK:
                 if job_id in _JOBS:
@@ -346,8 +343,6 @@ def _ensure_print_worker() -> None:
         if _WORKER_STARTED:
             return
         _SPOOL_DIR.mkdir(parents=True, exist_ok=True)
-        # Spool files cannot be resumed after a process restart because the
-        # corresponding in-memory job metadata is gone. Remove leftovers now.
         for path in _SPOOL_DIR.glob("*.json"):
             _remove_spool(str(path))
         threading.Thread(target=_printer_worker, daemon=True, name="b2m-printer").start()
@@ -362,7 +357,7 @@ async def create_print_job(request: Request):
         return JSONResponse({"error": "pages array is required"}, status_code=400)
     if len(pages) > 100:
         return JSONResponse({"error": "A print job may contain at most 100 entries"}, status_code=400)
-    status = printer_status()
+    status = await run_in_threadpool(printer_status)
     if not status.get("configured"):
         return JSONResponse({"error": "NIIMBOT printing is not configured"}, status_code=400)
     if not status.get("connected"):
@@ -400,7 +395,7 @@ async def create_print_job(request: Request):
 
     job_id = uuid.uuid4().hex[:16]
     try:
-        spool_path = _write_spool(job_id, clean_pages)
+        spool_path = await run_in_threadpool(_write_spool, job_id, clean_pages)
     except OSError as exc:
         return JSONResponse({"error": f"Could not spool print job: {exc}"}, status_code=507)
     clean_pages.clear()

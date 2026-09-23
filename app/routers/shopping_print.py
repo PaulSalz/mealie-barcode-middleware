@@ -96,8 +96,7 @@ def shopping_print_list(list_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/api/shopping-print/settings")
-async def shopping_print_save_settings(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+def shopping_print_save_settings(body: dict, db: Session = Depends(get_db)):
     if not isinstance(body, dict):
         return JSONResponse({"error": "JSON object required"}, status_code=400)
     try:
@@ -110,8 +109,7 @@ async def shopping_print_save_settings(request: Request, db: Session = Depends(g
 
 
 @router.post("/api/shopping-print/category-order")
-async def shopping_print_save_category_order(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+def shopping_print_save_category_order(body: dict, db: Session = Depends(get_db)):
     if not isinstance(body, dict):
         return JSONResponse({"error": "JSON object required"}, status_code=400)
     list_id = str(body.get("list_id") or "").strip()
@@ -137,8 +135,7 @@ async def shopping_print_save_category_order(request: Request, db: Session = Dep
 
 
 @router.post("/api/shopping-print/local-content")
-async def shopping_print_save_local_content(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+def shopping_print_save_local_content(body: dict, db: Session = Depends(get_db)):
     if not isinstance(body, dict):
         return JSONResponse({"error": "JSON object required"}, status_code=400)
     list_id = str(body.get("list_id") or "").strip()
@@ -169,8 +166,7 @@ async def shopping_print_save_local_content(request: Request, db: Session = Depe
 
 
 @router.post("/api/shopping-print/item-overrides")
-async def shopping_print_save_item_override(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+def shopping_print_save_item_override(body: dict, db: Session = Depends(get_db)):
     if not isinstance(body, dict):
         return JSONResponse({"error": "JSON object required"}, status_code=400)
     list_id = str(body.get("list_id") or "").strip()
@@ -197,8 +193,7 @@ async def shopping_print_save_item_override(request: Request, db: Session = Depe
 
 
 @router.post("/api/shopping-print/item-overrides/delete")
-async def shopping_print_delete_item_override(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+def shopping_print_delete_item_override(body: dict, db: Session = Depends(get_db)):
     if not isinstance(body, dict):
         return JSONResponse({"error": "JSON object required"}, status_code=400)
     list_id = str(body.get("list_id") or "").strip()
@@ -215,8 +210,7 @@ async def shopping_print_delete_item_override(request: Request, db: Session = De
 
 
 @router.post("/api/shopping-print/print")
-async def shopping_print_print(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+def shopping_print_print(body: dict, db: Session = Depends(get_db)):
     if not isinstance(body, dict):
         return JSONResponse({"error": "JSON object required"}, status_code=400)
 

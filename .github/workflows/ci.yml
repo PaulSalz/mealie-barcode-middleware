@@ -18,17 +18,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.14'
           cache: pip
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Compile Python
-        run: python -m compileall -q app tools/barcode2mealie-usb/scanner.py
+        run: python -m compileall -q app tools/barcode2mealie-usb/scanner.py tools/ci_stability_smoke.py
       - name: Import application modules
         run: |
           python - <<'PY'
           import app.models
+          import app.models_scan_delivery
           import app.services.actions
+          import app.services.barcode_lookup
+          import app.services.bounded_executor
+          import app.services.database_backup
           import app.services.mealie_extras
           import app.services.multitarget
           import app.services.niimblue
@@ -37,13 +41,18 @@ jobs:
           import app.services.targets
           import app.routers.actions
           import app.routers.barcodes
+          import app.routers.cache_recovery_v15
           import app.routers.dashboard
+          import app.routers.database_backup
           import app.routers.integrations
           import app.routers.items
+          import app.routers.label_printer
           import app.routers.labels
           import app.routers.recipes
+          import app.routers.runtime_features
           import app.routers.scan
           import app.routers.scanner
+          import app.routers.shopping_print
           print('imports ok')
           PY
       - name: Smoke-test SQLite migration and legacy target backfill
@@ -74,6 +83,8 @@ jobs:
           db.close()
           print('migration/backfill ok')
           PY
+      - name: Stability behavior smoke tests
+        run: python tools/ci_stability_smoke.py
       - name: Parse Jinja templates
         run: |
           python - <<'PY'

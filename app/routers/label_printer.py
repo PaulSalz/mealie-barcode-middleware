@@ -5,7 +5,7 @@ import re
 import time
 from copy import deepcopy
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -121,9 +121,6 @@ def b21_status(db: Session = Depends(get_db)):
     except Exception as exc:
         return JSONResponse({"error": str(exc), "connected": False, "desired_connected": desired}, status_code=502)
 
-    # Connection intent is server-side, not browser-side. If niimblue-node lost
-    # the BLE link while the user still wants B2M connected, re-establish it with
-    # a small cooldown so ordinary page navigation never loses the printer state.
     if desired and niim_is_configured() and not status.get("connected"):
         now = time.monotonic()
         if now - _last_auto_reconnect >= 10:
@@ -169,19 +166,12 @@ def b21_rfid(db: Session = Depends(get_db)):
     paper = data.get("paperRfidInfo") or {}
     barcode = str(paper.get("barCode") or "")
     bindings = _bindings(db)
-    return {
-        **data,
-        "profile_id": bindings.get(barcode) if barcode else None,
-    }
+    return {**data, "profile_id": bindings.get(barcode) if barcode else None}
 
 
 @router.get("/labels/b21/profiles")
 def b21_profiles(db: Session = Depends(get_db)):
-    return {
-        "profiles": _profiles(db),
-        "rfid_bindings": _bindings(db),
-        "calibrations": _calibrations(db),
-    }
+    return {"profiles": _profiles(db), "rfid_bindings": _bindings(db), "calibrations": _calibrations(db)}
 
 
 @router.get("/labels/b21/calibration")
@@ -190,8 +180,7 @@ def b21_calibration(db: Session = Depends(get_db)):
 
 
 @router.post("/labels/b21/calibration")
-async def b21_save_calibration(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+def b21_save_calibration(body: dict, db: Session = Depends(get_db)):
     profile_id = str(body.get("profile_id") or "").strip()
     if not any(str(profile.get("id")) == profile_id for profile in _profiles(db)):
         return JSONResponse({"error": "Roll profile not found"}, status_code=404)
@@ -209,8 +198,7 @@ async def b21_save_calibration(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/labels/b21/profiles")
-async def b21_save_profile(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+def b21_save_profile(body: dict, db: Session = Depends(get_db)):
     try:
         profile = _profile_from_body(body)
     except ValueError as exc:
@@ -246,8 +234,7 @@ def b21_delete_profile(profile_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/labels/b21/rfid-bind")
-async def b21_bind_rfid(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
+def b21_bind_rfid(body: dict, db: Session = Depends(get_db)):
     barcode = str(body.get("barcode") or "").strip()
     profile_id = str(body.get("profile_id") or "").strip()
     if not barcode:
@@ -261,8 +248,7 @@ async def b21_bind_rfid(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/labels/b21/print")
-async def b21_print(request: Request):
-    body = await request.json()
+def b21_print(body: dict):
     image_base64 = str(body.get("image_base64") or "")
     if image_base64.startswith("data:") and "," in image_base64:
         image_base64 = image_base64.split(",", 1)[1]
@@ -271,7 +257,7 @@ async def b21_print(request: Request):
     if not niim_is_configured():
         return JSONResponse({"error": "NIIMBOT printing is not configured"}, status_code=400)
     try:
-        result = print_image_base64(
+        return print_image_base64(
             image_base64,
             width_mm=float(body.get("width_mm")),
             height_mm=float(body.get("height_mm")),
@@ -281,6 +267,5 @@ async def b21_print(request: Request):
             dpi=int(body.get("dpi") or 300),
             threshold=int(body.get("threshold") or 128),
         )
-        return result
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
