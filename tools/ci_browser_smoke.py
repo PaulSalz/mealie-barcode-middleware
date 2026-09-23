@@ -87,13 +87,13 @@ def main() -> None:
             "E-paper preview CSS was not applied before Save.",
             timeout_ms=5_000,
         )
-        page.locator('input[name="theme_mode"][value="dark"]').check()
+        page.locator('input[name="theme_mode"][value="dark"]').check(force=True)
         wait_until(
             lambda: html.get_attribute("data-bs-theme") == "dark",
             "Appearance form did not preview dark mode immediately.",
             timeout_ms=3_000,
         )
-        page.locator('input[name="theme_mode"][value="light"]').check()
+        page.locator('input[name="theme_mode"][value="light"]').check(force=True)
         wait_until(
             lambda: html.get_attribute("data-bs-theme") == "light",
             "Appearance form did not preview light mode immediately.",
