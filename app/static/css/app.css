@@ -16,6 +16,14 @@
    navigation metrics identical before the very first paint so changing the
    active Items/Barcodes tab cannot push neighbouring buttons sideways. */
 @media (min-width: 768px) {
+  /* Establish alignment before page scripts or notification updates run. */
+  #navbar-menu {
+    justify-content: flex-end;
+  }
+  #navbar-menu > .navbar-nav {
+    margin-left: auto;
+    margin-right: 0;
+  }
   #navbar-menu > .navbar-nav > .nav-item > .nav-link,
   #navbar-menu > .navbar-nav > .nav-item > .nav-link .nav-link-title,
   #navbar-menu > .navbar-nav > .nav-item.active > .nav-link,
