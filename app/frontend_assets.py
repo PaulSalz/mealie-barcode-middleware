@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 
+from app.theme import build_theme_live_catalog_css
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 GENERATED_DIR = STATIC_DIR / "generated"
 
@@ -36,7 +38,6 @@ GLOBAL_JS = (
     "js/regression-v28.js",
     "js/ui-v29.js",
     "js/theme-controls-v32.js",
-    "js/theme-preview-compat-v34.js",
     "js/terminology-v30.js",
     "js/shopping-bootstrap-v31.js",
     "js/ui-v12-bell.js",
@@ -79,16 +80,20 @@ def _render_bundle(name: str, sources: tuple[str, ...]) -> tuple[str, list[dict[
             chunks.append(f"\n/* ---- {relative} ---- */\n;\n{content.rstrip()}\n")
         else:
             chunks.append(f"\n/* ---- {relative} ---- */\n{content.rstrip()}\n")
+
+    if name == "global-ui.css":
+        # Generated from the same Python palette/radius definitions as the
+        # persisted user stylesheet. This is the complete synchronous preview
+        # catalog; no server roundtrip is involved when a control changes.
+        live_css = build_theme_live_catalog_css()
+        chunks.append("\n/* ---- generated personal appearance v35 ---- */\n" + live_css + "\n")
+        manifest.append({"path": "<generated:appearance-v35>", "sha256": hashlib.sha256(live_css.encode("utf-8")).hexdigest()})
+
     return "".join(chunks), manifest
 
 
 def build_frontend_assets() -> dict[str, object]:
-    """Build deterministic browser bundles from the legacy source layers.
-
-    The individual source files remain readable while B2M migrates them into
-    canonical page controllers. Production only needs the generated entrypoints,
-    which prevents version-layer ordering from leaking into templates.
-    """
+    """Build deterministic browser bundles from readable source layers."""
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     result: dict[str, object] = {"bundles": {}}
 
