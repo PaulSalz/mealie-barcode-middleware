@@ -166,6 +166,14 @@ html body .form-hint,
 html body .card-subtitle {
   color: var(--b2m-v35-muted) !important;
 }
+/* Theme switches update every surface in the same frame. */
+html body, html body .page, html body .page-wrapper, html body .page-body,
+html body .navbar, html body .card, html body .dropdown-menu,
+html body .modal-content, html body .list-group-item,
+html body .form-control, html body .form-select,
+html body .form-selectgroup-label, html body .input-group-text {
+  transition: none !important;
+}
 """.strip()
 
 
