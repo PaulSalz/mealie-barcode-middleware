@@ -54,7 +54,8 @@ def test_first_paint_is_server_theme_only():
     assert "fetch(" not in init
     assert "localStorage.setItem" not in init
     assert "--b2m-saved-mode" in init
-    assert "document.head.appendChild(personal)" in init
+    assert "--b2m-saved-base" in init
+    assert "document.head.appendChild" not in init
     assert "get_template_theme" in templating
     assert "personal_theme(db, int(user_id))" in templating
     assert 'templates.env.globals["get_theme"] = get_template_theme' in templating
