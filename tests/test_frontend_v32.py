@@ -16,7 +16,7 @@ def test_v32_assets_replace_duplicate_theme_runtime():
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-scope-v32.js" in LABEL_JS
     assert LABEL_JS.index("js/labels-scope-v32.js") < LABEL_JS.index("js/labels-fixes-v30.js")
-    assert APP_VERSION == "2026.09.24.1"
+    assert APP_VERSION == "2026.09.24.2"
 
 
 def test_navbar_mode_uses_personal_theme_endpoint_and_captures_legacy_clicks():
@@ -25,34 +25,46 @@ def test_navbar_mode_uses_personal_theme_endpoint_and_captures_legacy_clicks():
     assert "/api/appearance-v24/mode" in source
     assert "document.addEventListener('click'" in source
     assert "stopImmediatePropagation" in source
-    assert "localStorage.setItem('theme-mode-override'" in source
+    assert "localStorage.setItem('theme-mode-override'" not in source
     assert "__b2mThemeMutationVersion" in source
     assert '@router.post("/api/appearance-v24/mode")' in router
     assert "save_personal_theme" in router
 
 
-def test_appearance_has_one_live_preview_controller():
+def test_appearance_preview_is_synchronous_and_uses_canonical_tokens():
     theme = read("app/static/js/theme-controls-v32.js")
+    profile = read("app/templates/profile_appearance.html")
     legacy = read("app/static/js/profile-live-v27.js")
-    profile = read("app/static/js/profile-v23.js")
-    assert "/api/appearance-v24/preview" in theme
-    assert "requestAnimationFrame" in theme
-    assert "AbortController" in theme
+    fallback = read("app/static/js/profile-v23.js")
+    assert "b2m-theme-runtime-config" in profile
+    assert "function buildThemeCss(state)" in theme
+    assert "preview.textContent = buildThemeCss(state)" in theme
+    assert "/api/appearance-v24/preview" not in theme
+    assert "AbortController" not in theme
+    assert "requestAnimationFrame" not in theme
     assert "b2m-epaper-v9" in theme
     assert "data-bs-theme" in theme
     assert "window.__b2mThemeV32Loaded" in legacy
-    assert "window.__b2mThemeV32Loaded" in profile
+    assert "window.__b2mThemeV32Loaded" in fallback
 
 
-def test_theme_bootstrap_never_clears_personal_background_or_epaper_state():
-    init = read("app/static/js/theme-init.js")
+def test_personal_theme_is_complete_before_first_paint():
+    base = read("app/templates/base.html")
     templating = read("app/templating.py")
-    assert "classList.remove('b2m-epaper" not in init
-    assert "delete root.dataset.b2mBase" not in init
-    assert "startedAtMutation" in init
+    theme = read("app/theme.py")
+    assert 'data-b2m-base="{{ t.base }}"' in base
+    assert 'data-b2m-radius="{{ t.radius }}"' in base
+    assert "b2m-epaper-v9 b2m-epaper" in base
+    assert "theme-mode-override" not in base
+    assert "theme-base-override" not in base
+    assert "theme-epaper-override" not in base
+    assert "theme-init.js" not in base
     assert "get_template_theme" in templating
     assert "personal_theme(db, int(user_id))" in templating
     assert 'templates.env.globals["get_theme"] = get_template_theme' in templating
+    assert "RADIUS_REM" in theme
+    assert 'f"--tblr-border-radius:{radius_rem:g}rem"' in theme
+    assert "--tblr-bg-surface-secondary" in theme
 
 
 def test_layer_visibility_drives_canonical_editor_immediately():

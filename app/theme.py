@@ -1,6 +1,7 @@
 """Theme settings — global appearance stored in the DB."""
 
 import logging
+from copy import deepcopy
 
 from app.models import SettingsOverride
 from app.utils import utcnow
@@ -54,6 +55,16 @@ GRAY_CSS = {
     "stone":{"50":"#fafaf9","100":"#f5f5f4","200":"#e7e5e4","300":"#d6d3d1","400":"#a8a29e","500":"#78716c","600":"#57534e","700":"#44403c","800":"#292524","900":"#1c1917","950":"#0c0a09"},
 }
 
+# The radius values are intentionally explicit. They are shared with the live
+# browser renderer so a saved theme and its unsaved preview are pixel-identical.
+RADIUS_REM = {
+    "0": 0.0,
+    "0.5": 0.25,
+    "1": 0.5,
+    "1.5": 0.8,
+    "2": 1.1,
+}
+
 
 def get_theme(db) -> dict[str, str]:
     rows = db.query(SettingsOverride).filter(SettingsOverride.key.startswith(_PREFIX)).all()
@@ -97,15 +108,31 @@ def save_theme(db, values: dict[str, str]) -> list[str]:
     return changed
 
 
+def theme_runtime_config() -> dict:
+    """Return the canonical theme tokens used by the synchronous live preview."""
+    return {
+        "defaults": dict(THEME_DEFAULTS),
+        "colors": deepcopy(COLOR_CSS),
+        "fonts": dict(FONT_CSS),
+        "grays": deepcopy(GRAY_CSS),
+        "radius_rem": dict(RADIUS_REM),
+    }
+
+
 def build_theme_css(theme: dict[str, str]) -> str:
+    """Build the complete effective theme CSS.
+
+    This output is used by the render-blocking per-user stylesheet. The browser
+    live preview mirrors these exact tokens/formulas so Save never changes the
+    visual result — it only makes the current selection persistent.
+    """
     props: list[str] = []
+    light_props: list[str] = []
     dark_props: list[str] = []
     extra_rules: list[str] = []
 
     color = theme.get("color", THEME_DEFAULTS["color"])
     if color == "rainbow":
-        # Custom properties switch between six strong accent colors. The brand
-        # itself uses a continuously moving gradient for a smooth rainbow pass.
         extra_rules.extend([
             "@keyframes b2m-rainbow-accent{0%,100%{--tblr-primary:#d63939;--tblr-primary-rgb:214,57,57}16%{--tblr-primary:#f76707;--tblr-primary-rgb:247,103,7}33%{--tblr-primary:#f59f00;--tblr-primary-rgb:245,159,0}50%{--tblr-primary:#2fb344;--tblr-primary-rgb:47,179,68}66%{--tblr-primary:#17a2b8;--tblr-primary-rgb:23,162,184}83%{--tblr-primary:#ae3ec9;--tblr-primary-rgb:174,62,201}}",
             ":root{animation:b2m-rainbow-accent 14s linear infinite}",
@@ -127,19 +154,45 @@ def build_theme_css(theme: dict[str, str]) -> str:
         grays = GRAY_CSS[base]
         for step, val in grays.items():
             props.append(f"--tblr-gray-{step}:{val}")
+        # Explicit surfaces are necessary: changing only the gray scale leaves
+        # Tabler's body/card/navbar variables at the previous palette until a
+        # reload. Define both modes so a mode switch is complete in one frame.
+        light_props.extend([
+            f"--tblr-body-color:{grays['900']}", f"--tblr-body-bg:{grays['100']}",
+            f"--tblr-bg-surface:{grays['50']}", f"--tblr-bg-surface-secondary:{grays['100']}",
+            f"--tblr-bg-surface-tertiary:{grays['300']}", f"--tblr-bg-surface-dark:{grays['900']}",
+            f"--tblr-border-color:{grays['200']}", f"--tblr-secondary-bg:{grays['200']}",
+            f"--tblr-secondary-color:{grays['600']}", f"--tblr-light-text-emphasis:{grays['900']}",
+            f"--tblr-dark-text-emphasis:{grays['700']}", f"--tblr-light-bg-subtle:{grays['100']}",
+        ])
         dark_props.extend([
-            f"--tblr-body-color:{grays['200']}", f"--tblr-body-bg:{grays['900']}",
-            f"--tblr-secondary-bg:{grays['800']}", f"--tblr-light-text-emphasis:{grays['100']}",
+            f"--tblr-body-color:{grays['200']}", f"--tblr-body-bg:{grays['950']}",
+            f"--tblr-bg-surface:{grays['900']}", f"--tblr-bg-surface-secondary:{grays['800']}",
+            f"--tblr-bg-surface-tertiary:{grays['700']}", f"--tblr-bg-surface-dark:{grays['950']}",
+            f"--tblr-border-color:{grays['800']}", f"--tblr-secondary-bg:{grays['800']}",
+            f"--tblr-secondary-color:{grays['400']}", f"--tblr-light-text-emphasis:{grays['100']}",
             f"--tblr-dark-text-emphasis:{grays['300']}", f"--tblr-light-bg-subtle:{grays['800']}",
         ])
 
     radius = theme.get("radius", THEME_DEFAULTS["radius"])
-    if radius != THEME_DEFAULTS["radius"]:
-        props.append(f"--tblr-border-radius-scale:{radius}")
+    if radius not in RADIUS_REM:
+        radius = THEME_DEFAULTS["radius"]
+    radius_rem = RADIUS_REM[radius]
+    # Always emit concrete radius variables, including the default. Otherwise
+    # Tabler paints its own default first and the user radius appears one frame
+    # later when JavaScript starts.
+    props.extend([
+        f"--tblr-border-radius-scale:{radius}",
+        f"--tblr-border-radius:{radius_rem:g}rem",
+        f"--tblr-border-radius-sm:{max(0.0, radius_rem * 0.72):g}rem",
+        f"--tblr-border-radius-lg:{max(0.0, radius_rem * 1.45):g}rem",
+        f"--tblr-border-radius-xl:{max(0.0, radius_rem * 1.9):g}rem",
+        f"--tblr-border-radius-xxl:{max(0.0, radius_rem * 2.5):g}rem",
+    ])
 
     epaper = theme.get("epaper", THEME_DEFAULTS["epaper"]) == "true"
     try:
-        contrast = max(0, min(100, int(theme.get("contrast", THEME_DEFAULTS["contrast"]))))
+        contrast = max(0, min(100, int(float(theme.get("contrast", THEME_DEFAULTS["contrast"])))))
     except (TypeError, ValueError):
         contrast = int(THEME_DEFAULTS["contrast"])
     if epaper:
@@ -148,25 +201,28 @@ def build_theme_css(theme: dict[str, str]) -> str:
         surface = max(238, 255 - round(contrast * 0.12))
         mono_props = [
             "--tblr-primary:#000", "--tblr-primary-rgb:0,0,0", "--tblr-body-color:#000", "--tblr-body-bg:#fff",
-            f"--tblr-bg-surface:rgb({surface},{surface},{surface})", f"--tblr-border-color:rgb({border},{border},{border})",
+            f"--tblr-bg-surface:rgb({surface},{surface},{surface})",
+            "--tblr-bg-surface-secondary:#fff", "--tblr-bg-surface-tertiary:#e5e5e5", "--tblr-bg-surface-dark:#000",
+            f"--tblr-border-color:rgb({border},{border},{border})", f"--tblr-secondary-bg:rgb({surface},{surface},{surface})",
             f"--tblr-secondary-color:rgb({muted},{muted},{muted})", "--tblr-link-color:#000", "--tblr-link-hover-color:#000",
         ]
         props.extend(mono_props)
+        light_props.extend(mono_props)
         dark_props.extend(mono_props)
         extra_rules.extend([
             "html{filter:grayscale(1)}", "body,.page,.page-wrapper{background:#fff!important;color:#000!important}",
-            ".card,.dropdown-menu,.modal-content,.navbar,.list-group-item{box-shadow:none!important}",
+            f".card,.dropdown-menu,.modal-content,.navbar,.list-group-item,.form-control,.form-select{{background:rgb({surface},{surface},{surface})!important;color:#000!important;box-shadow:none!important}}",
             f".card,.dropdown-menu,.modal-content,.navbar,.list-group-item,.form-control,.form-select,.btn{{border-color:rgb({border},{border},{border})!important}}",
             f".text-secondary,.form-hint,.card-subtitle{{color:rgb({muted},{muted},{muted})!important}}",
             "[class*=\"bg-\"][class*=\"-lt\"]{background:#fff!important;color:#000!important;border:1px solid #000!important}",
             ".badge{border:1px solid currentColor!important}",
         ])
 
-    if not props and not dark_props and not extra_rules:
-        return ""
     parts: list[str] = []
     if props:
         parts.append(":root{" + ";".join(props) + "}")
+    if light_props:
+        parts.append("[data-bs-theme=light]{" + ";".join(light_props) + "}")
     if dark_props:
         parts.append("[data-bs-theme=dark]{" + ";".join(dark_props) + "}")
     parts.extend(extra_rules)
