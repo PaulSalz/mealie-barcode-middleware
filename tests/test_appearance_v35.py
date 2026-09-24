@@ -66,7 +66,7 @@ def test_personal_stylesheet_exports_complete_saved_state_for_head_bootstrap():
     init = read("app/static/js/theme-init.js")
     for key in ("mode", "base", "button-color", "logo-color", "radius", "font", "epaper", "contrast"):
         assert f'"{key}"' in access
-        assert f"saved('{key}')" in init
+        assert f"--b2m-saved-{key}" in init
     for dataset in ("b2mBase", "b2mButtonColor", "b2mLogoColor", "b2mRadius", "b2mFont", "b2mEpaper"):
         assert f"root.dataset.{dataset}" in init
     assert "fetch(" not in init
