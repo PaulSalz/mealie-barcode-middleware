@@ -63,6 +63,58 @@ BUNDLES = {
     "labels-ui.js": LABEL_JS,
 }
 
+# Older UI layers contain component-specific background shorthands. The v35
+# personal theme must be the final authority for every major surface, otherwise
+# a mode switch can leave body/navbar in Light while cards are already Dark.
+APPEARANCE_AUTHORITY_CSS = """
+html body,
+html body .page,
+html body .page-wrapper,
+html body .page-body {
+  background: var(--b2m-page-bg) !important;
+  color: var(--b2m-text) !important;
+}
+html body .navbar,
+html body .card,
+html body .dropdown-menu,
+html body .modal-content,
+html body .offcanvas,
+html body .toast,
+html body .list-group-item {
+  background: var(--b2m-surface-bg) !important;
+  color: var(--b2m-text) !important;
+  border-color: var(--b2m-border) !important;
+}
+html body .card-header,
+html body .card-footer,
+html body .dropdown-header,
+html body .table thead th {
+  background: var(--b2m-surface-secondary) !important;
+  color: var(--b2m-text) !important;
+  border-color: var(--b2m-border) !important;
+}
+html body .form-control,
+html body .form-select,
+html body .input-group-text,
+html body .form-selectgroup-label {
+  background: var(--b2m-input-bg) !important;
+  color: var(--b2m-text) !important;
+  border-color: var(--b2m-border) !important;
+}
+html body .table,
+html body .table > :not(caption) > * > * {
+  background-color: transparent !important;
+  color: var(--b2m-text) !important;
+  border-color: var(--b2m-border) !important;
+}
+html body .text-secondary,
+html body .text-muted,
+html body .form-hint,
+html body .card-subtitle {
+  color: var(--b2m-muted) !important;
+}
+""".strip()
+
 
 def _render_bundle(name: str, sources: tuple[str, ...]) -> tuple[str, list[dict[str, str]]]:
     chunks: list[str] = [
@@ -86,8 +138,9 @@ def _render_bundle(name: str, sources: tuple[str, ...]) -> tuple[str, list[dict[
         # persisted user stylesheet. This is the complete synchronous preview
         # catalog; no server roundtrip is involved when a control changes.
         live_css = build_theme_live_catalog_css()
-        chunks.append("\n/* ---- generated personal appearance v35 ---- */\n" + live_css + "\n")
-        manifest.append({"path": "<generated:appearance-v35>", "sha256": hashlib.sha256(live_css.encode("utf-8")).hexdigest()})
+        complete_css = live_css + "\n" + APPEARANCE_AUTHORITY_CSS
+        chunks.append("\n/* ---- generated personal appearance v35 ---- */\n" + complete_css + "\n")
+        manifest.append({"path": "<generated:appearance-v35>", "sha256": hashlib.sha256(complete_css.encode("utf-8")).hexdigest()})
 
     return "".join(chunks), manifest
 
