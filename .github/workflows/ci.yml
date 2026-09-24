@@ -130,6 +130,8 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Build frontend bundles
         run: python -m app.frontend_assets
+      - name: Build frontend without runtime credentials
+        run: env -u MEALIE_URL -u MEALIE_API_KEY -u MEALIE_SHOPPING_LIST_ID -u MIDDLEWARE_BASE_URL python -m app.frontend_assets
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
       - name: Prepare local database

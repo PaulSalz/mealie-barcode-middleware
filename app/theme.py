@@ -7,9 +7,6 @@ THEME_DEFAULTS and is stored per user.
 
 import logging
 
-from app.models import SettingsOverride
-from app.utils import utcnow
-
 logger = logging.getLogger(__name__)
 _PREFIX = "theme_"
 
@@ -108,6 +105,8 @@ def normalize_theme(values: dict | None) -> dict[str, str]:
 
 def get_theme(db) -> dict[str, str]:
     """Legacy global theme reader; signed-in personal appearance does not use it."""
+    from app.models import SettingsOverride
+
     rows = db.query(SettingsOverride).filter(SettingsOverride.key.startswith(_PREFIX)).all()
     overrides = {row.key[len(_PREFIX):]: row.value for row in rows}
     return normalize_theme(overrides)
@@ -115,6 +114,9 @@ def get_theme(db) -> dict[str, str]:
 
 def save_theme(db, values: dict[str, str]) -> list[str]:
     """Legacy global writer retained for compatibility with old deployments."""
+    from app.models import SettingsOverride
+    from app.utils import utcnow
+
     changed: list[str] = []
     current = get_theme(db)
     normalized = normalize_theme({**current, **values})
