@@ -80,6 +80,18 @@ def main() -> None:
             assert initial_nav == current_nav, (route, "load shift", initial_nav, current_nav)
             assert activity_nav == current_nav, (route, activity_nav, current_nav)
 
+        # Simulate a slow post-b21.css request. Navigation must already have
+        # its final position from app.css before the late stylesheet loads.
+        page.goto(f"{BASE_URL}/items", wait_until="load", timeout=20_000)
+        navbar = page.locator("#navbar-menu > .navbar-nav")
+        late_css = page.locator('link[href*="/static/css/post-b21.css"]')
+        late_css.wait_for(state="attached", timeout=5_000)
+        final_x = navbar.evaluate("(el) => el.getBoundingClientRect().x")
+        late_css.evaluate("(el) => { el.disabled = true; }")
+        early_x = navbar.evaluate("(el) => el.getBoundingClientRect().x")
+        assert abs(early_x - final_x) < 1, (early_x, final_x)
+        late_css.evaluate("(el) => { el.disabled = false; }")
+
         # Navbar light/dark must update immediately and persist as the personal mode.
         page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
         html = page.locator("html")
