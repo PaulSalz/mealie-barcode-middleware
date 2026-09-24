@@ -61,7 +61,7 @@
                     </li>
                 </div>
                 <div class="collapse navbar-collapse" id="navbar-menu">
-                    <ul class="navbar-nav">
+                    <ul class="navbar-nav ms-md-auto">
                         <li class="nav-item{{ ' active' if request.url.path == '/' }}"><a class="nav-link" href="/"><span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-dashboard icon icon-1"></i></span><span class="nav-link-title">{{ tr('nav.dashboard') }}</span></a></li>
                         <li class="nav-item{{ ' active' if request.url.path.startswith('/barcodes') }}"><a class="nav-link" href="/barcodes"><span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-barcode icon icon-1"></i></span><span class="nav-link-title">{{ tr('nav.barcodes') }}</span></a></li>
                         <li class="nav-item{{ ' active' if request.url.path.startswith('/items') }}"><a class="nav-link" href="/items"><span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-apple icon icon-1"></i></span><span class="nav-link-title">{{ tr('nav.items') }}</span></a></li>
