@@ -1,15 +1,17 @@
-/* v2026.09.22.4 — async item controls and appearance polish. */
+/* v2026.09.24.3 — async item controls and legacy appearance compatibility. */
 (function(){
   'use strict';
   if(window.__b2mUiV24Loaded)return;window.__b2mUiV24Loaded=true;
   const $=id=>document.getElementById(id);
   const COLORS=['blue','azure','indigo','purple','pink','red','orange','yellow','lime','green','teal','cyan'];
   const ITEMS_STATE_KEY='b2m-items-list-v2';
+  const appearanceV35=!!window.__b2mThemeV35Loaded;
 
   async function json(url,options){const response=await fetch(url,Object.assign({headers:{Accept:'application/json'}},options||{}));const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||data.detail||('HTTP '+response.status));return data;}
 
   function rainbowClass(value){return value==='smooth'?'b2m-rainbow-buttons-smooth':'b2m-rainbow-buttons-'+value;}
   function applyRainbow(theme,preference){
+    if(appearanceV35)return;
     const root=document.documentElement;
     ['b2m-rainbow-buttons-smooth',...COLORS.map(color=>'b2m-rainbow-buttons-'+color)].forEach(cls=>root.classList.remove(cls));
     const active=theme&&theme.color==='rainbow'&&theme.epaper!=='true';
@@ -19,6 +21,7 @@
   }
 
   async function bootRainbow(){
+    if(appearanceV35)return;
     try{
       const result=await Promise.all([json('/api/theme',{cache:'no-store'}),json('/api/appearance-v24',{cache:'no-store'})]);
       applyRainbow(result[0],result[1].rainbow_buttons||'smooth');
@@ -34,7 +37,7 @@
   }
 
   function installRainbowControl(theme,value){
-    if(location.pathname!=='/profile/appearance'||$('b2m-v24-rainbow-buttons'))return;
+    if(appearanceV35||location.pathname!=='/profile/appearance'||$('b2m-v24-rainbow-buttons'))return;
     const accent=document.querySelector('input[name="theme_color"]')?.closest('.mb-4');if(!accent)return;
     const wrap=document.createElement('div');wrap.id='b2m-v24-rainbow-buttons';wrap.className='mt-3';
     wrap.innerHTML='<label class="form-label">Buttons when Accent is Rainbow</label><select class="form-select" id="b2m-v24-rainbow-buttons-select"><option value="smooth">Smooth rainbow</option>'+COLORS.map(color=>'<option value="'+color+'">Fixed '+color[0].toUpperCase()+color.slice(1)+'</option>').join('')+'</select><div class="form-hint">The logo stays rainbow. E-paper mode disables rainbow animation completely.</div>';
@@ -63,6 +66,7 @@
     select.replaceWith(group);
   }
   function installRadiusPreviews(){
+    if(appearanceV35)return;
     if(location.pathname==='/profile/appearance'){
       const select=document.querySelector('select[name="theme_radius"]');if(select)makeRadiusChoices(select);
     }
@@ -72,7 +76,7 @@
   }
 
   function installDefaultsHint(){
-    if(location.pathname!=='/settings'||new URLSearchParams(location.search).get('tab')!=='appearance'||$('b2m-v24-default-hint'))return;
+    if(appearanceV35||location.pathname!=='/settings'||new URLSearchParams(location.search).get('tab')!=='appearance'||$('b2m-v24-default-hint'))return;
     const form=document.querySelector('form[action="/settings/theme"]'),body=form?.querySelector('.card-body');if(!body)return;
     const hint=document.createElement('div');hint.id='b2m-v24-default-hint';hint.className='alert alert-info';
     hint.innerHTML='<strong>Default appearance.</strong> These values are the defaults for accounts without personal overrides. <a class="alert-link" href="/profile/appearance">Open Personal appearance</a> to configure your own account.';
