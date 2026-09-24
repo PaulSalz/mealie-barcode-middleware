@@ -12,12 +12,12 @@ def read(path: str) -> str:
 
 
 def test_v30_assets_are_retained_without_legacy_theme_runtime():
-    # v30 Shopping and Appearance controller sources remain for regression/reference,
-    # but newer single-controller implementations own those runtime paths now.
+    # v30 Shopping source remains for regression/reference; personal appearance
+    # is owned by the single v35 controller.
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/shopping-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-fixes-v30.js" in LABEL_JS
-    assert APP_VERSION == "2026.09.24.2"
+    assert APP_VERSION == "2026.09.24.3"
 
 
 def test_label_queue_uses_one_native_multipage_job():
@@ -61,14 +61,19 @@ def test_shopping_alias_drafts_quantity_hide_and_reset_sources_are_retained():
     assert 'override.get("hide_quantity", False)' in overrides
     assert "/api/shopping-print/reset-list-v30" in source
     assert "save_category_order(db, list_id, [])" in router
+    assert "save_category_aliases(db, list_id, [])" not in router
     assert "save_category_aliases(db, list_id, {})" in router
     assert 'save_local_content(db, list_id, "", [])' in router
 
 
-def test_personal_theme_reload_uses_personal_endpoint():
+def test_personal_theme_first_paint_has_no_async_reconciliation():
     source = read("app/static/js/theme-init.js")
     profile = read("app/templates/profile_appearance.html")
-    assert "fetch('/api/appearance-v24'" in source
-    assert "fetch('/api/theme'" not in source
+    assert "fetch(" not in source
+    assert "--b2m-saved-mode" in source
+    assert "--b2m-saved-base" in source
+    assert "document.head.appendChild" not in source
     assert ">Background</label>" in profile
+    assert ">Logo color</label>" in profile
+    assert ">Button color</label>" in profile
     assert "Neutral palette" not in profile

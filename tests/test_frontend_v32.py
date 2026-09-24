@@ -11,47 +11,51 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_v32_assets_replace_duplicate_theme_runtime():
+def test_v35_assets_keep_one_theme_runtime():
     assert "js/theme-controls-v32.js" in GLOBAL_JS
+    assert "js/theme-preview-compat-v34.js" not in GLOBAL_JS
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-scope-v32.js" in LABEL_JS
     assert LABEL_JS.index("js/labels-scope-v32.js") < LABEL_JS.index("js/labels-fixes-v30.js")
-    assert APP_VERSION == "2026.09.24.2"
+    assert APP_VERSION == "2026.09.24.3"
 
 
-def test_navbar_mode_uses_personal_theme_endpoint_and_captures_legacy_clicks():
+def test_navbar_mode_is_atomic_and_persisted_per_user():
     source = read("app/static/js/theme-controls-v32.js")
     router = read("app/routers/appearance_v24.py")
     assert "/api/appearance-v24/mode" in source
     assert "document.addEventListener('click'" in source
     assert "stopImmediatePropagation" in source
-    assert "localStorage.setItem('theme-mode-override'" in source
-    assert "__b2mThemeMutationVersion" in source
+    assert "root.setAttribute('data-bs-theme', mode)" in source
     assert '@router.post("/api/appearance-v24/mode")' in router
     assert "save_personal_theme" in router
+    assert "localStorage.setItem('theme-mode-override'" not in source
 
 
-def test_appearance_preview_is_complete_before_network_roundtrip():
-    theme = read("app/static/js/theme-controls-v32.js")
-    assert "buildImmediateCss" in theme
-    assert "applyStateNow(state)" in theme
-    assert "persistedTheme.disabled = true" in theme
-    assert "AbortController" in theme
-    assert "--tblr-body-bg:#fff" in theme
-    assert "--tblr-border-radius-xl" in theme
-    assert "GRAYS[state.base]" in theme
-    assert "state.epaper === 'true'" in theme
-    assert "/api/appearance-v24/preview" in theme
+def test_live_appearance_is_synchronous_and_has_no_preview_roundtrip():
+    source = read("app/static/js/theme-controls-v32.js")
+    assets = read("app/frontend_assets.py")
+    assert "data-b2m-base" not in source  # dataset API writes camelCase below
+    assert "root.dataset.b2mBase" in source
+    assert "root.dataset.b2mButtonColor" in source
+    assert "root.dataset.b2mLogoColor" in source
+    assert "root.dataset.b2mRadius" in source
+    assert "root.dataset.b2mEpaper" in source
+    assert "--b2m-epaper-border" in source
+    assert "/api/appearance-v24/preview" not in source
+    assert "AbortController" not in source
+    assert "requestAnimationFrame" not in source
+    assert "build_theme_live_catalog_css" in assets
 
 
-def test_theme_bootstrap_never_clears_personal_background_or_epaper_state():
+def test_first_paint_is_server_theme_only():
     init = read("app/static/js/theme-init.js")
     templating = read("app/templating.py")
-    assert "classList.remove('b2m-epaper" not in init
-    assert "delete root.dataset.b2mBase" not in init
-    assert "startedAtMutation" in init
-    assert "theme-radius-override" in init
-    assert "applyRadius" in init
+    assert "fetch(" not in init
+    assert "localStorage.setItem" not in init
+    assert "--b2m-saved-mode" in init
+    assert "--b2m-saved-base" in init
+    assert "document.head.appendChild" not in init
     assert "get_template_theme" in templating
     assert "personal_theme(db, int(user_id))" in templating
     assert 'templates.env.globals["get_theme"] = get_template_theme' in templating

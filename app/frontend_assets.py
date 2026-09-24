@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 
+from app.theme import GRAY_CSS, THEME_CHOICES, THEME_DEFAULTS, build_theme_live_catalog_css
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 GENERATED_DIR = STATIC_DIR / "generated"
 
@@ -24,7 +26,10 @@ GLOBAL_CSS = (
 )
 LABEL_CSS = ("css/ui-v13.css",)
 
+# v35 must initialize first so every historical UI layer can detect that it no
+# longer owns appearance. Their non-theme responsibilities remain active.
 GLOBAL_JS = (
+    "js/theme-controls-v32.js",
     "js/ui-v4.js",
     "js/ui-v6.js",
     "js/ui-v9.js",
@@ -35,8 +40,6 @@ GLOBAL_JS = (
     "js/ui-v27.js",
     "js/regression-v28.js",
     "js/ui-v29.js",
-    "js/theme-controls-v32.js",
-    "js/theme-preview-compat-v34.js",
     "js/terminology-v30.js",
     "js/shopping-bootstrap-v31.js",
     "js/ui-v12-bell.js",
@@ -63,6 +66,117 @@ BUNDLES = {
 }
 
 
+def _v35_surface_vars(base: str, mode: str) -> dict[str, str]:
+    """Return private v35 surface values with no dependency on legacy vars."""
+    gray = GRAY_CSS.get(base, GRAY_CSS[THEME_DEFAULTS["base"]])
+    if mode == "dark":
+        return {
+            "--b2m-v35-page-bg": gray["950"],
+            "--b2m-v35-surface-bg": gray["900"],
+            "--b2m-v35-surface-secondary": gray["800"],
+            "--b2m-v35-input-bg": gray["800"],
+            "--b2m-v35-text": gray["100"],
+            "--b2m-v35-muted": gray["400"],
+            "--b2m-v35-border": gray["700"],
+        }
+    return {
+        "--b2m-v35-page-bg": gray["50"],
+        "--b2m-v35-surface-bg": "#ffffff",
+        "--b2m-v35-surface-secondary": gray["100"],
+        "--b2m-v35-input-bg": "#ffffff",
+        "--b2m-v35-text": gray["900"],
+        "--b2m-v35-muted": gray["600"],
+        "--b2m-v35-border": gray["200"],
+    }
+
+
+def _css_vars(values: dict[str, str]) -> str:
+    return ";".join(f"{key}:{value}" for key, value in values.items())
+
+
+def _build_v35_surface_catalog_css() -> str:
+    """Generate direct root-state selectors used only by the v35 renderer."""
+    rules = [
+        "html{" + _css_vars(_v35_surface_vars(THEME_DEFAULTS["base"], "light")) + ";--b2m-v35-card-shadow:var(--tblr-box-shadow-card)}"
+    ]
+    for base in THEME_CHOICES["base"]:
+        rules.append(
+            f'html[data-b2m-base="{base}"]{{{_css_vars(_v35_surface_vars(base, "light"))}}}'
+        )
+        rules.append(
+            f'html[data-bs-theme="dark"][data-b2m-base="{base}"]{{{_css_vars(_v35_surface_vars(base, "dark"))}}}'
+        )
+    rules.extend([
+        'html[data-b2m-epaper="true"]{--b2m-v35-page-bg:#fff;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#f7f7f7);--b2m-v35-surface-secondary:#fff;--b2m-v35-input-bg:#fff;--b2m-v35-text:#000;--b2m-v35-muted:var(--b2m-epaper-muted,#444);--b2m-v35-border:var(--b2m-epaper-border,#555);--b2m-v35-card-shadow:none}',
+        'html[data-bs-theme="dark"][data-b2m-epaper="true"]{--b2m-v35-page-bg:#fff;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#f7f7f7);--b2m-v35-surface-secondary:#fff;--b2m-v35-input-bg:#fff;--b2m-v35-text:#000;--b2m-v35-muted:var(--b2m-epaper-muted,#444);--b2m-v35-border:var(--b2m-epaper-border,#555);--b2m-v35-card-shadow:none}',
+    ])
+    return "".join(rules)
+
+
+# Historical CSS may still declare the old --b2m-* variables on descendants.
+# The visible v35 surfaces therefore consume only collision-free private values
+# that are written directly on <html> by the catalog above.
+APPEARANCE_AUTHORITY_CSS = """
+html body,
+html body .page,
+html body .page-wrapper,
+html body .page-body {
+  background: var(--b2m-v35-page-bg) !important;
+  color: var(--b2m-v35-text) !important;
+}
+html body .navbar,
+html body .card,
+html body .dropdown-menu,
+html body .modal-content,
+html body .offcanvas,
+html body .toast,
+html body .list-group-item {
+  background: var(--b2m-v35-surface-bg) !important;
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--b2m-v35-border) !important;
+}
+html body .card {
+  box-shadow: var(--b2m-v35-card-shadow, var(--tblr-box-shadow-card)) !important;
+}
+html body .card-header,
+html body .card-footer,
+html body .dropdown-header,
+html body .table thead th {
+  background: var(--b2m-v35-surface-secondary) !important;
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--b2m-v35-border) !important;
+}
+html body .form-control,
+html body .form-select,
+html body .input-group-text,
+html body .form-selectgroup-label {
+  background: var(--b2m-v35-input-bg) !important;
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--b2m-v35-border) !important;
+}
+html body .table,
+html body .table > :not(caption) > * > * {
+  background-color: transparent !important;
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--b2m-v35-border) !important;
+}
+html body .text-secondary,
+html body .text-muted,
+html body .form-hint,
+html body .card-subtitle {
+  color: var(--b2m-v35-muted) !important;
+}
+/* Theme switches update every surface in the same frame. */
+html body, html body .page, html body .page-wrapper, html body .page-body,
+html body .navbar, html body .card, html body .dropdown-menu,
+html body .modal-content, html body .list-group-item,
+html body .form-control, html body .form-select,
+html body .form-selectgroup-label, html body .input-group-text {
+  transition: none !important;
+}
+""".strip()
+
+
 def _render_bundle(name: str, sources: tuple[str, ...]) -> tuple[str, list[dict[str, str]]]:
     chunks: list[str] = [
         "/* Generated by app.frontend_assets. Do not edit this file directly. */\n"
@@ -79,16 +193,22 @@ def _render_bundle(name: str, sources: tuple[str, ...]) -> tuple[str, list[dict[
             chunks.append(f"\n/* ---- {relative} ---- */\n;\n{content.rstrip()}\n")
         else:
             chunks.append(f"\n/* ---- {relative} ---- */\n{content.rstrip()}\n")
+
+    if name == "global-ui.css":
+        # Legacy-compatible variables and the private v35 surface catalog are
+        # generated from the same palette definitions. Live changes remain
+        # synchronous and require no server roundtrip.
+        live_css = build_theme_live_catalog_css()
+        v35_surfaces = _build_v35_surface_catalog_css()
+        complete_css = live_css + "\n" + v35_surfaces + "\n" + APPEARANCE_AUTHORITY_CSS
+        chunks.append("\n/* ---- generated personal appearance v35 ---- */\n" + complete_css + "\n")
+        manifest.append({"path": "<generated:appearance-v35>", "sha256": hashlib.sha256(complete_css.encode("utf-8")).hexdigest()})
+
     return "".join(chunks), manifest
 
 
 def build_frontend_assets() -> dict[str, object]:
-    """Build deterministic browser bundles from the legacy source layers.
-
-    The individual source files remain readable while B2M migrates them into
-    canonical page controllers. Production only needs the generated entrypoints,
-    which prevents version-layer ordering from leaking into templates.
-    """
+    """Build deterministic browser bundles from readable source layers."""
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     result: dict[str, object] = {"bundles": {}}
 

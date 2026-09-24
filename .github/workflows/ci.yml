@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Compile Python
-        run: python -m compileall -q app tests tools/barcode2mealie-usb/scanner.py tools/ci_stability_smoke.py tools/ci_browser_smoke.py
+        run: python -m compileall -q app tests tools/barcode2mealie-usb/scanner.py tools/ci_stability_smoke.py tools/ci_browser_smoke.py tools/ci_appearance_v35_smoke.py
       - name: Import application modules
         run: |
           python - <<'PY'
@@ -41,6 +41,8 @@ jobs:
           import app.services.shopping
           import app.services.targets
           import app.routers.actions
+          import app.routers.appearance_v3
+          import app.routers.appearance_v24
           import app.routers.barcodes
           import app.routers.dashboard
           import app.routers.database_backup
@@ -126,6 +128,8 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Build frontend bundles
+        run: python -m app.frontend_assets
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
       - name: Prepare local database
@@ -152,6 +156,8 @@ jobs:
           exit 1
       - name: Browser setup smoke
         run: python tools/ci_browser_smoke.py
+      - name: Appearance v35 browser smoke
+        run: python tools/ci_appearance_v35_smoke.py
       - name: Show server log on failure
         if: failure()
         run: cat /tmp/b2m-browser.log || true

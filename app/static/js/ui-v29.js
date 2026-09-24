@@ -1,4 +1,4 @@
-/* v2026.09.23.29 — global advanced settings and stronger appearance controls. */
+/* v2026.09.24.3 — global advanced settings and legacy appearance compatibility. */
 (function () {
   'use strict';
   if (window.__b2mUiV29Loaded) return;
@@ -7,6 +7,7 @@
   var root = document.documentElement;
   var CACHE_KEY = 'b2m-global-advanced-v1';
   var advancedEnabled = false;
+  var appearanceV35 = !!window.__b2mThemeV35Loaded;
 
   var PALETTES = {
     gray: {
@@ -43,6 +44,7 @@
   }
 
   function applyRadius(scale) {
+    if (appearanceV35) return;
     var base = radiusValue(scale);
     root.style.setProperty('--tblr-border-radius-scale', String(scale == null ? '1' : scale));
     root.style.setProperty('--tblr-border-radius', base + 'rem');
@@ -52,6 +54,7 @@
   }
 
   function applyPalette(name) {
+    if (appearanceV35) return;
     name = String(name || 'gray').toLowerCase();
     var p = PALETTES[name] || PALETTES.gray;
     root.dataset.b2mBase = name;
@@ -161,7 +164,7 @@
   }
 
   function installAppearanceListeners() {
-    if (window.location.pathname !== '/profile/appearance') return;
+    if (appearanceV35 || window.location.pathname !== '/profile/appearance') return;
     var form = document.querySelector('form[action="/profile/appearance"]');
     if (!form) return;
     var base = form.querySelector('[name="theme_base"]');
@@ -185,7 +188,7 @@
       if (!response.ok) throw new Error('HTTP ' + response.status);
       var data = await response.json();
       applyAdvanced(!!data.advanced_settings, true);
-      if (data.theme) {
+      if (!appearanceV35 && data.theme) {
         applyPalette(data.theme.base || 'gray');
         applyRadius(data.theme.radius || '1');
       }

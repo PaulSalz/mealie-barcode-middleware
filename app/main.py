@@ -13,6 +13,7 @@ from app.database import init_db
 from app.frontend_assets import ensure_frontend_assets
 from app.middleware import CSRFOriginMiddleware, LoginRequiredMiddleware, RememberMeSessionMiddleware, SecurityHeadersMiddleware, get_session_secret
 from app.permission_guard_v23 import PermissionGuardV23Middleware
+from app.personal_appearance_guard import PersonalAppearanceOnlyMiddleware
 from app.routers import access_v23, actions, appearance_v3, appearance_v24, barcodes, dashboard, database_backup, docs, health, integrations, items, label_printer, labels, localization, login, notifications, recipes, runtime_features, scan_gateway, scanner, settings as settings_router, shopping_print, target_editor_v6, theme_preview_v2, v30_fixes, version_api
 from app.scan_timing_v6 import ScanTimingMiddleware
 from app.services.scheduler import start_scheduler, stop_scheduler
@@ -33,14 +34,11 @@ async def lifespan(app: FastAPI):
     logger.info("Database initialized")
     settings.load_overrides_from_db()
 
-    from app.database import SessionLocal
-    from app.theme import get_theme
+    # Global Appearance is retired. Anonymous/setup pages use fixed application
+    # defaults; signed-in pages resolve their own personal theme per request.
     from app.templating import set_cached_theme
-    db = SessionLocal()
-    try:
-        set_cached_theme(get_theme(db))
-    finally:
-        db.close()
+    from app.theme import THEME_DEFAULTS
+    set_cached_theme(THEME_DEFAULTS)
 
     upcdb_usable = settings.upcdb_enabled and bool(settings.upcdb_api_key)
     if settings.upcdb_enabled and not settings.upcdb_api_key:
@@ -71,6 +69,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CSRFOriginMiddleware)
 app.add_middleware(AdminWriteGuardMiddleware)
 app.add_middleware(PermissionGuardV23Middleware)
+app.add_middleware(PersonalAppearanceOnlyMiddleware)
 app.add_middleware(LoginRequiredMiddleware)
 app.add_middleware(RememberMeSessionMiddleware, secret_key=get_session_secret(), max_age=settings.session_max_age_days * 24 * 3600)
 app.add_middleware(ScanTimingMiddleware)
