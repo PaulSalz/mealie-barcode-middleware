@@ -7,18 +7,14 @@
   var root = document.documentElement;
 
   try {
-    // Remove caches used by the layered v24-v34 implementations. The legacy
-    // inline bootstrap in base.html may have read them a few lines earlier, but
-    // this script still executes in <head> before the body is parsed/painted.
+    // Remove caches used by the layered v24-v34 implementations.
     ['theme-mode-override','theme-base-override','theme-epaper-override','theme-radius-override'].forEach(function (key) {
       localStorage.removeItem(key);
     });
   } catch (e) {}
 
-  // Do not reorder stylesheets here. base.html intentionally loads
-  // user-theme.css before global-ui.css, so persisted state is available for
-  // first paint while the generated v35 catalog remains the final cascade
-  // authority for subsequent live changes.
+  // The personal stylesheet and root attributes are rendered by the server
+  // before body paint. Keep these attributes aligned with saved CSS metadata.
   function cssValue(property) {
     try {
       return getComputedStyle(root).getPropertyValue(property).trim();
