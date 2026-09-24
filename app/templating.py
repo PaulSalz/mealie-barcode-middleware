@@ -5,8 +5,11 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
 
+from app.access_v23 import personal_theme
 from app.config import settings
+from app.database import SessionLocal
 from app.i18n import template_language, template_translate
 from app.theme import THEME_DEFAULTS, build_theme_css
 
@@ -40,6 +43,30 @@ def set_cached_theme(theme: dict[str, str]) -> None:
     global _current_theme_css
     _current_theme.update(theme)
     _current_theme_css = build_theme_css(theme)
+
+
+@pass_context
+def get_template_theme(context) -> dict[str, str]:
+    """Return the effective theme for the request currently being rendered.
+
+    Historically base.html used the process-wide cached/global theme here and
+    JavaScript corrected it after first paint. That causes a visible flash and
+    makes personal Appearance fight the default Appearance state. Resolve the
+    signed-in user's theme before HTML is painted instead.
+    """
+    request = context.get("request")
+    if request is None:
+        return get_cached_theme()
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return get_cached_theme()
+    db = SessionLocal()
+    try:
+        return personal_theme(db, int(user_id))
+    except (TypeError, ValueError):
+        return get_cached_theme()
+    finally:
+        db.close()
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -102,7 +129,7 @@ templates.env.filters["localtime"] = _localtime
 templates.env.filters["relative_time"] = _relative_time
 templates.env.filters["fromjson"] = _fromjson
 templates.env.globals["v"] = ASSET_VERSION
-templates.env.globals["get_theme"] = get_cached_theme
+templates.env.globals["get_theme"] = get_template_theme
 templates.env.globals["t"] = template_translate
 templates.env.globals["tr"] = template_translate
 templates.env.globals["ui_language"] = template_language
