@@ -1,6 +1,6 @@
 <!doctype html>
 {% set t = get_theme() %}
-<html lang="{{ ui_language() }}" data-bs-theme="{{ t.mode }}">
+<html lang="{{ ui_language() }}" data-bs-theme="{{ t.mode }}" data-b2m-base="{{ t.base }}" data-b2m-logo-color="{{ t.logo_color }}" data-b2m-button-color="{{ t.button_color }}" data-b2m-font="{{ t.font }}" data-b2m-radius="{{ t.radius }}" data-b2m-epaper="{{ t.epaper }}" data-b2m-contrast="{{ t.contrast }}">
 <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -29,8 +29,8 @@
     {% if not request.session.get('user_id') %}<link rel="stylesheet" href="/theme.css">{% endif %}
     <link rel="stylesheet" href="/static/vendor/tabler-icons/tabler-icons.min.css">
     <link rel="stylesheet" href="/static/css/app.css?v={{ v }}">
-    {% if request.session.get('user_id') %}<link rel="stylesheet" href="/user-theme.css?v={{ v }}">{% endif %}
     <link rel="stylesheet" href="/static/generated/global-ui.css?v={{ v }}">
+    {% if request.session.get('user_id') %}<link rel="stylesheet" href="/user-theme.css?v={{ v }}">{% endif %}
     {% if request.url.path == '/labels' %}<link rel="stylesheet" href="/static/generated/labels-ui.css?v={{ v }}">{% endif %}
     <script src="/static/js/theme-init.js?v={{ v }}"></script>
 </head>
