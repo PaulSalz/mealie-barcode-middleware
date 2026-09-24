@@ -176,7 +176,8 @@ def main() -> None:
         assert page.locator('input[name="theme_contrast"]').input_value() == "95"
         assert "grayscale" in page.evaluate("getComputedStyle(document.documentElement).filter")
         assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--tblr-border-radius').trim()") == "1.1rem"
-        assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--tblr-primary').trim()").lower() == "#000000"
+        primary_reload = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--tblr-primary').trim()")
+        assert primary_reload.lower() == "#000000", (primary_reload, theme_debug())
 
         if errors:
             raise AssertionError("Appearance browser JavaScript errors: " + " | ".join(errors))
