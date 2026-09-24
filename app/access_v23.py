@@ -140,4 +140,19 @@ def save_personal_theme(db: Session, user_id: int, values: dict) -> dict[str, st
 
 
 def personal_theme_css(db: Session, user_id: int | None) -> str:
-    return build_theme_css(personal_theme(db, user_id))
+    """Render personal CSS plus machine-readable state for the synchronous head bootstrap."""
+    theme = personal_theme(db, user_id)
+    saved = {
+        "mode": theme["mode"],
+        "base": theme["base"],
+        "button-color": theme["button_color"],
+        "logo-color": theme["logo_color"],
+        "radius": theme["radius"],
+        "font": theme["font"],
+        "epaper": theme["epaper"],
+        "contrast": theme["contrast"],
+    }
+    metadata = ":root{" + ";".join(
+        f"--b2m-saved-{key}:{value}" for key, value in saved.items()
+    ) + "}"
+    return metadata + build_theme_css(theme)
