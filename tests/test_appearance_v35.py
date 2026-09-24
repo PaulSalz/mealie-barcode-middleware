@@ -61,6 +61,17 @@ def test_persisted_theme_contains_complete_first_paint_state():
     assert "b2m-logo-rainbow" in css
 
 
+def test_personal_stylesheet_exports_complete_saved_state_for_head_bootstrap():
+    access = read("app/access_v23.py")
+    init = read("app/static/js/theme-init.js")
+    for key in ("mode", "base", "button-color", "logo-color", "radius", "font", "epaper", "contrast"):
+        assert f'"{key}"' in access
+        assert f"saved('{key}')" in init
+    for dataset in ("b2mBase", "b2mButtonColor", "b2mLogoColor", "b2mRadius", "b2mFont", "b2mEpaper"):
+        assert f"root.dataset.{dataset}" in init
+    assert "fetch(" not in init
+
+
 def test_live_catalog_controls_entire_page_synchronously():
     css = build_theme_live_catalog_css()
     for selector in (
@@ -88,6 +99,22 @@ def test_live_controller_has_no_server_preview_or_async_theme_reconciliation():
     assert "root.dataset.b2mButtonColor" in source
     assert "root.dataset.b2mLogoColor" in source
     assert "fetch(" not in init
+
+
+def test_v35_initializes_before_legacy_layers_and_disables_their_theme_repairs():
+    frontend = read("app/frontend_assets.py")
+    bundle = frontend.split("GLOBAL_JS = (", 1)[1].split(")\nLABEL_JS", 1)[0]
+    assert bundle.index('"js/theme-controls-v32.js"') < bundle.index('"js/ui-v24.js"')
+    assert bundle.index('"js/theme-controls-v32.js"') < bundle.index('"js/regression-v28.js"')
+    assert bundle.index('"js/theme-controls-v32.js"') < bundle.index('"js/ui-v29.js"')
+
+    v24 = read("app/static/js/ui-v24.js")
+    v28 = read("app/static/js/regression-v28.js")
+    v29 = read("app/static/js/ui-v29.js")
+    assert "appearanceV35" in v24 and "if(appearanceV35)return;" in v24
+    assert "appearanceV35" in v28 and "if (appearanceV35) return;" in v28
+    assert "appearanceV35" in v29 and "if (appearanceV35) return;" in v29
+    assert "if (!appearanceV35 && data.theme)" in v29
 
 
 def test_profile_form_uses_new_color_model_and_no_legacy_accent_control():
