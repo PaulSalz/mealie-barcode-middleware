@@ -65,14 +65,20 @@ BUNDLES = {
     "labels-ui.js": LABEL_JS,
 }
 
-# Older UI layers contain component-specific background shorthands. The v35
-# personal theme must be the final authority for every major surface, otherwise
-# a mode switch can leave body/navbar in Light while cards are already Dark.
+# Older UI layers contain component-specific background shorthands and some of
+# them also declare the old --b2m-* variables on descendants. The v35 root is
+# the only theme state owner, so major surfaces explicitly inherit those
+# variables before using them. This prevents a component-local Light value from
+# surviving after the root has atomically switched to Dark (or E-paper).
 APPEARANCE_AUTHORITY_CSS = """
 html body,
 html body .page,
 html body .page-wrapper,
 html body .page-body {
+  --b2m-page-bg: inherit !important;
+  --b2m-text: inherit !important;
+  --b2m-muted: inherit !important;
+  --b2m-border: inherit !important;
   background: var(--b2m-page-bg) !important;
   color: var(--b2m-text) !important;
 }
@@ -83,6 +89,10 @@ html body .modal-content,
 html body .offcanvas,
 html body .toast,
 html body .list-group-item {
+  --b2m-surface-bg: inherit !important;
+  --b2m-text: inherit !important;
+  --b2m-muted: inherit !important;
+  --b2m-border: inherit !important;
   background: var(--b2m-surface-bg) !important;
   color: var(--b2m-text) !important;
   border-color: var(--b2m-border) !important;
@@ -91,6 +101,9 @@ html body .card-header,
 html body .card-footer,
 html body .dropdown-header,
 html body .table thead th {
+  --b2m-surface-secondary: inherit !important;
+  --b2m-text: inherit !important;
+  --b2m-border: inherit !important;
   background: var(--b2m-surface-secondary) !important;
   color: var(--b2m-text) !important;
   border-color: var(--b2m-border) !important;
@@ -99,12 +112,17 @@ html body .form-control,
 html body .form-select,
 html body .input-group-text,
 html body .form-selectgroup-label {
+  --b2m-input-bg: inherit !important;
+  --b2m-text: inherit !important;
+  --b2m-border: inherit !important;
   background: var(--b2m-input-bg) !important;
   color: var(--b2m-text) !important;
   border-color: var(--b2m-border) !important;
 }
 html body .table,
 html body .table > :not(caption) > * > * {
+  --b2m-text: inherit !important;
+  --b2m-border: inherit !important;
   background-color: transparent !important;
   color: var(--b2m-text) !important;
   border-color: var(--b2m-border) !important;
@@ -113,6 +131,7 @@ html body .text-secondary,
 html body .text-muted,
 html body .form-hint,
 html body .card-subtitle {
+  --b2m-muted: inherit !important;
   color: var(--b2m-muted) !important;
 }
 """.strip()
