@@ -17,7 +17,7 @@ def test_v30_assets_are_retained_without_legacy_theme_runtime():
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/shopping-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-fixes-v30.js" in LABEL_JS
-    assert APP_VERSION == "2026.09.23.6"
+    assert APP_VERSION == "2026.09.24.1"
 
 
 def test_label_queue_uses_one_native_multipage_job():
