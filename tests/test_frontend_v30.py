@@ -70,8 +70,9 @@ def test_personal_theme_first_paint_has_no_async_reconciliation():
     source = read("app/static/js/theme-init.js")
     profile = read("app/templates/profile_appearance.html")
     assert "fetch(" not in source
-    assert "/user-theme.css" in source
     assert "--b2m-saved-mode" in source
+    assert "--b2m-saved-base" in source
+    assert "document.head.appendChild" not in source
     assert ">Background</label>" in profile
     assert ">Logo color</label>" in profile
     assert ">Button color</label>" in profile
