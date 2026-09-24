@@ -21,22 +21,22 @@
   });
   if (personal) document.head.appendChild(personal);
 
-  function saved(name) {
+  function cssValue(property) {
     try {
-      return getComputedStyle(root).getPropertyValue('--b2m-saved-' + name).trim();
+      return getComputedStyle(root).getPropertyValue(property).trim();
     } catch (e) {
       return '';
     }
   }
 
-  var mode = saved('mode');
-  var base = saved('base');
-  var buttonColor = saved('button-color');
-  var logoColor = saved('logo-color');
-  var radius = saved('radius');
-  var font = saved('font');
-  var epaper = saved('epaper');
-  var contrast = saved('contrast');
+  var mode = cssValue('--b2m-saved-mode');
+  var base = cssValue('--b2m-saved-base');
+  var buttonColor = cssValue('--b2m-saved-button-color');
+  var logoColor = cssValue('--b2m-saved-logo-color');
+  var radius = cssValue('--b2m-saved-radius');
+  var font = cssValue('--b2m-saved-font');
+  var epaper = cssValue('--b2m-saved-epaper');
+  var contrast = cssValue('--b2m-saved-contrast');
 
   if (mode === 'light' || mode === 'dark') root.setAttribute('data-bs-theme', mode);
   if (base) root.dataset.b2mBase = base;
