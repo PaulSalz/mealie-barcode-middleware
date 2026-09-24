@@ -42,6 +42,32 @@ def main() -> None:
         page.get_by_role("button", name="Create account").click()
         page.wait_for_load_state("domcontentloaded")
 
+        # Activity hover must color every cell in the row, including when the
+        # pointer sits over one cell. Navigation positions must be stable when
+        # Items becomes the active page.
+        page.goto(f"{BASE_URL}/activities", wait_until="load", timeout=20_000)
+        page.evaluate("""() => {
+            document.querySelector('#activity-tbody').innerHTML =
+              '<tr data-href="/barcodes/ci" class="cursor-pointer">' +
+              '<td>First</td><td>Second</td><td>Third</td><td>Fourth</td><td>Fifth</td></tr>';
+        }""")
+        cells = page.locator("#activity-tbody tr:first-child > td")
+        cells.first.hover()
+        hovered = cells.evaluate_all(
+            "(elements) => elements.map(el => getComputedStyle(el).backgroundColor)"
+        )
+        assert len(set(hovered)) == 1 and hovered[0] not in ("rgba(0, 0, 0, 0)", "transparent"), hovered
+
+        def nav_positions():
+            return page.locator("#navbar-menu > .navbar-nav > .nav-item > .nav-link").evaluate_all(
+                "(links) => Object.fromEntries(links.filter(a => getComputedStyle(a).display !== 'none').map(a => [a.textContent.trim(), Math.round(a.getBoundingClientRect().x * 10) / 10]))"
+            )
+
+        activity_nav = nav_positions()
+        page.goto(f"{BASE_URL}/items", wait_until="load", timeout=20_000)
+        items_nav = nav_positions()
+        assert activity_nav == items_nav, (activity_nav, items_nav)
+
         # Navbar light/dark must update immediately and persist as the personal mode.
         page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
         html = page.locator("html")
