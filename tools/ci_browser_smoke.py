@@ -52,11 +52,19 @@ def main() -> None:
               '<td>First</td><td>Second</td><td>Third</td><td>Fourth</td><td>Fifth</td></tr>';
         }""")
         cells = page.locator("#activity-tbody tr:first-child > td")
+        def cell_paints():
+            return cells.evaluate_all("""(elements) => elements.map(el => {
+                const style = getComputedStyle(el);
+                return [style.backgroundColor, style.backgroundImage, style.boxShadow];
+            })""")
+        page.locator("#activity-table thead").hover()
+        resting = cell_paints()
         cells.first.hover()
-        hovered = cells.evaluate_all(
-            "(elements) => elements.map(el => getComputedStyle(el).backgroundColor)"
-        )
-        assert len(set(hovered)) == 1 and hovered[0] not in ("rgba(0, 0, 0, 0)", "transparent"), hovered
+        first_hover = cell_paints()
+        cells.nth(2).hover()
+        middle_hover = cell_paints()
+        assert len({tuple(paint) for paint in first_hover}) == 1, (resting, first_hover)
+        assert first_hover == middle_hover and first_hover != resting, (resting, first_hover, middle_hover)
 
         def nav_positions():
             return page.locator("#navbar-menu > .navbar-nav > .nav-item > .nav-link").evaluate_all(
