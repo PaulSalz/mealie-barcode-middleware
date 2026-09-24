@@ -246,6 +246,9 @@ def build_theme_css(theme: dict[str, str]) -> str:
         }
         light = dict(mono)
         dark = dict(mono)
+        common.update(_button_vars(t["button_color"]))
+        for key in ("--tblr-primary", "--tblr-primary-rgb", "--tblr-link-color", "--tblr-link-hover-color"):
+            common[key] = mono[key]
         extra.append(".navbar-brand a{background:none!important;color:#000!important;-webkit-text-fill-color:#000!important;animation:none!important}")
 
     root_values = {**light, **common}
