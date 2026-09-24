@@ -16,7 +16,7 @@ def test_v32_assets_replace_duplicate_theme_runtime():
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-scope-v32.js" in LABEL_JS
     assert LABEL_JS.index("js/labels-scope-v32.js") < LABEL_JS.index("js/labels-fixes-v30.js")
-    assert APP_VERSION == "2026.09.24.1"
+    assert APP_VERSION == "2026.09.24.2"
 
 
 def test_navbar_mode_uses_personal_theme_endpoint_and_captures_legacy_clicks():
@@ -31,17 +31,17 @@ def test_navbar_mode_uses_personal_theme_endpoint_and_captures_legacy_clicks():
     assert "save_personal_theme" in router
 
 
-def test_appearance_has_one_live_preview_controller():
+def test_appearance_preview_is_complete_before_network_roundtrip():
     theme = read("app/static/js/theme-controls-v32.js")
-    legacy = read("app/static/js/profile-live-v27.js")
-    profile = read("app/static/js/profile-v23.js")
-    assert "/api/appearance-v24/preview" in theme
-    assert "requestAnimationFrame" in theme
+    assert "buildImmediateCss" in theme
+    assert "applyStateNow(state)" in theme
+    assert "persistedTheme.disabled = true" in theme
     assert "AbortController" in theme
-    assert "b2m-epaper-v9" in theme
-    assert "data-bs-theme" in theme
-    assert "window.__b2mThemeV32Loaded" in legacy
-    assert "window.__b2mThemeV32Loaded" in profile
+    assert "--tblr-body-bg:#fff" in theme
+    assert "--tblr-border-radius-xl" in theme
+    assert "GRAYS[state.base]" in theme
+    assert "state.epaper === 'true'" in theme
+    assert "/api/appearance-v24/preview" in theme
 
 
 def test_theme_bootstrap_never_clears_personal_background_or_epaper_state():
@@ -50,6 +50,8 @@ def test_theme_bootstrap_never_clears_personal_background_or_epaper_state():
     assert "classList.remove('b2m-epaper" not in init
     assert "delete root.dataset.b2mBase" not in init
     assert "startedAtMutation" in init
+    assert "theme-radius-override" in init
+    assert "applyRadius" in init
     assert "get_template_theme" in templating
     assert "personal_theme(db, int(user_id))" in templating
     assert 'templates.env.globals["get_theme"] = get_template_theme' in templating
