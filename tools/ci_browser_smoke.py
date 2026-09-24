@@ -29,6 +29,18 @@ def main() -> None:
                 elapsed += step_ms
             raise AssertionError(message)
 
+        def css_var(name: str) -> str:
+            return page.evaluate(
+                "name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()",
+                name,
+            )
+
+        def computed(selector: str, prop: str) -> str:
+            return page.locator(selector).first.evaluate(
+                "(el, prop) => getComputedStyle(el)[prop]",
+                prop,
+            )
+
         page.goto(f"{BASE_URL}/setup", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="Welcome").wait_for(timeout=5_000)
         assert page.get_by_role("button", name="Create account").is_visible()
@@ -42,63 +54,131 @@ def main() -> None:
         page.get_by_role("button", name="Create account").click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Navbar light/dark must update immediately and persist as the personal mode.
+        # Navbar mode is one personal-state path: complete immediately, then persist.
+        legacy_theme_hits = {"count": 0}
+
+        def handle_legacy_theme(route):
+            legacy_theme_hits["count"] += 1
+            route.abort()
+
+        page.route("**/api/theme/mode", handle_legacy_theme)
         page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
         html = page.locator("html")
+        light_body_bg = css_var("--tblr-body-bg")
+        light_surface = css_var("--tblr-bg-surface")
         with page.expect_response(lambda r: r.url.endswith("/api/appearance-v24/mode") and r.request.method == "POST", timeout=5_000) as dark_response:
             page.locator("#theme-toggle-dark").click(force=True)
         assert dark_response.value.ok
-        wait_until(
-            lambda: html.get_attribute("data-bs-theme") == "dark",
-            "Navbar did not switch to dark mode immediately.",
-            timeout_ms=3_000,
-        )
+        assert html.get_attribute("data-bs-theme") == "dark"
+        assert css_var("--tblr-body-bg") != light_body_bg
+        assert css_var("--tblr-bg-surface") != light_surface
+        assert legacy_theme_hits["count"] == 0
+
         page.reload(wait_until="domcontentloaded")
         html = page.locator("html")
-        wait_until(
-            lambda: html.get_attribute("data-bs-theme") == "dark",
-            "Personal dark mode was not retained after reload.",
-            timeout_ms=3_000,
-        )
+        assert html.get_attribute("data-bs-theme") == "dark"
 
         with page.expect_response(lambda r: r.url.endswith("/api/appearance-v24/mode") and r.request.method == "POST", timeout=5_000) as light_response:
             page.locator("#theme-toggle-light").click(force=True)
         assert light_response.value.ok
-        wait_until(
-            lambda: html.get_attribute("data-bs-theme") == "light",
-            "Navbar did not switch back to light mode immediately.",
-            timeout_ms=3_000,
-        )
+        assert html.get_attribute("data-bs-theme") == "light"
+        assert legacy_theme_hits["count"] == 0
 
-        # Appearance preview must apply light/dark and e-paper before Save.
+        # Appearance must be exact before Save: no network preview and no partial mode.
+        preview_api_hits = {"count": 0}
+
+        def handle_preview_api(route):
+            preview_api_hits["count"] += 1
+            route.abort()
+
+        page.route("**/api/appearance-v24/preview", handle_preview_api)
         page.goto(f"{BASE_URL}/profile/appearance", wait_until="domcontentloaded", timeout=20_000)
-        page.locator('form[action="/profile/appearance"]').wait_for(state="visible", timeout=5_000)
+        form = page.locator('form[action="/profile/appearance"]')
+        form.wait_for(state="visible", timeout=5_000)
         html = page.locator("html")
+
+        background = page.locator('select[name="theme_base"]')
+        background.select_option("slate")
+        assert html.get_attribute("data-b2m-base") == "slate"
+        assert css_var("--tblr-body-bg") == "#f1f5f9"
+        assert css_var("--tblr-bg-surface") == "#f8fafc"
+
+        radius = page.locator('select[name="theme_radius"]')
+        radius.select_option("2")
+        assert html.get_attribute("data-b2m-radius") == "2"
+        assert css_var("--tblr-border-radius") == "1.1rem"
+        assert computed(".card", "borderRadius") != "0px"
+
         epaper = page.locator('input[name="theme_epaper"]')
         epaper.check()
-        wait_until(
-            lambda: "b2m-epaper" in (html.get_attribute("class") or "").split(),
-            "E-paper class was not applied before Save.",
-            timeout_ms=3_000,
-        )
-        preview = page.locator("#b2m-theme-v32-preview")
-        wait_until(
-            lambda: preview.count() == 1 and "grayscale(1)" in (preview.text_content() or ""),
-            "E-paper preview CSS was not applied before Save.",
-            timeout_ms=5_000,
-        )
+        assert "b2m-epaper" in (html.get_attribute("class") or "").split()
+        assert computed("html", "filter") == "grayscale(1)"
+        assert css_var("--tblr-body-bg") == "#fff"
+        assert css_var("--tblr-primary") == "#000"
+        assert "rgb" in css_var("--tblr-border-color")
+        epaper_border_before = css_var("--tblr-border-color")
+        assert computed(".navbar", "backgroundColor") != "rgba(0, 0, 0, 0)"
+        assert computed(".card", "backgroundColor") != "rgba(0, 0, 0, 0)"
+
+        contrast = page.locator('input[name="theme_contrast"]')
+        contrast.fill("95")
+        assert "b2m-epaper" in (html.get_attribute("class") or "").split()
+        assert computed("html", "filter") == "grayscale(1)"
+        assert css_var("--tblr-body-bg") == "#fff"
+        assert css_var("--tblr-border-color") != epaper_border_before
+        assert page.locator("#profile-contrast-value").text_content() == "95"
+
+        # Leaving e-paper must restore the selected palette synchronously.
+        epaper.uncheck()
+        assert "b2m-epaper" not in (html.get_attribute("class") or "").split()
+        assert computed("html", "filter") == "none"
+        assert css_var("--tblr-body-bg") == "#f1f5f9"
+        assert css_var("--tblr-bg-surface") == "#f8fafc"
+
         page.locator('input[name="theme_mode"][value="dark"]').check(force=True)
-        wait_until(
-            lambda: html.get_attribute("data-bs-theme") == "dark",
-            "Appearance form did not preview dark mode immediately.",
-            timeout_ms=3_000,
-        )
+        assert html.get_attribute("data-bs-theme") == "dark"
+        assert css_var("--tblr-body-bg") == "#020617"
+        assert css_var("--tblr-bg-surface") == "#0f172a"
+        dark_nav = computed(".navbar", "backgroundColor")
+        dark_card = computed(".card", "backgroundColor")
+
         page.locator('input[name="theme_mode"][value="light"]').check(force=True)
-        wait_until(
-            lambda: html.get_attribute("data-bs-theme") == "light",
-            "Appearance form did not preview light mode immediately.",
-            timeout_ms=3_000,
-        )
+        assert html.get_attribute("data-bs-theme") == "light"
+        assert css_var("--tblr-body-bg") == "#f1f5f9"
+        assert css_var("--tblr-bg-surface") == "#f8fafc"
+        assert computed(".navbar", "backgroundColor") != dark_nav
+        assert computed(".card", "backgroundColor") != dark_card
+        assert preview_api_hits["count"] == 0
+
+        # Save is persistence only. Save a visible non-default combination and
+        # verify the server-rendered HTML + render-blocking CSS already contain it.
+        epaper.check()
+        contrast.fill("90")
+        assert computed("html", "filter") == "grayscale(1)"
+        page.get_by_role("button", name="Save appearance").click()
+        page.wait_for_url("**/profile/appearance?saved=1", timeout=10_000)
+        html = page.locator("html")
+        assert html.get_attribute("data-bs-theme") == "light"
+        assert html.get_attribute("data-b2m-base") == "slate"
+        assert html.get_attribute("data-b2m-radius") == "2"
+        assert "b2m-epaper" in (html.get_attribute("class") or "").split()
+        assert css_var("--tblr-border-radius") == "1.1rem"
+        assert css_var("--tblr-body-bg") == "#fff"
+        assert computed("html", "filter") == "grayscale(1)"
+
+        user_css = page.evaluate("() => fetch('/user-theme.css', {cache:'no-store'}).then(r => r.text())")
+        assert "--tblr-border-radius:1.1rem" in user_css
+        assert "--tblr-gray-950:#020617" in user_css
+        assert "html{filter:grayscale(1)}" in user_css
+
+        # Navigation must keep the saved first-paint markers; no default cache flash.
+        page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
+        html = page.locator("html")
+        assert html.get_attribute("data-b2m-base") == "slate"
+        assert html.get_attribute("data-b2m-radius") == "2"
+        assert "b2m-epaper" in (html.get_attribute("class") or "").split()
+        assert css_var("--tblr-border-radius") == "1.1rem"
+        assert computed("html", "filter") == "grayscale(1)"
 
         # Build a deterministic two-label queue for editor/live-layer tests.
         page.goto(f"{BASE_URL}/labels", wait_until="domcontentloaded", timeout=20_000)
