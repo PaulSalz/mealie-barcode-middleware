@@ -72,9 +72,10 @@ def main() -> None:
             )
 
         activity_nav = nav_positions()
-        page.goto(f"{BASE_URL}/items", wait_until="load", timeout=20_000)
-        items_nav = nav_positions()
-        assert activity_nav == items_nav, (activity_nav, items_nav)
+        for route in ("/", "/barcodes", "/items", "/actions"):
+            page.goto(f"{BASE_URL}{route}", wait_until="load", timeout=20_000)
+            current_nav = nav_positions()
+            assert activity_nav == current_nav, (route, activity_nav, current_nav)
 
         # Navbar light/dark must update immediately and persist as the personal mode.
         page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
