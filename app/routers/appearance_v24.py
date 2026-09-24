@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.access_v23 import personal_theme, save_personal_theme
 from app.database import get_db
 from app.models import SystemState
-from app.theme import THEME_CHOICES, build_theme_css, normalize_theme
+from app.theme import THEME_CHOICES, THEME_DEFAULTS, build_theme_css, normalize_theme
 
 router = APIRouter()
 
@@ -31,6 +31,20 @@ def _advanced_settings_preference(db: Session, user_id: int | None) -> bool:
     if not row or not row.value:
         return False
     return str(row.value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _theme_from_form(form) -> dict[str, str]:
+    return {
+        "mode": str(form.get("theme_mode", THEME_DEFAULTS["mode"])),
+        "logo_color": str(form.get("theme_logo_color", THEME_DEFAULTS["logo_color"])),
+        "button_color": str(form.get("theme_button_color", THEME_DEFAULTS["button_color"])),
+        "font": str(form.get("theme_font", THEME_DEFAULTS["font"])),
+        "base": str(form.get("theme_base", THEME_DEFAULTS["base"])),
+        "radius": str(form.get("theme_radius", THEME_DEFAULTS["radius"])),
+        "date_style": str(form.get("theme_date_style", THEME_DEFAULTS["date_style"])),
+        "epaper": "true" if form.get("theme_epaper") else "false",
+        "contrast": str(form.get("theme_contrast", THEME_DEFAULTS["contrast"])),
+    }
 
 
 @router.get("/api/appearance-v24")
@@ -101,16 +115,19 @@ async def appearance_v24_save(request: Request, db: Session = Depends(get_db)):
         key: value for key, value in payload.items()
         if key in {"mode", "logo_color", "button_color", "font", "base", "radius", "epaper", "contrast", "date_style", "color"}
     }
-    if theme_fields:
-        theme = save_personal_theme(db, user_id, theme_fields)
-    else:
-        theme = personal_theme(db, user_id)
+    theme = save_personal_theme(db, user_id, theme_fields) if theme_fields else personal_theme(db, user_id)
+    return {"ok": True, "theme": theme, "advanced_settings": _advanced_settings_preference(db, user_id)}
 
-    return {
-        "ok": True,
-        "theme": theme,
-        "advanced_settings": _advanced_settings_preference(db, user_id),
-    }
+
+@router.post("/profile/appearance")
+async def profile_appearance_save_v35(request: Request, db: Session = Depends(get_db)):
+    """Progressive-enhancement fallback; JS normally saves through the JSON API."""
+    user_id = _current_user_id(request)
+    if user_id is None:
+        return RedirectResponse("/login", status_code=303)
+    form = await request.form()
+    save_personal_theme(db, user_id, _theme_from_form(form))
+    return RedirectResponse("/profile/appearance?saved=1", status_code=303)
 
 
 @router.post("/api/appearance-v24/preview")
