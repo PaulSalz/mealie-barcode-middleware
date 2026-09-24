@@ -1,6 +1,7 @@
 /* v35 first-paint stabilizer.
-   Persisted personal CSS is authoritative. Its machine-readable saved state is
-   copied to root data attributes synchronously in <head>, before body paint. */
+   Persisted personal CSS provides the saved values/metadata; global-ui.css is
+   the final live authority. Copy the saved state to root attributes
+   synchronously in <head>, before body paint. */
 (function () {
   'use strict';
   var root = document.documentElement;
@@ -14,13 +15,10 @@
     });
   } catch (e) {}
 
-  // Keep the persisted personal stylesheet last in the cascade. All structural
-  // rules live in global-ui.css; user-theme.css owns the saved values.
-  var personal = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).find(function (link) {
-    return String(link.getAttribute('href') || '').indexOf('/user-theme.css') === 0;
-  });
-  if (personal) document.head.appendChild(personal);
-
+  // Do not reorder stylesheets here. base.html intentionally loads
+  // user-theme.css before global-ui.css, so persisted state is available for
+  // first paint while the generated v35 catalog remains the final cascade
+  // authority for subsequent live changes.
   function cssValue(property) {
     try {
       return getComputedStyle(root).getPropertyValue(property).trim();
