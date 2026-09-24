@@ -21,7 +21,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import Activity, ApiToken, BarcodeCache, BarcodeMapping, Item, RetryQueue, User
 from app.templating import templates
-from app.theme import THEME_CHOICES, THEME_DEFAULTS
+from app.theme import THEME_CHOICES, THEME_DEFAULTS, theme_runtime_config
 
 router = APIRouter()
 
@@ -169,6 +169,7 @@ def profile_appearance(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "profile_appearance.html", {
         "theme": personal_theme(db, user.id),
         "theme_choices": THEME_CHOICES,
+        "theme_runtime": theme_runtime_config(),
     })
 
 
@@ -188,8 +189,6 @@ async def profile_appearance_save(request: Request, db: Session = Depends(get_db
         "epaper": "true" if form.get("theme_epaper") else "false",
         "contrast": form.get("theme_contrast", THEME_DEFAULTS["contrast"]),
     }
-    # build_theme_css/save path validates unsupported values by falling back in
-    # the UI; store only values represented by the form choices/ranges.
     if values["mode"] not in THEME_CHOICES["mode"]:
         values["mode"] = THEME_DEFAULTS["mode"]
     if values["color"] not in THEME_CHOICES["color"]:
