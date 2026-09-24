@@ -26,7 +26,10 @@ GLOBAL_CSS = (
 )
 LABEL_CSS = ("css/ui-v13.css",)
 
+# v35 must initialize first so every historical UI layer can detect that it no
+# longer owns appearance. Their non-theme responsibilities remain active.
 GLOBAL_JS = (
+    "js/theme-controls-v32.js",
     "js/ui-v4.js",
     "js/ui-v6.js",
     "js/ui-v9.js",
@@ -37,7 +40,6 @@ GLOBAL_JS = (
     "js/ui-v27.js",
     "js/regression-v28.js",
     "js/ui-v29.js",
-    "js/theme-controls-v32.js",
     "js/terminology-v30.js",
     "js/shopping-bootstrap-v31.js",
     "js/ui-v12-bell.js",
