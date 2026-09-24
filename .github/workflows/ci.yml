@@ -128,6 +128,8 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Build frontend bundles
+        run: python -m app.frontend_assets
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
       - name: Prepare local database
