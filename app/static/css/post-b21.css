@@ -44,13 +44,6 @@ html.b2m-epaper-v9 body #activity-table.table-hover tbody tr[data-href]:hover > 
     bottom: auto !important;
 }
 
-/* Desktop primary navigation sits on the right side of the brand area. */
-@media (min-width: 768px) {
-    #navbar-menu > .navbar-nav {
-        margin-left: auto;
-    }
-}
-
 /* The modal size was already sufficient; let the scannable artwork use it. */
 #item-code-preview-img,
 #code-preview-modal #code-preview-large {
