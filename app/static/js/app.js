@@ -265,6 +265,8 @@
     function updateBadge() {
         if (!badge || !list || !empty) return;
         badge.classList.toggle('d-none', unreadCount <= 0);
+        var mobileBadge = document.getElementById('notif-badge-mobile');
+        if (mobileBadge) mobileBadge.classList.toggle('d-none', unreadCount <= 0);
         empty.style.display = list.querySelectorAll('.list-group-item:not(#notif-empty)').length ? 'none' : '';
     }
     function timeAgo(iso) {
