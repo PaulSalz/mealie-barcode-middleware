@@ -62,7 +62,17 @@
           <div class="row g-3">
             <div class="col-md-6"><label class="form-label">Font family</label><select name="theme_font" class="form-select">{% for opt in theme_choices.font %}<option value="{{ opt }}" {% if theme.font == opt %}selected{% endif %}>{{ opt|replace('-', ' ')|title }}</option>{% endfor %}</select></div>
             <div class="col-md-6"><label class="form-label">Background</label><select name="theme_base" class="form-select">{% for opt in theme_choices.base %}<option value="{{ opt }}" {% if theme.base == opt %}selected{% endif %}>{{ opt|title }}</option>{% endfor %}</select></div>
-            <div class="col-md-6"><label class="form-label">Corner radius</label><select name="theme_radius" class="form-select">{% for opt in theme_choices.radius %}<option value="{{ opt }}" {% if theme.radius == opt %}selected{% endif %}>{{ opt }}×</option>{% endfor %}</select></div>
+            <div class="col-12">
+              <label class="form-label">Corner radius</label>
+              <div class="form-selectgroup">
+                {% for opt in theme_choices.radius %}
+                <label class="form-selectgroup-item">
+                  <input type="radio" name="theme_radius" value="{{ opt }}" class="form-selectgroup-input" {% if theme.radius == opt %}checked{% endif %}>
+                  <span class="form-selectgroup-label">{{ opt }}×</span>
+                </label>
+                {% endfor %}
+              </div>
+            </div>
             <div class="col-md-6"><label class="form-label">Date style</label><select name="theme_date_style" class="form-select">{% for opt in theme_choices.date_style %}<option value="{{ opt }}" {% if theme.date_style == opt %}selected{% endif %}>{{ opt|title }}</option>{% endfor %}</select></div>
           </div>
         </div>
