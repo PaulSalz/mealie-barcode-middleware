@@ -60,7 +60,7 @@ def main() -> None:
 
         def nav_positions():
             return page.locator("#navbar-menu > .navbar-nav > .nav-item > .nav-link").evaluate_all(
-                "(links) => Object.fromEntries(links.filter(a => getComputedStyle(a).display !== 'none').map(a => [a.textContent.trim(), Math.round(a.getBoundingClientRect().x * 10) / 10]))"
+                "(links) => Object.fromEntries(links.filter(a => getComputedStyle(a).display !== 'none').map(a => [a.textContent.trim(), (() => { const r = a.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(n => Math.round(n * 10) / 10); })()]))"
             )
 
         activity_nav = nav_positions()
