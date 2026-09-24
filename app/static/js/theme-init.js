@@ -1,21 +1,27 @@
-/* Apply and refresh persisted personal theme state before the rest of the UI starts. */
+/* Keep the server-rendered personal theme stable and refresh the local cache. */
 (function() {
     'use strict';
 
     var root = document.documentElement;
-    var override = localStorage.getItem('theme-mode-override');
-    if (override === 'light' || override === 'dark') {
-        root.setAttribute('data-bs-theme', override);
-    }
 
-    /* base.html historically applied cached base/e-paper values before CSS and
-       this file then replaced them with /api/theme (the global theme). That made
-       personal background/e-paper settings flash and then revert. The personal
-       /user-theme.css is render blocking, so discard those stale marker classes
-       here and restore only the authenticated user's effective values below. */
-    delete root.dataset.b2mBase;
-    root.classList.remove('b2m-epaper-v9');
-    root.classList.remove('b2m-epaper');
+    /* base.html already renders the effective personal mode before first paint.
+       The local cache exists only to make navigation resilient between requests;
+       never clear cached base/e-paper here because doing so creates a visible
+       flash back to the default appearance before the API response arrives. */
+    try {
+        var mode = localStorage.getItem('theme-mode-override');
+        if ((mode === 'light' || mode === 'dark') && !root.getAttribute('data-bs-theme')) {
+            root.setAttribute('data-bs-theme', mode);
+        }
+        var base = localStorage.getItem('theme-base-override');
+        if (base && !root.dataset.b2mBase) root.dataset.b2mBase = base;
+        var epaper = localStorage.getItem('theme-epaper-override');
+        if (epaper === 'true' || epaper === 'false') {
+            var enabled = epaper === 'true';
+            root.classList.toggle('b2m-epaper-v9', enabled);
+            root.classList.toggle('b2m-epaper', enabled);
+        }
+    } catch (e) {}
 
     fetch('/api/appearance-v24', {headers:{Accept:'application/json'}, cache:'no-store'})
         .then(function(r){ return r.ok ? r.json() : null; })
