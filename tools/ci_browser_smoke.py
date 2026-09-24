@@ -73,8 +73,11 @@ def main() -> None:
 
         activity_nav = nav_positions()
         for route in ("/", "/barcodes", "/items", "/actions"):
-            page.goto(f"{BASE_URL}{route}", wait_until="load", timeout=20_000)
+            page.goto(f"{BASE_URL}{route}", wait_until="domcontentloaded", timeout=20_000)
+            initial_nav = nav_positions()
+            page.wait_for_load_state("load")
             current_nav = nav_positions()
+            assert initial_nav == current_nav, (route, "load shift", initial_nav, current_nav)
             assert activity_nav == current_nav, (route, activity_nav, current_nav)
 
         # Navbar light/dark must update immediately and persist as the personal mode.
