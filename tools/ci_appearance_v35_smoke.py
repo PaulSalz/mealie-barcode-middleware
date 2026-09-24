@@ -75,7 +75,11 @@ def main() -> None:
                             tblrBody: variable('--tblr-body-bg'),
                             tblrSurface: variable('--tblr-bg-surface'),
                             savedMode: variable('--b2m-saved-mode'),
-                            savedBase: variable('--b2m-saved-base')
+                            savedBase: variable('--b2m-saved-base'),
+                            authorityPage: variable('--b2m-v35-page-bg'),
+                            authoritySurface: variable('--b2m-v35-surface-bg'),
+                            bodyPage: getComputedStyle(document.body).getPropertyValue('--b2m-v35-page-bg').trim(),
+                            navbarSurface: getComputedStyle(document.querySelector('.navbar')).getPropertyValue('--b2m-v35-surface-bg').trim()
                         },
                         sheets: Array.from(document.styleSheets).map(sheet => sheet.href || 'inline')
                     };
