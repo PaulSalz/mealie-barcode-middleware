@@ -13,6 +13,21 @@
     box-shadow: none !important;
 }
 
+/* Activity: the pointer must not clear Tabler's hover shadow on just one cell.
+   Paint a single row color above the generic v35 transparent table rule. */
+html body #activity-table.table-hover tbody tr[data-href] > td,
+html body #activity-table.table-hover tbody tr[data-href]:hover > td {
+    box-shadow: none !important;
+    transition: none !important;
+}
+html body #activity-table.table-hover tbody tr[data-href]:hover > td {
+    background-color: color-mix(in srgb, var(--tblr-primary) 8%, var(--b2m-v35-surface-bg)) !important;
+}
+html.b2m-epaper body #activity-table.table-hover tbody tr[data-href]:hover > td,
+html.b2m-epaper-v9 body #activity-table.table-hover tbody tr[data-href]:hover > td {
+    background-color: #eee !important;
+}
+
 /* Keep statistic cards visually consistent across dashboard/detail pages. */
 .b2m-stat-card {
     box-shadow: var(--tblr-box-shadow-card);

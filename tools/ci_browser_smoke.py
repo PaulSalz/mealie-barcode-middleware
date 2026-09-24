@@ -42,6 +42,44 @@ def main() -> None:
         page.get_by_role("button", name="Create account").click()
         page.wait_for_load_state("domcontentloaded")
 
+        # Activity hover must color every cell in the row, including when the
+        # pointer sits over one cell. Navigation positions must be stable when
+        # Items becomes the active page.
+        page.goto(f"{BASE_URL}/activities", wait_until="load", timeout=20_000)
+        page.evaluate("""() => {
+            document.querySelector('#activity-tbody').innerHTML =
+              '<tr data-href="/barcodes/ci" class="cursor-pointer">' +
+              '<td>First</td><td>Second</td><td>Third</td><td>Fourth</td><td>Fifth</td></tr>';
+        }""")
+        cells = page.locator("#activity-tbody tr:first-child > td")
+        def cell_paints():
+            return cells.evaluate_all("""(elements) => elements.map(el => {
+                const style = getComputedStyle(el);
+                return [style.backgroundColor, style.backgroundImage, style.boxShadow];
+            })""")
+        page.locator("#activity-table thead").hover()
+        resting = cell_paints()
+        cells.first.hover()
+        first_hover = cell_paints()
+        cells.nth(2).hover()
+        middle_hover = cell_paints()
+        assert len({tuple(paint) for paint in first_hover}) == 1, (resting, first_hover)
+        assert first_hover == middle_hover and first_hover != resting, (resting, first_hover, middle_hover)
+
+        def nav_positions():
+            return page.locator("#navbar-menu > .navbar-nav > .nav-item > .nav-link").evaluate_all(
+                "(links) => Object.fromEntries(links.filter(a => getComputedStyle(a).display !== 'none').map(a => [a.textContent.trim(), (() => { const r = a.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(n => Math.round(n * 10) / 10); })()]))"
+            )
+
+        activity_nav = nav_positions()
+        for route in ("/", "/barcodes", "/items", "/actions"):
+            page.goto(f"{BASE_URL}{route}", wait_until="domcontentloaded", timeout=20_000)
+            initial_nav = nav_positions()
+            page.wait_for_load_state("load")
+            current_nav = nav_positions()
+            assert initial_nav == current_nav, (route, "load shift", initial_nav, current_nav)
+            assert activity_nav == current_nav, (route, activity_nav, current_nav)
+
         # Navbar light/dark must update immediately and persist as the personal mode.
         page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
         html = page.locator("html")
