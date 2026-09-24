@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from app.theme import build_theme_live_catalog_css
+from app.theme import GRAY_CSS, THEME_CHOICES, THEME_DEFAULTS, build_theme_live_catalog_css
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 GENERATED_DIR = STATIC_DIR / "generated"
@@ -65,22 +65,58 @@ BUNDLES = {
     "labels-ui.js": LABEL_JS,
 }
 
-# Older UI layers may declare the historical --b2m-* variables directly on
-# components. The live catalog still publishes those variables for backward
-# compatibility, but v35 snapshots the canonical root values into a private
-# namespace. Descendants consume only the private aliases, so a stale local
-# Light variable cannot survive an atomic root switch to Dark or E-paper.
+
+def _v35_surface_vars(base: str, mode: str) -> dict[str, str]:
+    """Return private v35 surface values with no dependency on legacy vars."""
+    gray = GRAY_CSS.get(base, GRAY_CSS[THEME_DEFAULTS["base"]])
+    if mode == "dark":
+        return {
+            "--b2m-v35-page-bg": gray["950"],
+            "--b2m-v35-surface-bg": gray["900"],
+            "--b2m-v35-surface-secondary": gray["800"],
+            "--b2m-v35-input-bg": gray["800"],
+            "--b2m-v35-text": gray["100"],
+            "--b2m-v35-muted": gray["400"],
+            "--b2m-v35-border": gray["700"],
+        }
+    return {
+        "--b2m-v35-page-bg": gray["50"],
+        "--b2m-v35-surface-bg": "#ffffff",
+        "--b2m-v35-surface-secondary": gray["100"],
+        "--b2m-v35-input-bg": "#ffffff",
+        "--b2m-v35-text": gray["900"],
+        "--b2m-v35-muted": gray["600"],
+        "--b2m-v35-border": gray["200"],
+    }
+
+
+def _css_vars(values: dict[str, str]) -> str:
+    return ";".join(f"{key}:{value}" for key, value in values.items())
+
+
+def _build_v35_surface_catalog_css() -> str:
+    """Generate direct root-state selectors used only by the v35 renderer."""
+    rules = [
+        "html{" + _css_vars(_v35_surface_vars(THEME_DEFAULTS["base"], "light")) + ";--b2m-v35-card-shadow:var(--tblr-box-shadow-card)}"
+    ]
+    for base in THEME_CHOICES["base"]:
+        rules.append(
+            f'html[data-b2m-base="{base}"]{{{_css_vars(_v35_surface_vars(base, "light"))}}}'
+        )
+        rules.append(
+            f'html[data-bs-theme="dark"][data-b2m-base="{base}"]{{{_css_vars(_v35_surface_vars(base, "dark"))}}}'
+        )
+    rules.extend([
+        'html[data-b2m-epaper="true"]{--b2m-v35-page-bg:#fff;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#f7f7f7);--b2m-v35-surface-secondary:#fff;--b2m-v35-input-bg:#fff;--b2m-v35-text:#000;--b2m-v35-muted:var(--b2m-epaper-muted,#444);--b2m-v35-border:var(--b2m-epaper-border,#555);--b2m-v35-card-shadow:none}',
+        'html[data-bs-theme="dark"][data-b2m-epaper="true"]{--b2m-v35-page-bg:#fff;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#f7f7f7);--b2m-v35-surface-secondary:#fff;--b2m-v35-input-bg:#fff;--b2m-v35-text:#000;--b2m-v35-muted:var(--b2m-epaper-muted,#444);--b2m-v35-border:var(--b2m-epaper-border,#555);--b2m-v35-card-shadow:none}',
+    ])
+    return "".join(rules)
+
+
+# Historical CSS may still declare the old --b2m-* variables on descendants.
+# The visible v35 surfaces therefore consume only collision-free private values
+# that are written directly on <html> by the catalog above.
 APPEARANCE_AUTHORITY_CSS = """
-html {
-  --b2m-v35-page-bg: var(--b2m-page-bg);
-  --b2m-v35-surface-bg: var(--b2m-surface-bg);
-  --b2m-v35-surface-secondary: var(--b2m-surface-secondary);
-  --b2m-v35-input-bg: var(--b2m-input-bg);
-  --b2m-v35-text: var(--b2m-text);
-  --b2m-v35-muted: var(--b2m-muted);
-  --b2m-v35-border: var(--b2m-border);
-  --b2m-v35-card-shadow: var(--b2m-card-shadow);
-}
 html body,
 html body .page,
 html body .page-wrapper,
@@ -151,11 +187,12 @@ def _render_bundle(name: str, sources: tuple[str, ...]) -> tuple[str, list[dict[
             chunks.append(f"\n/* ---- {relative} ---- */\n{content.rstrip()}\n")
 
     if name == "global-ui.css":
-        # Generated from the same Python palette/radius definitions as the
-        # persisted user stylesheet. This is the complete synchronous preview
-        # catalog; no server roundtrip is involved when a control changes.
+        # Legacy-compatible variables and the private v35 surface catalog are
+        # generated from the same palette definitions. Live changes remain
+        # synchronous and require no server roundtrip.
         live_css = build_theme_live_catalog_css()
-        complete_css = live_css + "\n" + APPEARANCE_AUTHORITY_CSS
+        v35_surfaces = _build_v35_surface_catalog_css()
+        complete_css = live_css + "\n" + v35_surfaces + "\n" + APPEARANCE_AUTHORITY_CSS
         chunks.append("\n/* ---- generated personal appearance v35 ---- */\n" + complete_css + "\n")
         manifest.append({"path": "<generated:appearance-v35>", "sha256": hashlib.sha256(complete_css.encode("utf-8")).hexdigest()})
 
