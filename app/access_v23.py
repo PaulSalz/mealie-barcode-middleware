@@ -6,7 +6,7 @@ from copy import deepcopy
 from sqlalchemy.orm import Session
 
 from app.models import SystemState, User
-from app.theme import COLOR_CSS, THEME_DEFAULTS, build_theme_css, get_theme
+from app.theme import COLOR_CSS, CANONICAL_PERSONAL_KEYS, THEME_DEFAULTS, build_theme_css, normalize_theme
 
 PERMISSION_CATALOG = [
     {"id": "printer", "label": "Printer & labels", "description": "Connect/configure the B21, edit roll settings and submit print jobs."},
@@ -30,6 +30,8 @@ DEFAULT_USER_PERMISSIONS = {
     "database": False,
 }
 
+# Retained only for old clients. v35 has an explicit button_color preference and
+# does not use a separate rainbow-button controller anymore.
 RAINBOW_BUTTON_DEFAULT = "smooth"
 RAINBOW_BUTTON_CHOICES = {RAINBOW_BUTTON_DEFAULT, *COLOR_CSS.keys()}
 
@@ -39,8 +41,7 @@ def _load_json(db: Session, key: str, default):
     if not row or not row.value:
         return deepcopy(default)
     try:
-        value = json.loads(row.value)
-        return value
+        return json.loads(row.value)
     except (TypeError, ValueError):
         return deepcopy(default)
 
@@ -83,19 +84,13 @@ def permissions_for_user(db: Session, user: User | None) -> dict[str, bool]:
     saved = _load_json(db, permission_key(user.id), {})
     if not isinstance(saved, dict):
         saved = {}
-    return {
-        key: bool(saved.get(key, default))
-        for key, default in DEFAULT_USER_PERMISSIONS.items()
-    }
+    return {key: bool(saved.get(key, default)) for key, default in DEFAULT_USER_PERMISSIONS.items()}
 
 
 def set_permissions(db: Session, user: User, values: dict) -> dict[str, bool]:
     if user.is_admin:
         return permissions_for_user(db, user)
-    cleaned = {
-        key: bool(values.get(key, DEFAULT_USER_PERMISSIONS[key]))
-        for key in DEFAULT_USER_PERMISSIONS
-    }
+    cleaned = {key: bool(values.get(key, DEFAULT_USER_PERMISSIONS[key])) for key in DEFAULT_USER_PERMISSIONS}
     _save_json(db, permission_key(user.id), cleaned)
     return cleaned
 
@@ -108,52 +103,41 @@ def has_permission(db: Session, user_id: int | None, permission: str) -> bool:
 
 
 def personal_theme(db: Session, user_id: int | None) -> dict[str, str]:
-    base = get_theme(db)
+    """Return only this user's appearance, never the legacy global DB theme."""
     if not user_id:
-        return base
+        return normalize_theme(THEME_DEFAULTS)
     saved = _load_json(db, theme_key(int(user_id)), {})
     if not isinstance(saved, dict):
-        return base
-    result = dict(base)
-    for key in THEME_DEFAULTS:
-        if key in saved:
-            result[key] = str(saved[key])
-    return result
+        saved = {}
+
+    # Migrate old single-accent settings without writing during GET. Rainbow used
+    # to control both logo and buttons; v35 keeps rainbow on the logo only and
+    # uses the previous fixed rainbow-button preference when available.
+    if "logo_color" not in saved and "color" in saved:
+        saved["logo_color"] = saved["color"]
+    if "button_color" not in saved and "color" in saved:
+        legacy = str(saved["color"])
+        if legacy == "rainbow":
+            preference = rainbow_button_preference(db, int(user_id))
+            saved["button_color"] = preference if preference in COLOR_CSS else THEME_DEFAULTS["button_color"]
+        elif legacy in COLOR_CSS:
+            saved["button_color"] = legacy
+
+    return normalize_theme(saved)
 
 
 def save_personal_theme(db: Session, user_id: int, values: dict) -> dict[str, str]:
-    current = _load_json(db, theme_key(user_id), {})
-    if not isinstance(current, dict):
-        current = {}
-    for key in THEME_DEFAULTS:
-        if key in values:
-            current[key] = str(values[key])
-    _save_json(db, theme_key(user_id), current)
+    """Persist the canonical personal appearance for exactly one user."""
+    current_raw = _load_json(db, theme_key(user_id), {})
+    if not isinstance(current_raw, dict):
+        current_raw = {}
+    merged = dict(personal_theme(db, user_id))
+    merged.update(values if isinstance(values, dict) else {})
+    normalized = normalize_theme(merged)
+    stored = {key: normalized[key] for key in CANONICAL_PERSONAL_KEYS}
+    _save_json(db, theme_key(user_id), stored)
     return personal_theme(db, user_id)
 
 
 def personal_theme_css(db: Session, user_id: int | None) -> str:
-    theme = personal_theme(db, user_id)
-    css = build_theme_css(theme)
-
-    # This stylesheet is loaded as render-blocking CSS in base.html. Include the
-    # per-user Rainbow button preference here so the first painted frame already
-    # has the final accent instead of waiting for ui-v24.js + /api/appearance-v24.
-    if theme.get("color") == "rainbow":
-        if theme.get("epaper") == "true":
-            css += (
-                ":root{animation:none!important}"
-                ".b2m-brand-text{animation:none!important;background:none!important;"
-                "color:#000!important;-webkit-text-fill-color:#000!important}"
-                ".btn-primary{animation:none!important}"
-            )
-        else:
-            preference = rainbow_button_preference(db, user_id)
-            if preference != RAINBOW_BUTTON_DEFAULT and preference in COLOR_CSS:
-                color = COLOR_CSS[preference]
-                css += (
-                    f":root{{animation:none!important;--tblr-primary:{color['hex']}!important;"
-                    f"--tblr-primary-rgb:{color['rgb']}!important}}"
-                    ".btn-primary{animation:none!important}"
-                )
-    return css
+    return build_theme_css(personal_theme(db, user_id))
