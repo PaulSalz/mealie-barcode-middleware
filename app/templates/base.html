@@ -1,25 +1,10 @@
 <!doctype html>
 {% set t = get_theme() %}
-<html lang="{{ ui_language() }}" data-bs-theme="{{ t.mode }}">
+<html lang="{{ ui_language() }}" data-bs-theme="{{ t.mode }}" data-b2m-base="{{ t.base }}" data-b2m-radius="{{ t.radius }}" class="{% if t.epaper == 'true' %}b2m-epaper-v9 b2m-epaper{% endif %}">
 <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
     <title>{% block title %}Mealie Barcode Middleware{% endblock %}</title>
-    <script>
-    (function(){
-        try {
-            var mode = localStorage.getItem('theme-mode-override');
-            if (mode === 'light' || mode === 'dark') document.documentElement.setAttribute('data-bs-theme', mode);
-            var base = localStorage.getItem('theme-base-override');
-            if (base) document.documentElement.dataset.b2mBase = base;
-            var epaper = localStorage.getItem('theme-epaper-override');
-            if (epaper === 'true' || epaper === 'false') {
-                document.documentElement.classList.toggle('b2m-epaper-v9', epaper === 'true');
-                document.documentElement.classList.toggle('b2m-epaper', epaper === 'true');
-            }
-        } catch (e) {}
-    })();
-    </script>
     <style>html{overflow-y:scroll;scrollbar-gutter:stable}</style>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preload" href="/static/vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
@@ -32,7 +17,6 @@
     {% if request.session.get('user_id') %}<link rel="stylesheet" href="/user-theme.css?v={{ v }}">{% endif %}
     <link rel="stylesheet" href="/static/generated/global-ui.css?v={{ v }}">
     {% if request.url.path == '/labels' %}<link rel="stylesheet" href="/static/generated/labels-ui.css?v={{ v }}">{% endif %}
-    <script src="/static/js/theme-init.js?v={{ v }}"></script>
 </head>
 <body>
     <div class="page">
@@ -88,7 +72,7 @@
                         {% if request.session.get('username') %}<li class="nav-item d-md-none"><button type="button" class="nav-link w-100 text-start border-0 bg-transparent" data-ui-language="{{ 'de' if ui_language() == 'en' else 'en' }}"><span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-language icon icon-1"></i></span><span class="nav-link-title">{{ 'Deutsch' if ui_language() == 'en' else 'English' }}</span></button></li>{% endif %}
                         <li class="nav-item d-md-none"><a href="#" class="nav-link hide-theme-dark" id="theme-toggle-dark-mobile"><span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-moon icon icon-1"></i></span><span class="nav-link-title">{{ tr('base.dark_mode') }}</span></a><a href="#" class="nav-link hide-theme-light" id="theme-toggle-light-mobile"><span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-sun icon icon-1"></i></span><span class="nav-link-title">{{ tr('base.light_mode') }}</span></a></li>
                         {% if request.session.get('is_admin') %}<li class="nav-item d-md-none"><a href="#" class="nav-link" id="pause-menu-item-mobile" data-action="pause"><span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-link-plus icon icon-1"></i></span><span class="nav-link-title" id="pause-menu-text-mobile">{{ tr('base.pause_title') }}</span></a></li>{% endif %}
-                        {% if request.session.get('username') %}<li class="nav-item d-md-none"><form action="/logout" method="post" class="d-inline"><button type="submit" class="nav-link w-100 text-start border-0 bg-transparent"><span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-logout icon icon-1"></i></span><span class="nav-link-title">{{ tr('nav.logout') }} ({{ request.session.get('username') }})</span></button></form></li>{% endif %}
+                        {% if request.session.get('username') %}<li class="nav-item d-md-none"><form action="/logout" method="post" class="d-inline"><button type="submit" class="nav-link w-100 text-start border-0 bg-transparent"><span class="nav-link-icon d-md-none d-lg-inline-block"><i class="ti ti-logout icon icon-1"></i></span><span class="nav-link-title">{{ tr('nav.logout') }} ({{ request.session.get('username') }})</button></form></li>{% endif %}
                     </ul>
                 </div>
             </div>
