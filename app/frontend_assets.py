@@ -65,22 +65,28 @@ BUNDLES = {
     "labels-ui.js": LABEL_JS,
 }
 
-# Older UI layers contain component-specific background shorthands and some of
-# them also declare the old --b2m-* variables on descendants. The v35 root is
-# the only theme state owner, so major surfaces explicitly inherit those
-# variables before using them. This prevents a component-local Light value from
-# surviving after the root has atomically switched to Dark (or E-paper).
+# Older UI layers may declare the historical --b2m-* variables directly on
+# components. The live catalog still publishes those variables for backward
+# compatibility, but v35 snapshots the canonical root values into a private
+# namespace. Descendants consume only the private aliases, so a stale local
+# Light variable cannot survive an atomic root switch to Dark or E-paper.
 APPEARANCE_AUTHORITY_CSS = """
+html {
+  --b2m-v35-page-bg: var(--b2m-page-bg);
+  --b2m-v35-surface-bg: var(--b2m-surface-bg);
+  --b2m-v35-surface-secondary: var(--b2m-surface-secondary);
+  --b2m-v35-input-bg: var(--b2m-input-bg);
+  --b2m-v35-text: var(--b2m-text);
+  --b2m-v35-muted: var(--b2m-muted);
+  --b2m-v35-border: var(--b2m-border);
+  --b2m-v35-card-shadow: var(--b2m-card-shadow);
+}
 html body,
 html body .page,
 html body .page-wrapper,
 html body .page-body {
-  --b2m-page-bg: inherit !important;
-  --b2m-text: inherit !important;
-  --b2m-muted: inherit !important;
-  --b2m-border: inherit !important;
-  background: var(--b2m-page-bg) !important;
-  color: var(--b2m-text) !important;
+  background: var(--b2m-v35-page-bg) !important;
+  color: var(--b2m-v35-text) !important;
 }
 html body .navbar,
 html body .card,
@@ -89,50 +95,40 @@ html body .modal-content,
 html body .offcanvas,
 html body .toast,
 html body .list-group-item {
-  --b2m-surface-bg: inherit !important;
-  --b2m-text: inherit !important;
-  --b2m-muted: inherit !important;
-  --b2m-border: inherit !important;
-  background: var(--b2m-surface-bg) !important;
-  color: var(--b2m-text) !important;
-  border-color: var(--b2m-border) !important;
+  background: var(--b2m-v35-surface-bg) !important;
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--b2m-v35-border) !important;
+}
+html body .card {
+  box-shadow: var(--b2m-v35-card-shadow, var(--tblr-box-shadow-card)) !important;
 }
 html body .card-header,
 html body .card-footer,
 html body .dropdown-header,
 html body .table thead th {
-  --b2m-surface-secondary: inherit !important;
-  --b2m-text: inherit !important;
-  --b2m-border: inherit !important;
-  background: var(--b2m-surface-secondary) !important;
-  color: var(--b2m-text) !important;
-  border-color: var(--b2m-border) !important;
+  background: var(--b2m-v35-surface-secondary) !important;
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--b2m-v35-border) !important;
 }
 html body .form-control,
 html body .form-select,
 html body .input-group-text,
 html body .form-selectgroup-label {
-  --b2m-input-bg: inherit !important;
-  --b2m-text: inherit !important;
-  --b2m-border: inherit !important;
-  background: var(--b2m-input-bg) !important;
-  color: var(--b2m-text) !important;
-  border-color: var(--b2m-border) !important;
+  background: var(--b2m-v35-input-bg) !important;
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--b2m-v35-border) !important;
 }
 html body .table,
 html body .table > :not(caption) > * > * {
-  --b2m-text: inherit !important;
-  --b2m-border: inherit !important;
   background-color: transparent !important;
-  color: var(--b2m-text) !important;
-  border-color: var(--b2m-border) !important;
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--b2m-v35-border) !important;
 }
 html body .text-secondary,
 html body .text-muted,
 html body .form-hint,
 html body .card-subtitle {
-  --b2m-muted: inherit !important;
-  color: var(--b2m-muted) !important;
+  color: var(--b2m-v35-muted) !important;
 }
 """.strip()
 
