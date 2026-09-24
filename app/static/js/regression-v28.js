@@ -3,6 +3,7 @@
   'use strict';
 
   var root = document.documentElement;
+  var appearanceV35 = !!window.__b2mThemeV35Loaded;
 
   function normaliseText(value) {
     return String(value == null ? '' : value).trim().replace(/\s+/g, ' ').toLocaleLowerCase();
@@ -55,6 +56,7 @@
   }
 
   function applyRadius(scale) {
+    if (appearanceV35) return;
     scale = Number(scale);
     if (!Number.isFinite(scale)) scale = radiusScaleFromPage();
     scale = Math.max(0, Math.min(2, scale));
@@ -70,6 +72,7 @@
   }
 
   function applyNeutralSurfaces() {
+    if (appearanceV35) return;
     if (root.classList.contains('b2m-epaper') || root.classList.contains('b2m-epaper-v9')) return;
     var g50 = gray(50), g100 = gray(100), g200 = gray(200), g400 = gray(400), g600 = gray(600), g700 = gray(700), g800 = gray(800), g900 = gray(900);
     if (!g50 || !g200 || !g800 || !g900) return;
@@ -82,6 +85,7 @@
   }
 
   function installAppearanceRepairs() {
+    if (appearanceV35) return;
     applyRadius(radiusScaleFromPage());
     applyNeutralSurfaces();
 
