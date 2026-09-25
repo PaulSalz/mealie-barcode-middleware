@@ -5,6 +5,7 @@ from app.theme import (
     THEME_CHOICES,
     _epaper_values,
     _epaper_surface_secondary,
+    _epaper_utility_bg,
     THEME_DEFAULTS,
     build_theme_css,
     build_theme_live_catalog_css,
@@ -64,32 +65,39 @@ def test_persisted_theme_contains_complete_first_paint_state():
 
 
 def test_epaper_palette_uses_mode_aware_surfaces_and_readable_text():
-    assert _epaper_values("0", "light") == (170, 0, 248)
-    assert _epaper_surface_secondary("0", "light") == 240
-    assert _epaper_values("100", "light") == (0, 0, 176)
-    assert _epaper_surface_secondary("100", "light") == 144
-    assert _epaper_values("0", "dark") == (96, 255, 40)
-    assert _epaper_surface_secondary("0", "dark") == 72
-    assert _epaper_values("100", "dark") == (255, 255, 104)
-    assert _epaper_surface_secondary("100", "dark") == 120
+    assert _epaper_values("0", "light") == (170, 0, 232)
+    assert _epaper_surface_secondary("0", "light") == 216
+    assert _epaper_utility_bg("0", "light") == 208
+    assert _epaper_values("100", "light") == (0, 0, 128)
+    assert _epaper_surface_secondary("100", "light") == 136
+    assert _epaper_utility_bg("100", "light") == 160
+    assert _epaper_values("0", "dark") == (96, 255, 80)
+    assert _epaper_surface_secondary("0", "dark") == 120
+    assert _epaper_utility_bg("0", "dark") == 192
+    assert _epaper_values("100", "dark") == (255, 255, 112)
+    assert _epaper_surface_secondary("100", "dark") == 128
+    assert _epaper_utility_bg("100", "dark") == 160
 
     css = build_theme_css({"mode": "dark", "epaper": "true", "contrast": "100"})
     light, dark = css.split("[data-bs-theme=dark]{", 1)
     assert "--b2m-page-bg:#ffffff" in light
     assert "--b2m-text:#000000" in light
-    assert "--b2m-surface-bg:rgb(176,176,176)" in light
+    assert "--b2m-surface-bg:rgb(128,128,128)" in light
     assert "--tblr-primary:#000000" in light
     assert "--b2m-page-bg:#000000" in dark
     assert "--b2m-text:#ffffff" in dark
-    assert "--b2m-surface-bg:rgb(104,104,104)" in dark
-    assert "--b2m-surface-secondary:rgb(120,120,120)" in dark
-    assert "--b2m-input-bg:rgb(48,48,48)" in dark
+    assert "--b2m-surface-bg:rgb(112,112,112)" in dark
+    assert "--b2m-surface-secondary:rgb(128,128,128)" in dark
+    assert "--b2m-epaper-utility-bg:rgb(160,160,160)" in dark
+    assert "--b2m-epaper-utility-text:#000000" in dark
+    assert "--b2m-input-bg:rgb(80,80,80)" in dark
     assert "--tblr-primary:#ffffff" in dark
 
     live = build_theme_live_catalog_css()
     assert 'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000' in live
     assert "--b2m-text:#fff" in live
-    assert "#303030" in live
+    assert "var(--b2m-epaper-input-bg,#505050)" in live
+    assert "#c0c0c0" in live
 
 
 def test_personal_stylesheet_exports_complete_saved_state_for_head_bootstrap():
@@ -109,6 +117,9 @@ def test_v35_epaper_maps_colored_dashboard_content_to_monochrome_surfaces():
     assert 'values[f"--tblr-{color}-lt"]' in frontend
     assert "--b2m-v35-utility-bg" in frontend
     assert '[class*="bg-"] *' in frontend
+    assert 'body [class*="bg-"]:not(.bg-transparent):not(.bg-white):not(.bg-body):not([class*="bg-body"]) [class*="text-"]' in frontend
+    assert "body .card:has(#item-stat-total) .avatar" in frontend
+    assert "body .status-indicator-circle" in frontend
     assert '.b2m-brand-text' in frontend
     assert '#activity-table tbody tr[data-href]:hover > td' in frontend
 
