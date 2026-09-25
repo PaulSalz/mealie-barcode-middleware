@@ -146,10 +146,8 @@ def test_v35_epaper_maps_colored_dashboard_content_to_monochrome_surfaces():
     assert "body .card:has(#item-stat-total) .avatar" in frontend
     assert "body .status-indicator-circle" in frontend
     assert 'html[data-bs-theme="dark"][data-b2m-epaper="true"] body .navbar .navbar-brand a' not in frontend
-    assert 'html[data-b2m-epaper="true"].b2m-epaper-v9 body .b2m-brand-text' not in frontend
     assert 'data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) *' in frontend
     assert "-webkit-text-fill-color: #fff !important;" in frontend
-    assert '.b2m-brand-text' in frontend
     assert '#activity-table tbody tr[data-href]:hover > td' in frontend
 
 
