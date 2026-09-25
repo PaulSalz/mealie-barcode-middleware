@@ -100,16 +100,18 @@
       return {
         border: 96 + Math.round(159 * contrast / 100),
         muted: 255,
-        surface: 40 + Math.round(64 * contrast / 100),
-        surfaceSecondary: 72 + Math.round(48 * contrast / 100),
-        input: 48
+        surface: 80 + Math.round(32 * contrast / 100),
+        surfaceSecondary: 120 + Math.round(8 * contrast / 100),
+        utility: 192 - Math.round(32 * contrast / 100),
+        input: 80
       };
     }
     return {
       border: 170 - Math.round(170 * contrast / 100),
       muted: 0,
-      surface: 248 - Math.round(72 * contrast / 100),
-      surfaceSecondary: 240 - Math.round(96 * contrast / 100),
+      surface: 232 - Math.round(104 * contrast / 100),
+      surfaceSecondary: 216 - Math.round(80 * contrast / 100),
+      utility: 208 - Math.round(48 * contrast / 100),
       input: 255
     };
   }
@@ -140,6 +142,8 @@
     root.style.setProperty('--b2m-epaper-muted', 'rgb(' + values.muted + ',' + values.muted + ',' + values.muted + ')');
     root.style.setProperty('--b2m-epaper-surface', 'rgb(' + values.surface + ',' + values.surface + ',' + values.surface + ')');
     root.style.setProperty('--b2m-epaper-surface-secondary', 'rgb(' + values.surfaceSecondary + ',' + values.surfaceSecondary + ',' + values.surfaceSecondary + ')');
+    root.style.setProperty('--b2m-epaper-utility-bg', 'rgb(' + values.utility + ',' + values.utility + ',' + values.utility + ')');
+    root.style.setProperty('--b2m-epaper-utility-text', '#000');
     root.style.setProperty('--b2m-epaper-input-bg', 'rgb(' + values.input + ',' + values.input + ',' + values.input + ')');
 
     // Compatibility only; visual styling comes from global-ui.css v35 rules.
