@@ -228,6 +228,27 @@ def main() -> None:
             "statusCircle": "rgb(0, 0, 0)"
         }, (dashboard_colors, theme_debug())
 
+        # Filled action buttons remain white-on-black in light e-paper.
+        for route, selector in (
+            ("/", "#shopping-lists-card .btn-primary"),
+            ("/profile/appearance", "#appearance-save-button"),
+            ("/items", "a.btn-primary"),
+        ):
+            page.goto(f"{BASE_URL}{route}", wait_until="domcontentloaded", timeout=20_000)
+            page.evaluate("""() => {
+                document.documentElement.setAttribute('data-bs-theme', 'light');
+            }""")
+            button = page.locator(selector).first
+            assert button.count() == 1, (route, selector)
+            colors = button.evaluate("""el => ({
+                text: getComputedStyle(el).color,
+                icon: el.querySelector('i,svg') ? getComputedStyle(el.querySelector('i,svg')).color : getComputedStyle(el).color,
+                background: getComputedStyle(el).backgroundColor
+            })""")
+            assert colors["text"] == "rgb(255, 255, 255)", (route, colors)
+            assert colors["icon"] == "rgb(255, 255, 255)", (route, colors)
+            assert colors["background"] == "rgb(0, 0, 0)", (route, colors)
+
         if errors:
             raise AssertionError("Appearance browser JavaScript errors: " + " | ".join(errors))
         browser.close()

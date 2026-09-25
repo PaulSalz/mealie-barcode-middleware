@@ -120,6 +120,8 @@ def test_v35_epaper_maps_colored_dashboard_content_to_monochrome_surfaces():
     assert 'body [class*="bg-"]:not(.bg-transparent):not(.bg-white):not(.bg-body):not([class*="bg-body"]) [class*="text-"]' in frontend
     assert "body .card:has(#item-stat-total) .avatar" in frontend
     assert "body .status-indicator-circle" in frontend
+    assert 'data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) *' in frontend
+    assert "-webkit-text-fill-color: #fff !important;" in frontend
     assert '.b2m-brand-text' in frontend
     assert '#activity-table tbody tr[data-href]:hover > td' in frontend
 

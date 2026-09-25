@@ -457,6 +457,19 @@ html[data-bs-theme="dark"][data-b2m-epaper="true"] body .navbar .navbar-brand a 
   animation: none !important;
 }
 
+/* Light e-paper filled buttons keep white labels and glyphs above utility text rules. */
+html[data-b2m-epaper="true"][data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]),
+html[data-b2m-epaper="true"][data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) *,
+html[data-b2m-epaper="true"][data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) svg,
+html[data-b2m-epaper="true"][data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) svg * {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+}
+html[data-b2m-epaper="true"][data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) svg,
+html[data-b2m-epaper="true"][data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) svg * {
+  fill: currentColor !important;
+}
+
 """.strip()
 
 
