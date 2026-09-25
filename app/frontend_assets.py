@@ -188,7 +188,7 @@ html[data-b2m-epaper="true"] body [class*="btn-outline-"] {
   color: var(--b2m-v35-action-bg) !important;
 }
 html[data-b2m-epaper="true"] body [class*="bg-"]:not(.bg-transparent):not(.bg-white):not(.bg-body):not([class*="bg-body"]) {
-  background-color: var(--b2m-v35-action-bg) !important;
+  background: var(--b2m-v35-action-bg) !important;
   background-image: none !important;
   border-color: var(--b2m-v35-action-bg) !important;
   color: var(--b2m-v35-action-text) !important;
@@ -208,7 +208,7 @@ html[data-b2m-epaper="true"] body .badge,
 html[data-b2m-epaper="true"] body [class*="alert-"],
 html[data-b2m-epaper="true"] body .progress-bar,
 html[data-b2m-epaper="true"] body mark {
-  background-color: var(--b2m-v35-action-bg) !important;
+  background: var(--b2m-v35-action-bg) !important;
   background-image: none !important;
   border-color: var(--b2m-v35-action-bg) !important;
   color: var(--b2m-v35-action-text) !important;
@@ -219,7 +219,7 @@ html[data-b2m-epaper="true"] body .btn:active,
 html[data-b2m-epaper="true"] body [class*="btn-outline-"]:hover,
 html[data-b2m-epaper="true"] body [class*="btn-outline-"]:focus,
 html[data-b2m-epaper="true"] body [class*="btn-outline-"]:active {
-  background-color: var(--b2m-v35-action-bg) !important;
+  background: var(--b2m-v35-action-bg) !important;
   background-image: none !important;
   border-color: var(--b2m-v35-action-bg) !important;
   color: var(--b2m-v35-action-text) !important;
@@ -245,6 +245,9 @@ html body .navbar, html body .card, html body .dropdown-menu,
 html body .modal-content, html body .list-group-item,
 html body .form-control, html body .form-select,
 html body .form-selectgroup-label, html body .input-group-text {
+  transition: none !important;
+}
+html[data-b2m-epaper="true"] body * {
   transition: none !important;
 }
 """.strip()
