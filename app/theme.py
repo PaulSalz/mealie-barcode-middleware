@@ -176,17 +176,32 @@ def _palette_vars(base: str, mode: str) -> dict[str, str]:
     }
 
 
-def _epaper_values(contrast: str) -> tuple[int, int, int]:
+def _epaper_values(contrast: str, mode: str = "light") -> tuple[int, int, int]:
     try:
         value = max(0, min(100, int(float(contrast))))
     except (TypeError, ValueError):
         value = int(THEME_DEFAULTS["contrast"])
-    # Use the full slider range: black borders/text and a distinct gray
-    # surface at 100%. Integer half-up rounding matches the browser preview.
+    if mode == "dark":
+        # Black page, brighter cards and near-white text at maximum contrast.
+        border = 35 + (220 * value + 50) // 100
+        muted = 145 + (110 * value + 50) // 100
+        surface = 16 + (48 * value + 50) // 100
+        return border, muted, surface
+    # White page, black text/borders and darker cards at maximum contrast.
     border = 220 - (220 * value + 50) // 100
     muted = 112 - (112 * value + 50) // 100
     surface = 255 - (55 * value + 50) // 100
     return border, muted, surface
+
+
+def _epaper_surface_secondary(contrast: str, mode: str = "light") -> int:
+    try:
+        value = max(0, min(100, int(float(contrast))))
+    except (TypeError, ValueError):
+        value = int(THEME_DEFAULTS["contrast"])
+    if mode == "dark":
+        return 24 + (72 * value + 50) // 100
+    return 255 - (32 * value + 50) // 100
 
 
 def _css_vars(values: dict[str, str]) -> str:
@@ -226,10 +241,10 @@ def build_theme_css(theme: dict[str, str]) -> str:
     common["--b2m-saved-mode"] = t["mode"]
     common["--b2m-card-shadow"] = "var(--tblr-box-shadow-card)"
     common["--b2m-page-filter"] = "none"
-    border, muted, surface = _epaper_values(t["contrast"])
-    common["--b2m-epaper-border"] = f"rgb({border},{border},{border})"
-    common["--b2m-epaper-muted"] = f"rgb({muted},{muted},{muted})"
-    common["--b2m-epaper-surface"] = f"rgb({surface},{surface},{surface})"
+    light_epaper = _epaper_values(t["contrast"], "light")
+    dark_epaper = _epaper_values(t["contrast"], "dark")
+    light_secondary = _epaper_surface_secondary(t["contrast"], "light")
+    dark_secondary = _epaper_surface_secondary(t["contrast"], "dark")
 
     extra: list[str] = []
     logo = t["logo_color"]
@@ -246,27 +261,54 @@ def build_theme_css(theme: dict[str, str]) -> str:
         extra.append("body{letter-spacing:.018em;word-spacing:.045em;line-height:1.55}input,select,textarea,button{letter-spacing:.012em}")
 
     if t["epaper"] == "true":
-        mono = {
+        light_mono = {
             "--b2m-page-bg": "#ffffff",
-            "--b2m-surface-bg": f"rgb({surface},{surface},{surface})",
-            "--b2m-surface-secondary": "#ffffff",
+            "--b2m-surface-bg": f"rgb({light_epaper[2]},{light_epaper[2]},{light_epaper[2]})",
+            "--b2m-surface-secondary": f"rgb({light_secondary},{light_secondary},{light_secondary})",
             "--b2m-input-bg": "#ffffff",
             "--b2m-text": "#000000",
-            "--b2m-muted": f"rgb({muted},{muted},{muted})",
-            "--b2m-border": f"rgb({border},{border},{border})",
+            "--b2m-muted": f"rgb({light_epaper[1]},{light_epaper[1]},{light_epaper[1]})",
+            "--b2m-border": f"rgb({light_epaper[0]},{light_epaper[0]},{light_epaper[0]})",
             "--b2m-card-shadow": "none",
             "--b2m-page-filter": "grayscale(1)",
+            "--b2m-epaper-border": f"rgb({light_epaper[0]},{light_epaper[0]},{light_epaper[0]})",
+            "--b2m-epaper-muted": f"rgb({light_epaper[1]},{light_epaper[1]},{light_epaper[1]})",
+            "--b2m-epaper-surface": f"rgb({light_epaper[2]},{light_epaper[2]},{light_epaper[2]})",
+            "--b2m-epaper-surface-secondary": f"rgb({light_secondary},{light_secondary},{light_secondary})",
+            "--b2m-epaper-input-bg": "#ffffff",
             "--tblr-primary": "#000000",
             "--tblr-primary-rgb": "0,0,0",
             "--tblr-link-color": "#000000",
             "--tblr-link-hover-color": "#000000",
         }
-        light = dict(mono)
-        dark = dict(mono)
+        dark_mono = {
+            "--b2m-page-bg": "#000000",
+            "--b2m-surface-bg": f"rgb({dark_epaper[2]},{dark_epaper[2]},{dark_epaper[2]})",
+            "--b2m-surface-secondary": f"rgb({dark_secondary},{dark_secondary},{dark_secondary})",
+            "--b2m-input-bg": "rgb(12,12,12)",
+            "--b2m-text": "#ffffff",
+            "--b2m-muted": f"rgb({dark_epaper[1]},{dark_epaper[1]},{dark_epaper[1]})",
+            "--b2m-border": f"rgb({dark_epaper[0]},{dark_epaper[0]},{dark_epaper[0]})",
+            "--b2m-card-shadow": "none",
+            "--b2m-page-filter": "grayscale(1)",
+            "--b2m-epaper-border": f"rgb({dark_epaper[0]},{dark_epaper[0]},{dark_epaper[0]})",
+            "--b2m-epaper-muted": f"rgb({dark_epaper[1]},{dark_epaper[1]},{dark_epaper[1]})",
+            "--b2m-epaper-surface": f"rgb({dark_epaper[2]},{dark_epaper[2]},{dark_epaper[2]})",
+            "--b2m-epaper-surface-secondary": f"rgb({dark_secondary},{dark_secondary},{dark_secondary})",
+            "--b2m-epaper-input-bg": "rgb(12,12,12)",
+            "--tblr-primary": "#ffffff",
+            "--tblr-primary-rgb": "255,255,255",
+            "--tblr-link-color": "#ffffff",
+            "--tblr-link-hover-color": "#ffffff",
+        }
+        light = dict(light_mono)
+        dark = dict(dark_mono)
+        if t["mode"] == "dark":
+            extra.append("html[data-bs-theme=dark] .navbar-brand a{background:none!important;color:#fff!important;-webkit-text-fill-color:#fff!important;animation:none!important}")
+        else:
+            extra.append(".navbar-brand a{background:none!important;color:#000!important;-webkit-text-fill-color:#000!important;animation:none!important}")
         for key in ("--tblr-primary", "--tblr-primary-rgb", "--tblr-link-color", "--tblr-link-hover-color"):
-            common[key] = mono[key]
-        extra.append(".navbar-brand a{background:none!important;color:#000!important;-webkit-text-fill-color:#000!important;animation:none!important}")
-
+            common.pop(key, None)
     root_values = {**light, **common}
     dark_values = {**dark, **common}
     return ":root{" + _css_vars(root_values) + "}" + "[data-bs-theme=dark]{" + _css_vars(dark_values) + "}" + "".join(extra)
@@ -309,9 +351,9 @@ def build_theme_live_catalog_css() -> str:
         rules.append(f'html[data-b2m-radius="{name}"]{{{_css_vars(_radius_vars(name))}}}')
 
     rules.extend([
-        'html[data-b2m-epaper="true"]{--b2m-page-bg:#fff;--b2m-surface-bg:var(--b2m-epaper-surface,#f7f7f7);--b2m-surface-secondary:#fff;--b2m-input-bg:#fff;--b2m-text:#000;--b2m-muted:var(--b2m-epaper-muted,#444);--b2m-border:var(--b2m-epaper-border,#555);--b2m-card-shadow:none;--b2m-page-filter:grayscale(1);--tblr-primary:#000;--tblr-primary-rgb:0,0,0;--tblr-link-color:#000;--tblr-link-hover-color:#000}',
-        'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#fff;--b2m-surface-bg:var(--b2m-epaper-surface,#f7f7f7);--b2m-surface-secondary:#fff;--b2m-input-bg:#fff;--b2m-text:#000;--b2m-muted:var(--b2m-epaper-muted,#444);--b2m-border:var(--b2m-epaper-border,#555)}',
-        'html[data-b2m-epaper="true"] .navbar-brand a{background:none!important;color:#000!important;-webkit-text-fill-color:#000!important;animation:none!important}',
+        'html[data-b2m-epaper="true"]{--b2m-page-bg:#fff;--b2m-surface-bg:var(--b2m-epaper-surface,#c8c8c8);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#dfdfdf);--b2m-input-bg:#fff;--b2m-text:#000;--b2m-muted:var(--b2m-epaper-muted,#000);--b2m-border:var(--b2m-epaper-border,#000);--b2m-card-shadow:none;--b2m-page-filter:grayscale(1);--tblr-primary:#000;--tblr-primary-rgb:0,0,0;--tblr-link-color:#000;--tblr-link-hover-color:#000}',
+        'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000;--b2m-surface-bg:var(--b2m-epaper-surface,#404040);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#606060);--b2m-input-bg:var(--b2m-epaper-input-bg,#0c0c0c);--b2m-text:#fff;--b2m-muted:var(--b2m-epaper-muted,#fff);--b2m-border:var(--b2m-epaper-border,#fff);--b2m-card-shadow:none;--tblr-primary:#fff;--tblr-primary-rgb:255,255,255;--tblr-link-color:#fff;--tblr-link-hover-color:#fff}',
+        'html[data-b2m-epaper="true"] .navbar-brand a{background:none!important;color:var(--b2m-text)!important;-webkit-text-fill-color:var(--b2m-text)!important;animation:none!important}',
         'html[data-b2m-epaper="false"]{--b2m-page-filter:none}',
     ])
     return "".join(rules)
