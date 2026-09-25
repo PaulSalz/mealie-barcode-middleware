@@ -100,8 +100,8 @@
       return {
         border: 96 + Math.round(159 * contrast / 100),
         muted: 255,
-        surface: 80 + Math.round(32 * contrast / 100),
-        surfaceSecondary: 120 + Math.round(8 * contrast / 100),
+        surface: 184 - Math.round(66 * contrast / 100),
+        surfaceSecondary: 216 - Math.round(64 * contrast / 100),
         utility: 192 - Math.round(32 * contrast / 100),
         input: 80
       };
