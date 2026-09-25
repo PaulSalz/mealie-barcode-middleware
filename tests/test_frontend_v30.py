@@ -24,11 +24,24 @@ def test_label_queue_uses_one_native_multipage_job():
     source = read("app/static/js/labels-fixes-v30.js")
     service = read("app/services/niimblue_batch_v30.py")
     router = read("app/routers/v30_fixes.py")
-    assert "/labels/b21/print-batch-v30" in source
+    assert "/labels/b21/jobs" in source
     assert "pages:pages" in source
     assert '"pages": clean_pages' in service
-    assert '"/labels/b21/print-batch-v30"' in router
-    assert "total_quantity * 20.0" in service
+    assert '@router.post("/labels/b21/jobs", status_code=202)' in router
+    assert '"/labels/b21/print-batch-v30"' in router  # legacy endpoint remains available
+    assert "total_quantity * 30.0" in service
+    assert "PrintOutcomeUnknown" in service
+
+
+def test_settings_force_disconnect_is_always_available_on_desktop():
+    template = read("app/templates/settings.html")
+    client = read("app/static/js/settings-page.js")
+    service = read("app/services/niimblue.py")
+    assert 'id="b2m-printer-force-disconnect"' in template
+    assert "d-none d-md-block" in template
+    assert "method:'POST'" in client
+    assert '_request("POST", "/disconnect", json={}, timeout=5)' in service
+    assert "Disconnect requested" in service
 
 
 def test_small_label_text_is_fitted_and_clipped_consistently():

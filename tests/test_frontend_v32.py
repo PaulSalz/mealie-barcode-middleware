@@ -61,12 +61,25 @@ def test_first_paint_is_server_theme_only():
     assert 'templates.env.globals["get_theme"] = get_template_theme' in templating
 
 
-def test_layer_visibility_drives_canonical_editor_immediately():
-    source = read("app/static/js/labels-v24.js")
-    assert "b21-v2-visible" in source
-    assert "input.dispatchEvent(new Event('change',{bubbles:true}))" in source
-    assert "direct storage writes only become" in source
-    assert "oldSection.classList.add('d-none')" in source
+def test_layer_order_uses_canonical_editor_state_without_duplicate_visibility():
+    layers = read("app/static/js/labels-v24.js")
+    editor = read("app/static/js/labels-b21-v2.js")
+    assert "editor.moveLayer(id,direction)" in layers
+    assert "data-layer-forward" in layers
+    assert "data-layer-back" in layers
+    assert "data-layer-visible" not in layers
+    assert "b21-v2-visible" not in layers
+    assert "b21-v2-visible" in editor
+    assert "oldSection.classList.add('d-none')" in layers
+
+
+def test_label_text_color_and_frame_controls_are_explicit():
+    source = read("app/static/js/labels-v22.js")
+    assert 'id="b21-v22-text-color"' in source
+    assert '<option value="black">Black</option><option value="white">White</option>' in source
+    assert "style.invert ? '#000' : 'transparent'" in source
+    assert "style.invert ? '#fff' : '#111'" in source
+    assert "Useful for cutting/alignment" not in source
 
 
 def test_current_print_scope_bypasses_v30_queue_capture():
