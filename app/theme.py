@@ -41,6 +41,15 @@ GRAY_CSS = {
     "stone": {"50":"#fafaf9","100":"#f5f5f4","200":"#e7e5e4","300":"#d6d3d1","400":"#a8a29e","500":"#78716c","600":"#57534e","700":"#44403c","800":"#292524","900":"#1c1917","950":"#0c0a09"},
 }
 
+# Distinct page tints while keeping cards and text on the existing neutral scale.
+PAGE_BACKGROUND_CSS = {
+    "gray": {"light": "#edf0f4", "dark": "#080e18"},
+    "slate": {"light": "#e6eef8", "dark": "#041228"},
+    "zinc": {"light": "#eeeaf4", "dark": "#150d20"},
+    "neutral": {"light": "#ededed", "dark": "#0e0e0e"},
+    "stone": {"light": "#f3e9dc", "dark": "#1c1007"},
+}
+
 RADIUS_REM = {"0": 0.0, "0.5": 0.25, "1": 0.5, "1.5": 0.8, "2": 1.1}
 
 THEME_DEFAULTS = {
@@ -145,9 +154,10 @@ def save_theme(db, values: dict[str, str]) -> list[str]:
 
 def _palette_vars(base: str, mode: str) -> dict[str, str]:
     gray = GRAY_CSS.get(base, GRAY_CSS[THEME_DEFAULTS["base"]])
+    page = PAGE_BACKGROUND_CSS.get(base, PAGE_BACKGROUND_CSS[THEME_DEFAULTS["base"]])
     if mode == "dark":
         return {
-            "--b2m-page-bg": gray["950"],
+            "--b2m-page-bg": page["dark"],
             "--b2m-surface-bg": gray["900"],
             "--b2m-surface-secondary": gray["800"],
             "--b2m-input-bg": gray["800"],
@@ -156,7 +166,7 @@ def _palette_vars(base: str, mode: str) -> dict[str, str]:
             "--b2m-border": gray["700"],
         }
     return {
-        "--b2m-page-bg": gray["50"],
+        "--b2m-page-bg": page["light"],
         "--b2m-surface-bg": "#ffffff",
         "--b2m-surface-secondary": gray["100"],
         "--b2m-input-bg": "#ffffff",
