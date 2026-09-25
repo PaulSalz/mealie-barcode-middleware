@@ -95,12 +95,12 @@
   }
 
   function contrastVars(value) {
-    // Match the doubled effective strength in app.theme._epaper_values.
-    var contrast = Math.max(0, Math.min(100, parseInt(value, 10) || 0)) * 2;
+    // Match the full-range contrast curve in app.theme._epaper_values.
+    var contrast = Math.max(0, Math.min(100, parseInt(value, 10) || 0));
     return {
-      border: Math.max(24, 220 - Math.round(contrast * 1.7)),
-      muted: Math.max(0, 112 - Math.round(contrast * 0.9)),
-      surface: Math.max(238, 255 - Math.round(contrast * 0.12))
+      border: 220 - Math.round(220 * contrast / 100),
+      muted: 112 - Math.round(112 * contrast / 100),
+      surface: 255 - Math.round(55 * contrast / 100)
     };
   }
 

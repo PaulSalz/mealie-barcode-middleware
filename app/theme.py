@@ -181,11 +181,11 @@ def _epaper_values(contrast: str) -> tuple[int, int, int]:
         value = max(0, min(100, int(float(contrast))))
     except (TypeError, ValueError):
         value = int(THEME_DEFAULTS["contrast"])
-    # Keep the UI at 0-100 while doubling its effective contrast strength.
-    value *= 2
-    border = max(24, 220 - round(value * 1.7))
-    muted = max(0, 112 - round(value * 0.9))
-    surface = max(238, 255 - round(value * 0.12))
+    # Use the full slider range: black borders/text and a distinct gray
+    # surface at 100%. Integer half-up rounding matches the browser preview.
+    border = 220 - (220 * value + 50) // 100
+    muted = 112 - (112 * value + 50) // 100
+    surface = 255 - (55 * value + 50) // 100
     return border, muted, surface
 
 
