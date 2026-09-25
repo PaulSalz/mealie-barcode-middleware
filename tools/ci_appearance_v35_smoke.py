@@ -140,6 +140,10 @@ def main() -> None:
 
         # E-paper + contrast: the page must remain monochrome while contrast is
         # changed; only monochrome border/surface variables are allowed to move.
+        light_mode = page.locator('input[name="theme_mode"][value="light"]')
+        light_mode.check(force=True)
+        light_mode.dispatch_event("change")
+        assert html.get_attribute("data-bs-theme") == "light"
         epaper = page.locator('input[name="theme_epaper"]')
         epaper.check()
         assert html.get_attribute("data-b2m-epaper") == "true"
@@ -159,6 +163,19 @@ def main() -> None:
         assert border_after != border_before, (border_before, border_after, theme_debug())
         assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(255, 255, 255)"
 
+        # The dark e-paper palette reverses action fills to white with black text.
+        dark_mode = page.locator('input[name="theme_mode"][value="dark"]')
+        dark_mode.check(force=True)
+        dark_mode.dispatch_event("change")
+        assert html.get_attribute("data-bs-theme") == "dark"
+        assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(0, 0, 0)"
+        assert page.evaluate("getComputedStyle(document.body).color") == "rgb(255, 255, 255)"
+        action_colors = page.evaluate("""() => {
+            const style = getComputedStyle(document.getElementById('appearance-save-button'));
+            return [style.backgroundColor, style.color];
+        }""")
+        assert action_colors == ["rgb(255, 255, 255)", "rgb(0, 0, 0)"], (action_colors, theme_debug())
+
         # Save must persist exactly the already-visible state; it must not be the
         # event that finally makes the design correct.
         with page.expect_response(lambda r: r.url.endswith("/api/appearance-v24") and r.request.method == "POST") as saved:
@@ -177,7 +194,8 @@ def main() -> None:
         assert "grayscale" in page.evaluate("getComputedStyle(document.documentElement).filter")
         assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--tblr-border-radius').trim()") == "1.1rem"
         primary_reload = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--tblr-primary').trim()")
-        assert primary_reload.lower() in ("#000", "#000000"), (primary_reload, theme_debug())
+        assert page.locator("html").get_attribute("data-bs-theme") == "dark"
+        assert primary_reload.lower() in ("#fff", "#ffffff"), (primary_reload, theme_debug())
 
         if errors:
             raise AssertionError("Appearance browser JavaScript errors: " + " | ".join(errors))
