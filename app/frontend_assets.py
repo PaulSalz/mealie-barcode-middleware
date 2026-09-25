@@ -388,12 +388,6 @@ html[data-b2m-epaper="true"] body .card:has(#item-stat-last) .avatar {
   background: var(--b2m-v35-utility-bg) !important;
   background-image: none !important;
 }
-html[data-b2m-epaper="true"].b2m-epaper-v9 body .b2m-brand-text {
-  background: none !important;
-  color: var(--b2m-v35-text) !important;
-  -webkit-text-fill-color: var(--b2m-v35-text) !important;
-  animation: none !important;
-}
 html[data-b2m-epaper="true"].b2m-epaper-v9 body .b2m-scan-link-card {
   background: var(--b2m-v35-surface-bg) !important;
   border-color: var(--b2m-v35-border) !important;
