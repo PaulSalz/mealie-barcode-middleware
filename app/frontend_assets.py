@@ -450,12 +450,6 @@ html[data-bs-theme="dark"][data-b2m-epaper="true"] body .card .status-indicator-
 html[data-bs-theme="dark"][data-b2m-epaper="true"] body .card .status-dot {
   background-color: #000 !important;
 }
-html[data-bs-theme="dark"][data-b2m-epaper="true"] body .navbar .navbar-brand a {
-  background: none !important;
-  color: #000 !important;
-  -webkit-text-fill-color: #000 !important;
-  animation: none !important;
-}
 
 /* Light e-paper filled buttons keep white labels and glyphs above utility text rules. */
 html[data-b2m-epaper="true"][data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]),
