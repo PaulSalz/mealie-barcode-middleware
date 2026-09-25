@@ -3,6 +3,8 @@ from pathlib import Path
 from app.theme import (
     COLOR_CSS,
     THEME_CHOICES,
+    _epaper_values,
+    _epaper_surface_secondary,
     THEME_DEFAULTS,
     build_theme_css,
     build_theme_live_catalog_css,
@@ -56,9 +58,31 @@ def test_persisted_theme_contains_complete_first_paint_state():
     })
     assert "--b2m-saved-mode:dark" in css
     assert "--tblr-border-radius:0.8rem" in css
-    assert "--b2m-page-bg:#09090b" in css
+    assert "--b2m-page-bg:#150d20" in css
     assert "--tblr-primary:#2fb344" in css
     assert "b2m-logo-rainbow" in css
+
+
+def test_epaper_palette_uses_full_mode_aware_monochrome_range():
+    assert _epaper_values("100", "light") == (0, 0, 200)
+    assert _epaper_surface_secondary("100", "light") == 223
+    assert _epaper_values("100", "dark") == (255, 255, 64)
+    assert _epaper_surface_secondary("100", "dark") == 96
+
+    css = build_theme_css({"mode": "dark", "epaper": "true", "contrast": "100"})
+    light, dark = css.split("[data-bs-theme=dark]{", 1)
+    assert "--b2m-page-bg:#ffffff" in light
+    assert "--b2m-text:#000000" in light
+    assert "--b2m-surface-bg:rgb(200,200,200)" in light
+    assert "--tblr-primary:#000000" in light
+    assert "--b2m-page-bg:#000000" in dark
+    assert "--b2m-text:#ffffff" in dark
+    assert "--b2m-surface-bg:rgb(64,64,64)" in dark
+    assert "--tblr-primary:#ffffff" in dark
+
+    live = build_theme_live_catalog_css()
+    assert 'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000' in live
+    assert "--b2m-text:#fff" in live
 
 
 def test_personal_stylesheet_exports_complete_saved_state_for_head_bootstrap():
