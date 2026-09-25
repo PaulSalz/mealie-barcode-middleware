@@ -14,13 +14,6 @@
         return Math.floor(seconds / 86400) + 'd ' + Math.floor((seconds % 86400) / 3600) + 'h';
     }
 
-    function exposeLabelsNav() {
-        document.querySelectorAll('a.nav-link[href="/labels"]').forEach(function(link) {
-            var item = link.closest('.nav-item');
-            if (item) item.classList.remove('d-md-none');
-        });
-    }
-
     function addSettingsLink(afterSelector, tab, label, icon) {
         if (window.location.pathname !== '/settings' || document.querySelector('a[href="/settings?tab=' + tab + '"]')) return;
         var after = document.querySelector(afterSelector);
@@ -223,7 +216,6 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        exposeLabelsNav();
         addSettingsLink('a.list-group-item[href="/settings?tab=mealie"]', 'printing', 'Printing', 'ti-printer');
         addSettingsLink('a.list-group-item[href="/settings?tab=scanning"]', 'notifications', 'Notifications', 'ti-bell-cog');
         renderPrintingSettings();
