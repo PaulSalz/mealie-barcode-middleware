@@ -87,7 +87,7 @@ def test_epaper_palette_uses_mode_aware_surfaces_and_readable_text():
     assert "--b2m-page-bg:#000000" in dark
     assert "--b2m-text:#ffffff" in dark
     assert "--b2m-surface-bg:rgb(118,118,118)" in dark
-    assert "--b2m-surface-secondary:rgb(128,128,128)" in dark
+    assert "--b2m-surface-secondary:rgb(152,152,152)" in dark
     assert "--b2m-epaper-utility-bg:rgb(160,160,160)" in dark
     assert "--b2m-epaper-utility-text:#000000" in dark
     assert "--b2m-input-bg:rgb(160,160,160)" in dark
