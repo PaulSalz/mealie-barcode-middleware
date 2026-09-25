@@ -135,7 +135,22 @@ def main() -> None:
         assert primary.lower() == "#2fb344", (primary, theme_debug())
         page.locator('input[name="theme_logo_color"][value="rainbow"]').check(force=True)
         assert html.get_attribute("data-b2m-logo-color") == "rainbow"
-        logo_background = page.evaluate("getComputedStyle(document.querySelector('.navbar-brand a')).backgroundImage")
+        # In normal mode the wordmark itself must animate, not only its parent.
+        epaper_toggle = page.locator('input[name="theme_epaper"]')
+        if epaper_toggle.is_checked():
+            epaper_toggle.uncheck()
+        normal_logo = page.locator('.navbar-brand a .b2m-brand-text')
+        normal_animation = normal_logo.evaluate("""el => {
+            const style = getComputedStyle(el);
+            return {name: style.animationName, duration: style.animationDuration, timing: style.animationTimingFunction, state: style.animationPlayState, position: style.backgroundPosition};
+        }""")
+        assert normal_animation["name"] == "b2m-logo-rainbow-live", (normal_animation, theme_debug())
+        assert normal_animation["duration"] == "12s" and normal_animation["timing"] == "linear" and normal_animation["state"] == "running", (normal_animation, theme_debug())
+        normal_position_before = normal_animation["position"]
+        page.wait_for_timeout(250)
+        normal_position_after = normal_logo.evaluate("el => getComputedStyle(el).backgroundPosition")
+        assert normal_position_before != normal_position_after, (normal_position_before, normal_position_after, theme_debug())
+        logo_background = page.evaluate("getComputedStyle(document.querySelector('.navbar-brand a .b2m-brand-text')).backgroundImage")
         assert "gradient" in logo_background.lower(), (logo_background, theme_debug())
 
         # E-paper + contrast: the page must remain monochrome while contrast is
@@ -218,7 +233,7 @@ def main() -> None:
             };
         }""")
         logo_animation = page.evaluate("""() => {
-            const style = getComputedStyle(document.querySelector('.navbar-brand a'));
+            const style = getComputedStyle(document.querySelector('.navbar-brand a .b2m-brand-text'));
             return {
                 name: style.animationName,
                 duration: style.animationDuration,
