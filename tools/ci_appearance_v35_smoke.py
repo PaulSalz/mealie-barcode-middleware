@@ -212,16 +212,20 @@ def main() -> None:
                 card: card ? getComputedStyle(card).backgroundColor : '',
                 avatar: avatar ? getComputedStyle(avatar).backgroundColor : '',
                 icon: icon ? getComputedStyle(icon).color : '',
-                status: status ? getComputedStyle(status).color : ''
+                status: status ? getComputedStyle(status).color : '',
+                statValue: document.getElementById('stat-total') ? getComputedStyle(document.getElementById('stat-total')).color : '',
+                statusCircle: document.querySelector('#health-indicator .status-indicator-circle') ? getComputedStyle(document.querySelector('#health-indicator .status-indicator-circle')).backgroundColor : ''
             };
         }""")
         assert dashboard_colors == {
             "page": "rgb(0, 0, 0)",
             "text": "rgb(255, 255, 255)",
-            "card": "rgb(40, 40, 40)",
-            "avatar": "rgb(72, 72, 72)",
-            "icon": "rgb(255, 255, 255)",
-            "status": "rgb(255, 255, 255)"
+            "card": "rgb(80, 80, 80)",
+            "avatar": "rgb(192, 192, 192)",
+            "icon": "rgb(0, 0, 0)",
+            "status": "rgb(255, 255, 255)",
+            "statValue": "rgb(255, 255, 255)",
+            "statusCircle": "rgb(255, 255, 255)"
         }, (dashboard_colors, theme_debug())
 
         if errors:
