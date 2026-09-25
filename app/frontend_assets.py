@@ -110,11 +110,11 @@ def _v35_epaper_vars(mode: str) -> dict[str, str]:
     action_text = "#000" if dark else "#fff"
     values = {
         "--b2m-v35-page-bg": "#000" if dark else "#fff",
-        "--b2m-v35-surface-bg": "var(--b2m-epaper-surface,#505050)" if dark else "var(--b2m-epaper-surface,#e8e8e8)",
-        "--b2m-v35-surface-secondary": "var(--b2m-epaper-surface-secondary,#707070)" if dark else "var(--b2m-epaper-surface-secondary,#d8d8d8)",
+        "--b2m-v35-surface-bg": "var(--b2m-epaper-surface,#b8b8b8)" if dark else "var(--b2m-epaper-surface,#e8e8e8)",
+        "--b2m-v35-surface-secondary": "var(--b2m-epaper-surface-secondary,#d8d8d8)" if dark else "var(--b2m-epaper-surface-secondary,#d8d8d8)",
         "--b2m-v35-utility-bg": "var(--b2m-epaper-utility-bg,#c0c0c0)" if dark else "var(--b2m-epaper-utility-bg,#d0d0d0)",
         "--b2m-v35-utility-text": "#000",
-        "--b2m-v35-input-bg": "var(--b2m-epaper-input-bg,#505050)" if dark else "#fff",
+        "--b2m-v35-input-bg": "var(--b2m-epaper-input-bg,var(--b2m-epaper-utility-bg,#c0c0c0))" if dark else "#fff",
         "--b2m-v35-text": text,
         "--b2m-v35-muted": "var(--b2m-epaper-muted," + text + ")",
         "--b2m-v35-border": "var(--b2m-epaper-border," + text + ")",
@@ -429,6 +429,34 @@ html body .form-selectgroup-label, html body .input-group-text {
 html[data-b2m-epaper="true"] body * {
   transition: none !important;
 }
+/* Dark e-paper keeps the page black, while readable components are inverted. */
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .navbar,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .card,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .dropdown-menu,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .modal-content,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .offcanvas,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .toast,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .list-group-item,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .card :is(h1,h2,h3,h4,h5,h6,p,span,small,strong,em,label,a,td,th,li,div),
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .navbar :is(span,small,strong,a,i,svg),
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .dropdown-menu *,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .modal-content *,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .offcanvas *,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .toast *,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .list-group-item * {
+  color: #000 !important;
+}
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .card .status-indicator-circle,
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .card .status-dot {
+  background-color: #000 !important;
+}
+html[data-bs-theme="dark"][data-b2m-epaper="true"] body .navbar .navbar-brand a {
+  background: none !important;
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  animation: none !important;
+}
+
 """.strip()
 
 
