@@ -17,7 +17,7 @@ def test_v35_assets_keep_one_theme_runtime():
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-scope-v32.js" in LABEL_JS
     assert LABEL_JS.index("js/labels-scope-v32.js") < LABEL_JS.index("js/labels-fixes-v30.js")
-    assert APP_VERSION == "2026.09.24.3"
+    assert APP_VERSION == "2026.09.25.1"
 
 
 def test_navbar_mode_is_atomic_and_persisted_per_user():

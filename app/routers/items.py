@@ -158,6 +158,13 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
         if not current_label_id and isinstance(mealie_food.get("label"), dict):
             current_label_id = mealie_food["label"].get("id")
 
+    shopping_lists = get_shopping_lists()
+    default_shopping_list_id = get_default_shopping_list_id(db)
+    default_shopping_list_name = next(
+        (row["name"] for row in shopping_lists if row["id"] == str(default_shopping_list_id)),
+        None,
+    )
+
     return templates.TemplateResponse(request, "item_detail.html", {
         "item": item,
         "mapped_items": mapped_items,
@@ -165,8 +172,9 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
         "labels": labels,
         "current_label_id": current_label_id,
         "stats": _item_scan_stats(db, item_id),
-        "shopping_lists": get_shopping_lists(),
-        "default_shopping_list_id": get_default_shopping_list_id(db),
+        "shopping_lists": shopping_lists,
+        "default_shopping_list_id": default_shopping_list_id,
+        "default_shopping_list_name": default_shopping_list_name,
         "saved": request.query_params.get("saved") == "1",
         "routing_saved": request.query_params.get("routing_saved") == "1",
         "edit_error": request.query_params.get("edit_error") == "1",
