@@ -44,7 +44,7 @@ def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
         "epaper": "true",
     })
     assert "animation:b2m-logo-rainbow 12s linear infinite" in rainbow
-    assert ".navbar-brand a .b2m-brand-text{background:linear-gradient(90deg," in rainbow
+    assert ".navbar-brand a .b2m-brand-text{background-image:linear-gradient(90deg," in rainbow
     assert "background-position:100% 50%" in rainbow
     assert "html[data-bs-theme=dark] .navbar-brand a{" not in rainbow
     assert "animation:none!important" not in rainbow
