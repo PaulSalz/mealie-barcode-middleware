@@ -71,11 +71,11 @@ def test_epaper_palette_uses_mode_aware_surfaces_and_readable_text():
     assert _epaper_values("100", "light") == (0, 0, 128)
     assert _epaper_surface_secondary("100", "light") == 136
     assert _epaper_utility_bg("100", "light") == 160
-    assert _epaper_values("0", "dark") == (96, 255, 80)
-    assert _epaper_surface_secondary("0", "dark") == 120
+    assert _epaper_values("0", "dark") == (96, 255, 184)
+    assert _epaper_surface_secondary("0", "dark") == 216
     assert _epaper_utility_bg("0", "dark") == 192
-    assert _epaper_values("100", "dark") == (255, 255, 112)
-    assert _epaper_surface_secondary("100", "dark") == 128
+    assert _epaper_values("100", "dark") == (255, 255, 118)
+    assert _epaper_surface_secondary("100", "dark") == 152
     assert _epaper_utility_bg("100", "dark") == 160
 
     css = build_theme_css({"mode": "dark", "epaper": "true", "contrast": "100"})
@@ -90,13 +90,13 @@ def test_epaper_palette_uses_mode_aware_surfaces_and_readable_text():
     assert "--b2m-surface-secondary:rgb(128,128,128)" in dark
     assert "--b2m-epaper-utility-bg:rgb(160,160,160)" in dark
     assert "--b2m-epaper-utility-text:#000000" in dark
-    assert "--b2m-input-bg:rgb(80,80,80)" in dark
+    assert "--b2m-input-bg:rgb(160,160,160)" in dark
     assert "--tblr-primary:#ffffff" in dark
 
     live = build_theme_live_catalog_css()
     assert 'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000' in live
     assert "--b2m-text:#fff" in live
-    assert "var(--b2m-epaper-input-bg,#505050)" in live
+    assert "var(--b2m-epaper-input-bg,var(--b2m-epaper-utility-bg,#c0c0c0))" in live
     assert "#c0c0c0" in live
 
 
