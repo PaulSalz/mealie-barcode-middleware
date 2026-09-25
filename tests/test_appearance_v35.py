@@ -54,6 +54,10 @@ def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
     })
     assert ".navbar-brand a{background:none!important;color:#d63939!important" in colored
 
+    live = build_theme_live_catalog_css()
+    assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a{' in live
+    assert "animation:b2m-logo-rainbow-live 12s linear infinite!important" in live
+    assert 'html[data-b2m-epaper="true"] .navbar-brand a' not in live
 def test_personal_theme_does_not_inherit_legacy_global_theme():
     source = read("app/access_v23.py")
     personal = source.split("def personal_theme", 1)[1].split("def save_personal_theme", 1)[0]
