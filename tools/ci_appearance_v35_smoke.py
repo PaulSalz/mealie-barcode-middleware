@@ -168,7 +168,8 @@ def main() -> None:
         dark_mode.check(force=True)
         dark_mode.dispatch_event("change")
         assert html.get_attribute("data-bs-theme") == "dark"
-        assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(0, 0, 0)"
+        dark_page = page.evaluate("getComputedStyle(document.body).backgroundColor")
+        assert dark_page == "rgb(0, 0, 0)", (dark_page, theme_debug())
         assert page.evaluate("getComputedStyle(document.body).color") == "rgb(255, 255, 255)"
         action_colors = page.evaluate("""() => {
             const style = getComputedStyle(document.getElementById('appearance-save-button'));
