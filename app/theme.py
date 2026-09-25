@@ -263,7 +263,7 @@ def build_theme_css(theme: dict[str, str]) -> str:
     if logo == "rainbow":
         extra.extend([
             "@keyframes b2m-logo-rainbow{0%{background-position:0% 50%}100%{background-position:100% 50%}}",
-            ".navbar-brand a .b2m-brand-text{background:linear-gradient(90deg,#d63939 0%,#f76707 7.142857%,#f59f00 14.285714%,#2fb344 21.428571%,#17a2b8 28.571429%,#4263eb 35.714286%,#ae3ec9 42.857143%,#d63939 50%,#f76707 57.142857%,#f59f00 64.285714%,#2fb344 71.428571%,#17a2b8 78.571429%,#4263eb 85.714286%,#ae3ec9 92.857143%,#d63939 100%);background-size:200% 100%;background-clip:text;-webkit-background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent!important;animation:b2m-logo-rainbow 12s linear infinite}",
+            ".navbar-brand a .b2m-brand-text{background-image:linear-gradient(90deg,#d63939 0%,#f76707 7.142857%,#f59f00 14.285714%,#2fb344 21.428571%,#17a2b8 28.571429%,#4263eb 35.714286%,#ae3ec9 42.857143%,#d63939 50%,#f76707 57.142857%,#f59f00 64.285714%,#2fb344 71.428571%,#17a2b8 78.571429%,#4263eb 85.714286%,#ae3ec9 92.857143%,#d63939 100%);background-size:200% 100%;background-clip:text;-webkit-background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent!important;animation:b2m-logo-rainbow 12s linear infinite}",
         ])
     else:
         color = COLOR_CSS[logo]["hex"]
