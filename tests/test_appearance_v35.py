@@ -44,6 +44,8 @@ def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
         "epaper": "true",
     })
     assert "animation:b2m-logo-rainbow 12s linear infinite" in rainbow
+    assert ".navbar-brand a .b2m-brand-text{background:linear-gradient(90deg," in rainbow
+    assert "background-position:100% 50%" in rainbow
     assert "html[data-bs-theme=dark] .navbar-brand a{" not in rainbow
     assert "animation:none!important" not in rainbow
 
@@ -57,6 +59,8 @@ def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
     live = build_theme_live_catalog_css()
     assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a{' in live
     assert "animation:b2m-logo-rainbow-live 12s linear infinite!important" in live
+    assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{' in live
+    assert "background-position:100% 50%" in live
     assert 'html[data-b2m-epaper="true"] .navbar-brand a' not in live
 def test_personal_theme_does_not_inherit_legacy_global_theme():
     source = read("app/access_v23.py")
