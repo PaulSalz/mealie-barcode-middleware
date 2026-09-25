@@ -360,7 +360,6 @@
   function applyPreset(name) {
     const preset = PRESETS[name];
     if (!preset) return;
-    activePreset = name;
     exampleActive = true;
     const nameInput = field('name');
     if (nameInput && window.location.pathname === '/actions/new' && (!nameInput.value.trim() || nameInput.dataset.b2mGeneratedDefault === 'true')) {
@@ -384,6 +383,7 @@
     if (payloadInput) payloadInput.value = JSON.stringify(payload, null, 2);
     renderObjectEditor('params', preset.params);
     renderObjectEditor('payload', payload);
+    activePreset = name;
 
     document.querySelectorAll('.b2m-action-preset').forEach((button) => {
       button.classList.toggle('active', button.dataset.preset === name);

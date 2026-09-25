@@ -223,8 +223,8 @@ def main() -> None:
         }""")
         page.locator('[data-preset="notification"]').click()
         notification_yaml = page.locator("#action-ha-yaml").input_value()
-        assert "action: persistent_notification.create" in notification_yaml
-        assert "event: b2m_action" not in notification_yaml
+        assert "action: persistent_notification.create" in notification_yaml, notification_yaml
+        assert "event: b2m_action" not in notification_yaml, notification_yaml
         assert not page.locator("#action-payload-json").is_visible()
 
         page.evaluate("""() => {
