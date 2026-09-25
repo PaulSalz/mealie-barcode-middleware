@@ -108,8 +108,8 @@ def _build_v35_surface_catalog_css() -> str:
             f'html[data-bs-theme="dark"][data-b2m-base="{base}"]{{{_css_vars(_v35_surface_vars(base, "dark"))}}}'
         )
     rules.extend([
-        'html[data-b2m-epaper="true"]{--b2m-v35-page-bg:#fff;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#f7f7f7);--b2m-v35-surface-secondary:#fff;--b2m-v35-input-bg:#fff;--b2m-v35-text:#000;--b2m-v35-muted:var(--b2m-epaper-muted,#444);--b2m-v35-border:var(--b2m-epaper-border,#555);--b2m-v35-card-shadow:none}',
-        'html[data-bs-theme="dark"][data-b2m-epaper="true"]{--b2m-v35-page-bg:#fff;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#f7f7f7);--b2m-v35-surface-secondary:#fff;--b2m-v35-input-bg:#fff;--b2m-v35-text:#000;--b2m-v35-muted:var(--b2m-epaper-muted,#444);--b2m-v35-border:var(--b2m-epaper-border,#555);--b2m-v35-card-shadow:none}',
+        'html[data-b2m-epaper="true"]{--b2m-v35-page-bg:#fff;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#c8c8c8);--b2m-v35-surface-secondary:var(--b2m-epaper-surface-secondary,#dfdfdf);--b2m-v35-input-bg:#fff;--b2m-v35-text:#000;--b2m-v35-muted:var(--b2m-epaper-muted,#000);--b2m-v35-border:var(--b2m-epaper-border,#000);--b2m-v35-card-shadow:none;--b2m-v35-action-bg:#000;--b2m-v35-action-text:#fff;--tblr-primary:#000;--tblr-primary-rgb:0,0,0;--tblr-link-color:#000;--tblr-link-hover-color:#000;--tblr-border-color:var(--b2m-v35-border);--tblr-border-color-translucent:var(--b2m-v35-border)}',
+        'html[data-bs-theme="dark"][data-b2m-epaper="true"]{--b2m-v35-page-bg:#000;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#404040);--b2m-v35-surface-secondary:var(--b2m-epaper-surface-secondary,#606060);--b2m-v35-input-bg:var(--b2m-epaper-input-bg,#0c0c0c);--b2m-v35-text:#fff;--b2m-v35-muted:var(--b2m-epaper-muted,#fff);--b2m-v35-border:var(--b2m-epaper-border,#fff);--b2m-v35-card-shadow:none;--b2m-v35-action-bg:#fff;--b2m-v35-action-text:#000;--tblr-primary:#fff;--tblr-primary-rgb:255,255,255;--tblr-link-color:#fff;--tblr-link-hover-color:#fff;--tblr-border-color:var(--b2m-v35-border);--tblr-border-color-translucent:var(--b2m-v35-border)}',
     ])
     return "".join(rules)
 
@@ -177,6 +177,67 @@ html body .text-muted,
 html body .form-hint,
 html body .card-subtitle {
   color: var(--b2m-v35-muted) !important;
+}
+/* E-paper replaces colored text, icons, borders and action fills with monochrome. */
+html[data-b2m-epaper="true"] body * {
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--b2m-v35-border) !important;
+}
+html[data-b2m-epaper="true"] body a,
+html[data-b2m-epaper="true"] body [class*="btn-outline-"] {
+  color: var(--b2m-v35-action-bg) !important;
+}
+html[data-b2m-epaper="true"] body [class*="bg-"]:not(.bg-transparent):not(.bg-white):not(.bg-body):not([class*="bg-body"]) {
+  background-color: var(--b2m-v35-action-bg) !important;
+  background-image: none !important;
+  border-color: var(--b2m-v35-action-bg) !important;
+  color: var(--b2m-v35-action-text) !important;
+}
+html[data-b2m-epaper="true"] body .bg-white,
+html[data-b2m-epaper="true"] body [class*="bg-body"] {
+  background-color: var(--b2m-v35-surface-bg) !important;
+  background-image: none !important;
+  color: var(--b2m-v35-text) !important;
+}
+html[data-b2m-epaper="true"] body .btn:not(.btn-link):not([class*="btn-outline-"]),
+html[data-b2m-epaper="true"] body .btn-check:checked + .btn,
+html[data-b2m-epaper="true"] body .dropdown-item.active,
+html[data-b2m-epaper="true"] body .list-group-item.active,
+html[data-b2m-epaper="true"] body .nav-link.active,
+html[data-b2m-epaper="true"] body .badge,
+html[data-b2m-epaper="true"] body [class*="alert-"],
+html[data-b2m-epaper="true"] body .progress-bar,
+html[data-b2m-epaper="true"] body mark {
+  background-color: var(--b2m-v35-action-bg) !important;
+  background-image: none !important;
+  border-color: var(--b2m-v35-action-bg) !important;
+  color: var(--b2m-v35-action-text) !important;
+}
+html[data-b2m-epaper="true"] body .btn:hover,
+html[data-b2m-epaper="true"] body .btn:focus,
+html[data-b2m-epaper="true"] body .btn:active,
+html[data-b2m-epaper="true"] body [class*="btn-outline-"]:hover,
+html[data-b2m-epaper="true"] body [class*="btn-outline-"]:focus,
+html[data-b2m-epaper="true"] body [class*="btn-outline-"]:active {
+  background-color: var(--b2m-v35-action-bg) !important;
+  background-image: none !important;
+  border-color: var(--b2m-v35-action-bg) !important;
+  color: var(--b2m-v35-action-text) !important;
+}
+html[data-b2m-epaper="true"] body svg {
+  color: var(--b2m-v35-text) !important;
+}
+html[data-b2m-epaper="true"] body svg[fill]:not([fill="none"]),
+html[data-b2m-epaper="true"] body svg [fill]:not([fill="none"]) {
+  fill: currentColor !important;
+}
+html[data-b2m-epaper="true"] body svg[stroke]:not([stroke="none"]),
+html[data-b2m-epaper="true"] body svg [stroke]:not([stroke="none"]) {
+  stroke: currentColor !important;
+}
+html[data-b2m-epaper="true"] body input,
+html[data-b2m-epaper="true"] body progress {
+  accent-color: var(--b2m-v35-action-bg) !important;
 }
 /* Theme switches update every surface in the same frame. */
 html body, html body .page, html body .page-wrapper, html body .page-body,
