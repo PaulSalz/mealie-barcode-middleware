@@ -185,12 +185,12 @@ def _epaper_values(contrast: str, mode: str = "light") -> tuple[int, int, int]:
         # Keep cards distinct from black while preserving white text contrast.
         border = 96 + (159 * value + 50) // 100
         muted = 255
-        surface = 40 + (64 * value + 50) // 100
+        surface = 80 + (32 * value + 50) // 100
         return border, muted, surface
     # Light mode keeps all text pure black and progressively deepens surfaces.
     border = 170 - (170 * value + 50) // 100
     muted = 0
-    surface = 248 - (72 * value + 50) // 100
+    surface = 232 - (104 * value + 50) // 100
     return border, muted, surface
 
 
@@ -200,8 +200,18 @@ def _epaper_surface_secondary(contrast: str, mode: str = "light") -> int:
     except (TypeError, ValueError):
         value = int(THEME_DEFAULTS["contrast"])
     if mode == "dark":
-        return 72 + (48 * value + 50) // 100
-    return 240 - (96 * value + 50) // 100
+        return 120 + (8 * value + 50) // 100
+    return 216 - (80 * value + 50) // 100
+
+
+def _epaper_utility_bg(contrast: str, mode: str = "light") -> int:
+    try:
+        value = max(0, min(100, int(float(contrast))))
+    except (TypeError, ValueError):
+        value = int(THEME_DEFAULTS["contrast"])
+    if mode == "dark":
+        return 192 - (32 * value + 50) // 100
+    return 208 - (48 * value + 50) // 100
 
 
 def _css_vars(values: dict[str, str]) -> str:
@@ -245,6 +255,8 @@ def build_theme_css(theme: dict[str, str]) -> str:
     dark_epaper = _epaper_values(t["contrast"], "dark")
     light_secondary = _epaper_surface_secondary(t["contrast"], "light")
     dark_secondary = _epaper_surface_secondary(t["contrast"], "dark")
+    light_utility = _epaper_utility_bg(t["contrast"], "light")
+    dark_utility = _epaper_utility_bg(t["contrast"], "dark")
 
     extra: list[str] = []
     logo = t["logo_color"]
@@ -275,6 +287,8 @@ def build_theme_css(theme: dict[str, str]) -> str:
             "--b2m-epaper-muted": f"rgb({light_epaper[1]},{light_epaper[1]},{light_epaper[1]})",
             "--b2m-epaper-surface": f"rgb({light_epaper[2]},{light_epaper[2]},{light_epaper[2]})",
             "--b2m-epaper-surface-secondary": f"rgb({light_secondary},{light_secondary},{light_secondary})",
+            "--b2m-epaper-utility-bg": f"rgb({light_utility},{light_utility},{light_utility})",
+            "--b2m-epaper-utility-text": "#000000",
             "--b2m-epaper-input-bg": "#ffffff",
             "--tblr-primary": "#000000",
             "--tblr-primary-rgb": "0,0,0",
@@ -285,7 +299,7 @@ def build_theme_css(theme: dict[str, str]) -> str:
             "--b2m-page-bg": "#000000",
             "--b2m-surface-bg": f"rgb({dark_epaper[2]},{dark_epaper[2]},{dark_epaper[2]})",
             "--b2m-surface-secondary": f"rgb({dark_secondary},{dark_secondary},{dark_secondary})",
-            "--b2m-input-bg": "rgb(48,48,48)",
+            "--b2m-input-bg": "rgb(80,80,80)",
             "--b2m-text": "#ffffff",
             "--b2m-muted": f"rgb({dark_epaper[1]},{dark_epaper[1]},{dark_epaper[1]})",
             "--b2m-border": f"rgb({dark_epaper[0]},{dark_epaper[0]},{dark_epaper[0]})",
@@ -295,7 +309,9 @@ def build_theme_css(theme: dict[str, str]) -> str:
             "--b2m-epaper-muted": f"rgb({dark_epaper[1]},{dark_epaper[1]},{dark_epaper[1]})",
             "--b2m-epaper-surface": f"rgb({dark_epaper[2]},{dark_epaper[2]},{dark_epaper[2]})",
             "--b2m-epaper-surface-secondary": f"rgb({dark_secondary},{dark_secondary},{dark_secondary})",
-            "--b2m-epaper-input-bg": "rgb(48,48,48)",
+            "--b2m-epaper-utility-bg": f"rgb({dark_utility},{dark_utility},{dark_utility})",
+            "--b2m-epaper-utility-text": "#000000",
+            "--b2m-epaper-input-bg": "rgb(80,80,80)",
             "--tblr-primary": "#ffffff",
             "--tblr-primary-rgb": "255,255,255",
             "--tblr-link-color": "#ffffff",
@@ -351,8 +367,8 @@ def build_theme_live_catalog_css() -> str:
         rules.append(f'html[data-b2m-radius="{name}"]{{{_css_vars(_radius_vars(name))}}}')
 
     rules.extend([
-        'html[data-b2m-epaper="true"]{--b2m-page-bg:#fff;--b2m-surface-bg:var(--b2m-epaper-surface,#b0b0b0);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#909090);--b2m-input-bg:#fff;--b2m-text:#000;--b2m-muted:var(--b2m-epaper-muted,#000);--b2m-border:var(--b2m-epaper-border,#000);--b2m-card-shadow:none;--b2m-page-filter:grayscale(1);--tblr-primary:#000;--tblr-primary-rgb:0,0,0;--tblr-link-color:#000;--tblr-link-hover-color:#000}',
-        'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000;--b2m-surface-bg:var(--b2m-epaper-surface,#686868);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#787878);--b2m-input-bg:var(--b2m-epaper-input-bg,#303030);--b2m-text:#fff;--b2m-muted:var(--b2m-epaper-muted,#fff);--b2m-border:var(--b2m-epaper-border,#fff);--b2m-card-shadow:none;--tblr-primary:#fff;--tblr-primary-rgb:255,255,255;--tblr-link-color:#fff;--tblr-link-hover-color:#fff}',
+        'html[data-b2m-epaper="true"]{--b2m-page-bg:#fff;--b2m-surface-bg:var(--b2m-epaper-surface,#e8e8e8);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#d8d8d8);--b2m-epaper-utility-bg:var(--b2m-epaper-utility-bg,#d0d0d0);--b2m-epaper-utility-text:#000;--b2m-input-bg:#fff;--b2m-text:#000;--b2m-muted:var(--b2m-epaper-muted,#000);--b2m-border:var(--b2m-epaper-border,#000);--b2m-card-shadow:none;--b2m-page-filter:grayscale(1);--tblr-primary:#000;--tblr-primary-rgb:0,0,0;--tblr-link-color:#000;--tblr-link-hover-color:#000}',
+        'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000;--b2m-surface-bg:var(--b2m-epaper-surface,#505050);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#707070);--b2m-epaper-utility-bg:var(--b2m-epaper-utility-bg,#c0c0c0);--b2m-epaper-utility-text:#000;--b2m-input-bg:var(--b2m-epaper-input-bg,#505050);--b2m-text:#fff;--b2m-muted:var(--b2m-epaper-muted,#fff);--b2m-border:var(--b2m-epaper-border,#fff);--b2m-card-shadow:none;--tblr-primary:#fff;--tblr-primary-rgb:255,255,255;--tblr-link-color:#fff;--tblr-link-hover-color:#fff}',
         'html[data-b2m-epaper="true"] .navbar-brand a{background:none!important;color:var(--b2m-text)!important;-webkit-text-fill-color:var(--b2m-text)!important;animation:none!important}',
         'html[data-b2m-epaper="false"]{--b2m-page-filter:none}',
     ])
