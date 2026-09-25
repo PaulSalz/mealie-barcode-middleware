@@ -12,8 +12,9 @@
   </div>
 </div>
 
+<div class="b2m-dashboard-mobile-flow">
 {% if system_ready %}
-<div class="alert alert-success d-flex align-items-center mb-3" role="status">
+<div class="alert alert-success d-flex align-items-center mb-3 b2m-dashboard-readiness" role="status">
   <span class="avatar avatar-sm bg-green-lt text-green me-3"><i class="ti ti-circle-check"></i></span>
   <div class="flex-fill">
     <div class="fw-semibold">B2M is ready</div>
@@ -21,7 +22,7 @@
   </div>
 </div>
 {% else %}
-<div class="card mb-3 border-warning" id="readiness-card">
+<div class="card mb-3 border-warning b2m-dashboard-readiness" id="readiness-card">
   <div class="card-header">
     <div><h3 class="card-title"><i class="ti ti-tool me-2"></i>Needs attention</h3><p class="card-subtitle">Follow these steps to get B2M fully ready. Your existing data is safe.</p></div>
   </div>
@@ -39,7 +40,12 @@
 </div>
 {% endif %}
 
-<div class="row row-deck row-cards mb-3">
+<div class="b2m-mobile-dashboard-actions d-md-none">
+  <a class="btn btn-primary" href="/shopping-print"><i class="ti ti-printer icon"></i> Print shopping list</a>
+  <a class="btn btn-outline-primary" href="/barcodes?status=pending"><i class="ti ti-link icon"></i> Link codes</a>
+</div>
+
+<div class="row row-deck row-cards mb-3 b2m-dashboard-overview">
   <div class="col-lg-7"><div class="card h-100"><div class="card-body"><div class="row g-3 align-items-center">
     <div class="col-auto"><span id="health-indicator" class="status-indicator status-{{ 'green' if mealie_reachable else 'red' }}{{ ' status-indicator-animated' if mealie_reachable }}"><span class="status-indicator-circle"></span><span class="status-indicator-circle"></span><span class="status-indicator-circle"></span></span></div>
     <div class="col"><h2 class="page-title mb-0">Mealie</h2><div class="text-secondary"><ul class="list-inline list-inline-dots mb-0"><li class="list-inline-item"><span id="health-status" class="text-{{ 'green' if mealie_reachable else 'red' }}">{{ 'Connected' if mealie_reachable else 'Unreachable' }}</span></li>{% if last_sync_time %}<li class="list-inline-item" title="{{ last_sync_time|localtime }}">Last sync: {{ last_sync_time|relative_time }}</li>{% else %}<li class="list-inline-item">No item sync yet</li>{% endif %}</ul></div></div>
@@ -48,14 +54,14 @@
   <div class="col-sm-6 col-lg-3"><div class="card h-100 b2m-stat-card"><div class="card-body"><div class="d-flex align-items-center gap-3"><span class="avatar bg-orange-lt text-orange"><i class="ti ti-refresh"></i></span><div><div class="subheader">Retry Queue</div><div class="h1 mb-0 text-{{ 'green' if queue_depth == 0 else 'red' }}" id="stat-queue">{{ queue_depth }}</div><div class="text-secondary small">pending retries</div></div></div></div></div></div>
 </div>
 
-<div class="row row-deck row-cards mb-3">
+<div class="row row-deck row-cards mb-3 b2m-dashboard-counts">
   <div class="col-sm-6 col-lg-3"><a href="/barcodes?status=all" class="card card-link b2m-stat-card"><div class="card-body"><div class="d-flex align-items-center gap-3"><span class="avatar bg-blue-lt text-blue"><i class="ti ti-barcode"></i></span><div><div class="subheader">Total Barcodes</div><div class="h1 mb-0" id="stat-total">{{ total_barcodes }}</div></div></div></div></a></div>
   <div class="col-sm-6 col-lg-3"><a href="/barcodes?status=mapped" class="card card-link b2m-stat-card"><div class="card-body"><div class="d-flex align-items-center gap-3"><span class="avatar bg-green-lt text-green"><i class="ti ti-link"></i></span><div><div class="subheader">Linked</div><div class="h1 mb-0{{ ' text-green' if mapped_count > 0 else '' }}" id="stat-mapped">{{ mapped_count }}</div></div></div></div></a></div>
   <div class="col-sm-6 col-lg-3"><a href="/barcodes?status=pending" class="card card-link b2m-stat-card"><div class="card-body"><div class="d-flex align-items-center gap-3"><span class="avatar bg-yellow-lt text-yellow"><i class="ti ti-link-plus"></i></span><div><div class="subheader">Pending Mapping</div><div class="h1 mb-0 text-{{ 'green' if pending_count == 0 else 'yellow' }}" id="stat-pending">{{ pending_count }}</div></div></div></div></a></div>
   <div class="col-sm-6 col-lg-3"><a href="/barcodes?status=unknown" class="card card-link b2m-stat-card"><div class="card-body"><div class="d-flex align-items-center gap-3"><span class="avatar bg-red-lt text-red"><i class="ti ti-help"></i></span><div><div class="subheader">Unknown</div><div class="h1 mb-0 text-{{ 'green' if unknown_count == 0 else 'red' }}" id="stat-unknown">{{ unknown_count }}</div></div></div></div></a></div>
 </div>
 
-<div class="card mb-3" id="shopping-lists-card">
+<div class="card mb-3 b2m-dashboard-shopping" id="shopping-lists-card">
   <div class="card-header"><div><h3 class="card-title">Shopping lists</h3><p class="card-subtitle">Unchecked items currently on each Mealie list. Click a list to open it in Mealie.</p></div><div class="card-actions"><a class="btn btn-primary btn-lg px-4" href="/shopping-print"><i class="ti ti-printer icon"></i> Print shopping list</a></div></div>
   <div class="card-body"><div class="row g-3" id="shopping-lists-status">
     {% for list in shopping_lists_status %}<div class="col-sm-6 col-lg-3" data-shopping-list-id="{{ list.id }}"><a href="{{ mealie_url }}/shopping-lists/{{ list.id }}" target="_blank" rel="noopener" class="border rounded p-3 h-100 d-block text-reset text-decoration-none b2m-shopping-list-link"><div class="d-flex align-items-center"><span class="avatar bg-blue-lt text-blue me-3"><i class="ti ti-list-check"></i></span><div class="min-w-0 flex-fill"><div class="fw-medium text-truncate">{{ list.name }}{% if list.default %} <span class="badge bg-blue-lt">default</span>{% endif %}</div><div class="h2 mb-0"><span class="shopping-list-count">{{ list.count }}</span> <span class="fs-5 fw-normal text-secondary">items</span></div></div><i class="ti ti-external-link text-secondary ms-2"></i></div></a></div>{% else %}<div class="col-12 text-secondary">No shopping lists returned by Mealie.</div>{% endfor %}
@@ -63,14 +69,14 @@
 </div>
 
 {% if frequent_foods or frequent_recipes or frequent_actions %}
-<div class="row row-deck row-cards mb-3">
+<div class="row row-deck row-cards mb-3 b2m-dashboard-frequent">
   <div class="col-lg-4"><div class="card h-100"><div class="card-header"><div><h3 class="card-title">Frequently used Foods</h3><p class="card-subtitle">Based on scan target snapshots.</p></div></div><div class="list-group list-group-flush">{% for entry in frequent_foods %}<a href="/items/{{ entry.id }}" class="list-group-item list-group-item-action d-flex align-items-center"><span class="me-auto">{{ entry.name }}</span><span class="badge bg-blue-lt">{{ entry.uses }} scans</span></a>{% endfor %}</div></div></div>
   <div class="col-lg-4"><div class="card h-100"><div class="card-header"><div><h3 class="card-title">Frequently used Recipes</h3><p class="card-subtitle">Historical recipe targets.</p></div></div><div class="list-group list-group-flush">{% for entry in frequent_recipes %}<a href="/recipes/{{ entry.id|urlencode }}" class="list-group-item list-group-item-action d-flex align-items-center"><span class="me-auto"><i class="ti ti-receipt me-1"></i>{{ entry.name }}</span><span class="badge bg-purple-lt">{{ entry.uses }} scans</span></a>{% endfor %}</div></div></div>
   <div class="col-lg-4"><div class="card h-100"><div class="card-header"><div><h3 class="card-title">Frequently used Actions</h3><p class="card-subtitle">Webhook / automation codes.</p></div></div><div class="list-group list-group-flush">{% for entry in frequent_actions %}<a href="/actions/{{ entry.id|urlencode }}" class="list-group-item list-group-item-action d-flex align-items-center"><span class="me-auto"><i class="ti ti-bolt me-1"></i>{{ entry.name }}</span><span class="badge bg-yellow-lt">{{ entry.uses }} scans</span></a>{% endfor %}</div></div></div>
 </div>
 {% endif %}
 
-<div class="row row-deck row-cards"><div class="col-12"><div class="card" id="recent-scans-card">
+<div class="row row-deck row-cards b2m-dashboard-recent"><div class="col-12"><div class="card" id="recent-scans-card">
 {% if recent_items %}
   <div class="card-header"><div><h3 class="card-title">Recent Scans</h3><p class="card-subtitle">Last {{ recent_items|length }} scan events, including multi-target scans.</p></div></div>
   <div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>Barcode</th><th>Product</th><th>Linked target</th><th>Source</th><th>Result</th><th>Scanned</th></tr></thead><tbody id="recent-scans-body">
@@ -80,5 +86,6 @@
   <div class="card-header"><h3 class="card-title">Getting Started</h3></div><div class="card-body"><p class="text-secondary">Complete these steps to start scanning products into your Mealie shopping list.</p><div class="list-group list-group-flush"><div class="list-group-item"><b>1. Connect to Mealie</b></div><div class="list-group-item"><b>2. Create a scanner token</b></div><div class="list-group-item"><b>3. Configure your scanner</b></div><div class="list-group-item"><b>4. Scan your first code</b></div></div></div>
 {% endif %}
 </div></div></div>
+</div>
 {% endblock %}
 {% block scripts %}<script src="/static/js/health.js?v={{ v }}&rev=2"></script><script src="/static/js/dashboard-v2.js?v={{ v }}&rev=2"></script>{% endblock %}
