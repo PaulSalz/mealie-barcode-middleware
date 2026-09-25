@@ -25,6 +25,10 @@ _http = httpx.Client(
 _print_lock = threading.Lock()
 
 
+class PrintOutcomeUnknown(RuntimeError):
+    """The print request was sent, but its final outcome could not be confirmed."""
+
+
 def _env(name: str, default: str = "") -> str:
     return (os.getenv(name, default) or default).strip()
 
@@ -103,10 +107,16 @@ def _http_error_message(exc: Exception, *, action: str = "request") -> str:
 
 
 def _connected(*, timeout: float = 2.0) -> bool:
-    try:
-        return bool(_request("GET", "/connected", timeout=timeout).json().get("connected"))
-    except Exception:
-        return False
+    """Confirm connection state once more before reporting a transient disconnect."""
+    for attempt in range(2):
+        try:
+            if bool(_request("GET", "/connected", timeout=timeout if attempt == 0 else min(timeout, 1.2)).json().get("connected")):
+                return True
+        except Exception:
+            pass
+        if attempt == 0:
+            time.sleep(0.12)
+    return False
 
 
 def _wait_connected(seconds: float = 3.0) -> bool:
@@ -165,7 +175,7 @@ def printer_status() -> dict:
     if not result["configured"]:
         return result
     try:
-        result["connected"] = bool(_request("GET", "/connected", timeout=2).json().get("connected"))
+        result["connected"] = _connected(timeout=1.5)
         if result["connected"]:
             try:
                 info = _request("GET", "/info", timeout=4).json()
@@ -247,13 +257,14 @@ def disconnect_printer() -> dict:
     cfg = config()
     if not cfg["url"]:
         raise RuntimeError("NIIMBLUE_URL is not configured")
-    if _connected():
-        try:
-            _request("POST", "/disconnect", json={}, timeout=5)
-        except httpx.HTTPError as exc:
-            raise RuntimeError(_http_error_message(exc, action="disconnect")) from exc
+    # Always ask niimblue-node to disconnect. /connected can briefly return a
+    # stale false value while BLE is still occupied, which must not block recovery.
+    try:
+        _request("POST", "/disconnect", json={}, timeout=5)
+    except httpx.HTTPError as exc:
+        raise RuntimeError(_http_error_message(exc, action="disconnect")) from exc
     result = printer_status()
-    result["message"] = "Disconnected"
+    result["message"] = "Disconnect requested"
     return result
 
 

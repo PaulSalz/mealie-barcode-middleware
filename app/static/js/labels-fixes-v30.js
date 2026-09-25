@@ -255,31 +255,105 @@
     if (!response.ok) throw new Error('Could not register label queue (HTTP ' + response.status + ')');
   }
 
+  function sleep(ms) { return new Promise(function (resolve) { window.setTimeout(resolve, ms); }); }
+
+  async function readJob(id) {
+    var response = await fetch('/labels/b21/jobs/' + encodeURIComponent(id), {headers:{'Accept':'application/json'}, cache:'no-store'});
+    var data = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+    return data;
+  }
+
+  async function waitForPrintJob(id, button, status) {
+    var deadline = Date.now() + 15 * 60 * 1000;
+    var pollErrors = 0;
+    while (Date.now() < deadline) {
+      try {
+        var job = await readJob(id);
+        pollErrors = 0;
+        if (status) {
+          status.className = 'small text-secondary b21-v2-job-state';
+          status.textContent = job.status + ' · ' + job.completed_pages + '/' + job.page_count + ' pages · ' + job.printed_labels + ' labels';
+        }
+        if (job.status === 'completed' || job.status === 'failed' || job.status === 'unknown') return job;
+      } catch (error) {
+        pollErrors += 1;
+        if (pollErrors >= 10) return {status:'unknown', error:'Print status could not be reached'};
+      }
+      await sleep(1000);
+    }
+    return {status:'unknown', error:'Print is taking longer than expected'};
+  }
+
   async function printWholeQueue(button) {
     var rows = queue();
     if (!rows.length) return;
     var p = profile(), d = fittedDesign();
     var old = button.innerHTML;
+    var status = $('b21-v2-job-state');
+    var submissionStarted = false;
     button.disabled = true;
-    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Printing ' + rows.length + '…';
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Preparing ' + rows.length + '…';
+    if (status) { status.className = 'small text-secondary b21-v2-job-state'; status.textContent = 'Preparing label queue…'; }
     try {
       await registerQueue(rows);
-      var pages = [];
-      for (var i = 0; i < rows.length; i++) {
-        pages.push({image_base64: await renderPng(rows[i]), quantity: Math.max(1, Number(rows[i].qty || 1))});
+      var pages;
+      if (window.__b2mB21StyledPrint && typeof window.__b2mB21StyledPrint.renderQueuePages === 'function') {
+        pages = await window.__b2mB21StyledPrint.renderQueuePages();
+      } else {
+        pages = [];
+        for (var i = 0; i < rows.length; i++) {
+          pages.push({
+            image_base64: await renderPng(rows[i]),
+            quantity: Math.max(1, Number(rows[i].qty || 1)),
+            width_mm:p.width_mm, height_mm:p.height_mm, density:p.density,
+            label_type:p.label_type, dpi:p.dpi, threshold:d.threshold
+          });
+        }
       }
-      var response = await fetch('/labels/b21/print-batch-v30', {
+      if (!pages.length) throw new Error('No labels to print');
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending print job…';
+      submissionStarted = true;
+      var response = await fetch('/labels/b21/jobs', {
         method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'},
-        body:JSON.stringify({pages:pages,width_mm:p.width_mm,height_mm:p.height_mm,density:p.density,label_type:p.label_type,dpi:p.dpi,threshold:d.threshold})
+        body:JSON.stringify({pages:pages})
       });
       var data = await response.json().catch(function () { return {}; });
-      if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
-      button.className = 'btn btn-success';
-      button.innerHTML = '<i class="ti ti-check icon"></i> Printed ' + (data.quantity || rows.length);
+      if (!response.ok) { submissionStarted = false; throw new Error(data.error || ('HTTP ' + response.status)); }
+      if (!data.id) throw new Error('Print job was accepted without a job ID');
+      submissionStarted = false;
+      if (status) status.textContent = 'Queued · ' + data.id;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Printing…';
+      var job = await waitForPrintJob(data.id, button, status);
+      if (job.status === 'completed') {
+        button.className = 'btn btn-success';
+        button.innerHTML = '<i class="ti ti-check icon"></i> Printed ' + job.printed_labels;
+      } else if (job.status === 'unknown') {
+        button.className = 'btn btn-outline-warning';
+        button.innerHTML = '<i class="ti ti-alert-triangle icon"></i> Check output';
+        if (status) {
+          status.className = 'small text-warning b21-v2-job-state';
+          status.textContent = 'Print result unknown. Check the printer output before retrying. ' + (job.error || '');
+        }
+        window.alert('The printer may have printed these labels. Check the output before retrying to avoid duplicates.');
+      } else {
+        throw new Error(job.error || 'Print job failed');
+      }
     } catch (error) {
-      button.className = 'btn btn-outline-danger';
-      button.innerHTML = '<i class="ti ti-alert-triangle icon"></i> Failed';
-      window.alert('B21 Pro queue print failed: ' + error.message);
+      if (submissionStarted) {
+        button.className = 'btn btn-outline-warning';
+        button.innerHTML = '<i class="ti ti-alert-triangle icon"></i> Check output';
+        if (status) {
+          status.className = 'small text-warning b21-v2-job-state';
+          status.textContent = 'Could not confirm print submission. Check the printer output before retrying.';
+        }
+        window.alert('The print request may have reached the printer. Check the output before retrying to avoid duplicates.');
+      } else {
+        button.className = 'btn btn-outline-danger';
+        button.innerHTML = '<i class="ti ti-alert-triangle icon"></i> Failed';
+        if (status) { status.className = 'small text-danger b21-v2-job-state'; status.textContent = error.message; }
+        window.alert('B21 Pro queue print failed: ' + error.message);
+      }
     } finally {
       window.setTimeout(function () {
         button.className = 'btn btn-outline-primary';
