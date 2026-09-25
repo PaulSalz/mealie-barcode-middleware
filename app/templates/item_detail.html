@@ -22,24 +22,14 @@
 <div class="card mb-3"><div class="card-header"><div><h3 class="card-title">Shopping destination</h3><p class="card-subtitle">Choose where scans of this Food are sent. The physical barcode does not need to change.</p></div></div>
 <form method="post" action="/items/{{ item.id }}/routing"><div class="card-body"><div class="row g-3">
 <div class="col-md-6"><label class="form-label">Route</label><select class="form-select" name="shopping_route" id="shopping-route">
-<option value="default" {{ 'selected' if item.shopping_route == 'default' }}>Default Mealie list</option>
+<option value="default" {{ 'selected' if item.shopping_route == 'default' }}>Dynamic — follow the current routing settings</option>
 <option value="mealie" {{ 'selected' if item.shopping_route == 'mealie' }}>Mealie only</option>
 <option value="homeassistant" {{ 'selected' if item.shopping_route == 'homeassistant' }}>Home Assistant only</option>
 <option value="both" {{ 'selected' if item.shopping_route == 'both' }}>Mealie + Home Assistant</option>
 <option value="none" {{ 'selected' if item.shopping_route == 'none' }}>Do not add anywhere</option>
 </select><div class="form-hint">HA events use the existing HA webhook with <code>result_type=shopping_route</code>.</div></div>
-<div class="col-md-6"><label class="form-label">Mealie shopping list</label><select class="form-select" name="shopping_list_id" id="shopping-list-id"><option value="">Default configured list</option>{% for list in shopping_lists %}<option value="{{ list.id }}" {{ 'selected' if item.shopping_list_id == list.id }}>{{ list.name }}{% if list.id == default_shopping_list_id %} · default{% endif %}</option>{% endfor %}</select><div class="form-hint">Used for Mealie or Both. Changing this later does not require a new code.</div></div>
+<div class="col-md-6"><label class="form-label">Mealie shopping list</label><select class="form-select" name="shopping_list_id" id="shopping-list-id"><option value="" {{ 'selected' if not item.shopping_list_id }}>Use the automatically selected list</option>{% for list in shopping_lists %}<option value="{{ list.id }}" {{ 'selected' if item.shopping_list_id == list.id }}>{{ list.name }}</option>{% endfor %}</select>{% if default_shopping_list_name %}<div class="form-hint d-flex align-items-center gap-2 mt-2"><span class="badge bg-blue text-blue-fg">Current default</span><span>{{ default_shopping_list_name }}</span></div>{% else %}<div class="form-hint mt-2">No current default list could be identified.</div>{% endif %}<div class="form-hint">The first option follows the list shown above and updates automatically. Used for Mealie or Both.</div></div>
 </div></div><div class="card-footer text-end"><button class="btn btn-primary" type="submit"><i class="ti ti-device-floppy icon"></i> Save destination</button></div></form></div>
-
-{% if item.source == 'mealie' and mealie_food %}
-<div class="card mb-3"><div class="card-header"><div><h3 class="card-title">Edit Food</h3><p class="card-subtitle">Changes are written directly to Mealie and open shopping-list entries are refreshed afterward.</p></div></div>
-<form method="post" action="/items/{{ item.id }}/edit"><div class="card-body"><div class="row g-3">
-<div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="name" required value="{{ mealie_food.name or item.name }}"></div>
-<div class="col-md-6"><label class="form-label">Plural name</label><input class="form-control" name="plural_name" value="{{ mealie_food.pluralName or '' }}"></div>
-<div class="col-md-6"><label class="form-label">Category / label</label><select class="form-select" name="label_id"><option value="">No label</option>{% for label in labels %}<option value="{{ label.id }}" {{ 'selected' if current_label_id == label.id }}>{{ label.name }}</option>{% endfor %}</select></div>
-<div class="col-12"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="3">{{ mealie_food.description or '' }}</textarea></div>
-</div></div><div class="card-footer text-end"><button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Save in Mealie</button></div></form></div>
-{% endif %}
 
 <div class="row row-cards mb-3">
 <div class="col-lg-7"><div class="card h-100"><div class="card-header"><h3 class="card-title">Details</h3></div><div class="card-body"><div class="datagrid">
@@ -55,6 +45,16 @@
 {% for row in stats.by_barcode %}<div class="list-group-item d-flex align-items-center gap-2"><button type="button" class="btn btn-ghost-secondary p-0 font-monospace text-start text-break barcode-preview-trigger" data-barcode="{{ row.barcode|e }}" data-bs-toggle="modal" data-bs-target="#item-code-preview">{{ row.barcode }}</button><span class="text-secondary small ms-auto" title="{{ row.last_scan|localtime }}">{{ row.last_scan|relative_time }}</span><span class="badge bg-primary text-primary-fg">{{ row.count }}</span><a class="btn btn-sm btn-icon btn-ghost-secondary" href="/barcodes/{{ row.barcode|urlencode }}" title="Open barcode"><i class="ti ti-external-link"></i></a></div>{% else %}<div class="list-group-item text-secondary">No scan history yet.</div>{% endfor %}
 </div></div></div>
 </div>
+
+{% if item.source == 'mealie' and mealie_food %}
+<div class="card mb-3"><div class="card-header"><div><h3 class="card-title">Edit Food</h3><p class="card-subtitle">Changes are written directly to Mealie and open shopping-list entries are refreshed afterward.</p></div></div>
+<form method="post" action="/items/{{ item.id }}/edit"><div class="card-body"><div class="row g-3">
+<div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="name" required value="{{ mealie_food.name or item.name }}"></div>
+<div class="col-md-6"><label class="form-label">Plural name</label><input class="form-control" name="plural_name" value="{{ mealie_food.pluralName or '' }}"></div>
+<div class="col-md-6"><label class="form-label">Category / label</label><select class="form-select" name="label_id"><option value="">No label</option>{% for label in labels %}<option value="{{ label.id }}" {{ 'selected' if current_label_id == label.id }}>{{ label.name }}</option>{% endfor %}</select></div>
+<div class="col-12"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="3">{{ mealie_food.description or '' }}</textarea></div>
+</div></div><div class="card-footer text-end"><button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Save in Mealie</button></div></form></div>
+{% endif %}
 
 <div class="card mb-3"><div class="card-header"><h3 class="card-title">Recent scans</h3></div><div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>Time</th><th>Barcode</th><th>Result</th><th>Quantity snapshot</th></tr></thead><tbody>{% for scan in stats.recent %}<tr><td title="{{ scan.created_at|localtime }}">{{ scan.created_at|relative_time }}</td><td><a href="/barcodes/{{ scan.barcode|urlencode }}"><code>{{ scan.barcode }}</code></a></td><td>{{ scan.result }}</td><td>{{ scan.quantity_snapshot if scan.quantity_snapshot is not none else '—' }}</td></tr>{% else %}<tr><td colspan="4" class="text-center text-secondary">No scan history yet. New scans after this update are tracked with target snapshots.</td></tr>{% endfor %}</tbody></table></div></div>
 

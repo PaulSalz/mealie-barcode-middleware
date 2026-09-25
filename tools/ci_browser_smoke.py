@@ -216,6 +216,36 @@ def main() -> None:
         page.locator("#action-v22-builder").wait_for(state="visible", timeout=5_000)
         assert page.locator("#action-v22-builder").is_visible()
 
+        page.locator('input[name="webhook_url"]').evaluate("""el => {
+            el.value = 'http://homeassistant.local:8123/api/webhook/ci_action';
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+        }""")
+        page.locator('[data-preset="notification"]').click()
+        notification_yaml = page.locator("#action-ha-yaml").input_value()
+        assert "action: persistent_notification.create" in notification_yaml
+        assert "event: b2m_action" not in notification_yaml
+        assert not page.locator("#action-payload-json").is_visible()
+
+        page.evaluate("""() => {
+            Object.defineProperty(navigator, 'clipboard', {
+                configurable: true,
+                value: {writeText: () => Promise.reject(new Error('clipboard unavailable'))}
+            });
+            document.execCommand = command => {
+                window.__b2mCopiedText = document.getElementById('action-ha-yaml').value;
+                return command === 'copy';
+            };
+        }""")
+        page.locator("#action-ha-copy").click()
+        assert page.evaluate("window.__b2mCopiedText") == notification_yaml
+        assert "copied" in page.locator("#action-ha-status").inner_text().lower()
+
+        page.locator('[data-preset="tts"]').click()
+        tts_yaml = page.locator("#action-ha-yaml").input_value()
+        assert "action: tts.speak" in tts_yaml
+        assert "media_player_entity_id" in tts_yaml
+
         local_advanced = page.locator("#action-advanced-toggle")
         local_advanced.wait_for(state="attached", timeout=5_000)
         assert not local_advanced.is_visible()

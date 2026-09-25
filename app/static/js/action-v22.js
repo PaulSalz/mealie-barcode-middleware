@@ -13,27 +13,32 @@
 
   const PRESETS = {
     light: {
-      icon: 'bulb', title: 'Light', subtitle: 'Toggle or set a Home Assistant light',
+      name: 'Barcode light', icon: 'bulb', title: 'Light', subtitle: 'Toggle a Home Assistant light',
       params: {},
-      payload: {kind: 'light', entity_id: 'light.kitchen', command: 'toggle', brightness_pct: 70}
+      payload: {kind: 'light', entity_id: 'light.kitchen', command: 'toggle'}
     },
     tts: {
-      icon: 'speakerphone', title: 'TTS', subtitle: 'Speak a message on a media player',
+      name: 'Barcode announcement', icon: 'speakerphone', title: 'Text to speech', subtitle: 'Speak a message on a media player',
       params: {},
-      payload: {kind: 'tts', media_player: 'media_player.kitchen', message: 'Barcode {{ scan.barcode }} scanned', language: 'de'}
+      payload: {kind: 'tts', tts_entity: 'tts.home_assistant_cloud', media_player: 'media_player.kitchen', message: 'Barcode {{ scan.barcode }} scanned', language: 'de'}
     },
     timer: {
-      icon: 'clock-play', title: 'Timer', subtitle: 'Send a reusable duration parameter',
-      params: {duration_seconds: 600},
-      payload: {kind: 'timer', timer: 'timer.kitchen', duration_seconds: '{{ params.duration_seconds }}'}
+      name: 'Barcode timer', icon: 'clock-play', title: 'Timer', subtitle: 'Start a Home Assistant timer',
+      params: {},
+      payload: {kind: 'timer', timer: 'timer.kitchen', duration: '00:10:00'}
     },
     automation: {
-      icon: 'automation', title: 'Automation', subtitle: 'Trigger a HA automation with variables',
+      name: 'Barcode automation', icon: 'automation', title: 'Automation', subtitle: 'Run a Home Assistant automation',
       params: {},
-      payload: {kind: 'automation', entity_id: 'automation.kitchen_mode', variables: {source: 'b2m', barcode: '{{ scan.barcode }}'}}
+      payload: {kind: 'automation', entity_id: 'automation.kitchen_mode'}
+    },
+    notification: {
+      name: 'Barcode notification', icon: 'bell-ringing', title: 'Notification', subtitle: 'Show a notification in Home Assistant',
+      params: {},
+      payload: {kind: 'notification', title: 'B2M scan', message: 'Barcode {{ scan.barcode }} scanned'}
     },
     data: {
-      icon: 'braces', title: 'Data', subtitle: 'Pass structured data to any webhook',
+      name: 'Custom webhook action', icon: 'braces', title: 'Custom data', subtitle: 'Send a custom payload to a webhook',
       params: {value: 'example'},
       payload: {kind: 'data', value: '{{ params.value }}', data: {source: 'barcode'}}
     }
@@ -65,7 +70,8 @@
   let idOverridden = false;
   let urlOverridden = false;
   let exampleActive = false;
-  let presetNoteTimer = null;
+  let activePreset = null;
+  let advancedMode = false;
 
   function dispatch(el) {
     if (!el) return;
@@ -231,17 +237,20 @@
     builder.className = 'col-12';
     builder.innerHTML =
       '<div class="b2m-action-builder">' +
-        '<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3"><div><h3 class="h4 mb-1">Request builder</h3><div class="text-secondary">Start from an example or build parameters, payload and headers without writing JSON by hand.</div></div><span class="badge bg-primary-lt text-primary">JSON generated automatically</span></div>' +
+        '<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3"><div><h3 class="h4 mb-1">Choose an example</h3><div class="text-secondary">Choose what should happen when this code is scanned. B2M prepares the action and Home Assistant automation.</div></div></div>' +
         '<div class="b2m-action-preset-grid mb-3">' + Object.entries(PRESETS).map(([key, preset]) =>
           '<button class="b2m-action-preset" type="button" data-preset="' + key + '"><span class="avatar bg-primary-lt text-primary"><i class="ti ti-' + preset.icon + '"></i></span><span><strong>' + esc(preset.title) + '</strong><small>' + esc(preset.subtitle) + '</small></span></button>'
         ).join('') + '</div>' +
-        '<div class="alert alert-info py-2 mb-3" id="action-v22-preset-note"><strong>Examples are editable.</strong> For Home Assistant, your webhook automation decides what <code>kind</code>, <code>entity_id</code>, <code>command</code> and the other fields do.</div>' +
+        '<div class="alert alert-info py-2 mb-3" id="action-v22-preset-note" role="status">Choose an example, save the action in B2M, then copy the automation below into Home Assistant.</div>' +
         '<div class="accordion" id="action-v22-editor-accordion">' +
           editorSection('params', 'Parameters', 'Parameters are reusable server-side values stored with the Action. They are not sent automatically; reference one in the Payload as {{ params.key }}. Use them for values you may want to change later without printing a new barcode.') +
           editorSection('payload', 'Payload', 'Payload is the actual data B2M sends to the webhook. For POST/PUT/PATCH it becomes the JSON request body; for GET it becomes query parameters. Template values are resolved at scan time.') +
           editorSection('headers', 'Headers', 'Headers are HTTP metadata, not normal action data. Most Home Assistant webhooks need none. Secrets here stay in B2M and are never encoded in the barcode.') +
         '</div>' +
       '</div>';
+
+    markAdvancedField(builder.querySelector('#action-v22-editor-accordion'));
+    markAdvancedField(builder.querySelector('[data-preset="data"]'));
 
     const insertionPoint = Array.from(row.children).find((node) => node.querySelector && node.querySelector('#action-apply-timer')) || payloadInput.closest('[class*="col-"]');
     row.insertBefore(builder, insertionPoint);
@@ -345,16 +354,20 @@
   function flashPresetNote(title) {
     const note = $('action-v22-preset-note');
     if (!note) return;
-    note.innerHTML = '<strong>' + esc(title) + ' example loaded.</strong> Edit the fields below; B2M will serialize them to JSON automatically.';
-    note.classList.remove('d-none');
-    clearTimeout(presetNoteTimer);
-    presetNoteTimer = setTimeout(() => note.classList.add('d-none'), 1800);
+    note.textContent = title + ' example selected. Save the action in B2M, then copy the Home Assistant automation below.';
   }
 
   function applyPreset(name) {
     const preset = PRESETS[name];
     if (!preset) return;
+    activePreset = name;
     exampleActive = true;
+    const nameInput = field('name');
+    if (nameInput && window.location.pathname === '/actions/new' && (!nameInput.value.trim() || nameInput.dataset.b2mGeneratedDefault === 'true')) {
+      nameInput.value = preset.name;
+      nameInput.dataset.b2mGeneratedDefault = 'false';
+      dispatch(nameInput);
+    }
     syncGeneratedIdentity(false);
 
     const currentId = field('action_id')?.value || generatedId(field('name')?.value || '');
@@ -383,6 +396,7 @@
     if (method) { method.value = 'POST'; dispatch(method); }
     if (execution) { execution.value = 'async'; dispatch(execution); }
     flashPresetNote(preset.title);
+    updateHaYaml();
   }
 
   function addHelp() {
@@ -434,28 +448,64 @@
     return heading ? heading.closest('.card') : null;
   }
 
+  function markAdvancedField(element) {
+    if (!element) return;
+    element.classList.add('action-advanced-field');
+    element.classList.toggle('d-none', !advancedMode);
+  }
+
+  function hasSimplePreset() {
+    return Boolean(activePreset && activePreset !== 'data');
+  }
+
+  function applyAdvancedMode() {
+    document.querySelectorAll('.action-advanced-field').forEach((element) => {
+      element.classList.toggle('d-none', !advancedMode);
+    });
+    const copyButton = $('action-ha-copy');
+    if (copyButton) copyButton.disabled = !hasSimplePreset() && !advancedMode;
+    updateHaYaml();
+  }
+
   function setupAdvancedMode() {
     const form = document.querySelector('form[action^="/actions/"]');
     if (!form || $('action-advanced-toggle')) return;
-    const advancedEls = ['parameters_json', 'payload_json', 'headers_json'].map(fieldColumnByName).filter(Boolean);
+    advancedMode = localStorage.getItem('b2m-action-advanced') === '1';
+    const advancedEls = ['action_id', 'aliases', 'description', 'respect_pause', 'parameters_json', 'payload_json', 'headers_json']
+      .map(fieldColumnByName).filter(Boolean);
+    const webhookUrl = field('webhook_url');
+    if (webhookUrl && webhookUrl.value.trim()) advancedEls.push(webhookUrl.closest('[class*="col-"]'));
     ['Execution controls', 'Timeouts'].forEach((title) => {
       const card = cardByHeading(title);
       if (card) advancedEls.push(card);
     });
-    advancedEls.forEach((el) => el.classList.add('action-advanced-field'));
+    advancedEls.forEach(markAdvancedField);
 
     const holder = document.createElement('div');
     holder.className = 'd-flex justify-content-end align-items-center mb-3';
-    holder.innerHTML = '<span class="text-secondary small me-2 b2m-v22-advanced-hint">Retries, network timeouts and raw JSON</span><label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="action-advanced-toggle"><span class="form-check-label"><i class="ti ti-adjustments-horizontal me-1"></i>Advanced / raw JSON</span></label>';
+    holder.innerHTML = '<span class="text-secondary small me-2 b2m-v22-advanced-hint">Show technical settings</span><label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="action-advanced-toggle"><span class="form-check-label"><i class="ti ti-adjustments-horizontal me-1"></i>Advanced</span></label>';
     form.parentElement.insertBefore(holder, form);
     const toggle = holder.querySelector('input');
-    toggle.checked = localStorage.getItem('b2m-action-advanced') === '1';
-    const apply = () => {
-      advancedEls.forEach((el) => el.classList.toggle('d-none', !toggle.checked));
-      localStorage.setItem('b2m-action-advanced', toggle.checked ? '1' : '0');
-    };
-    toggle.addEventListener('change', apply);
-    apply();
+    toggle.checked = advancedMode;
+    toggle.addEventListener('change', () => {
+      advancedMode = toggle.checked;
+      localStorage.setItem('b2m-action-advanced', advancedMode ? '1' : '0');
+      applyAdvancedMode();
+    });
+    if (webhookUrl && !webhookUrl.value.trim()) {
+      const note = document.createElement('div');
+      note.className = 'alert alert-warning py-2 mb-3';
+      note.textContent = 'Add the Home Assistant webhook URL in Settings before saving this action.';
+      webhookUrl.closest('[class*="col-"]')?.prepend(note);
+    }
+    applyAdvancedMode();
+  }
+
+  function revealAdvancedField(element) {
+    if (element) {
+      element.classList.add('action-advanced-field');
+      element.classList.toggle('d-none', !advancedMode);
+    }
   }
 
   function moveProtocolFieldsToAdvanced() {
@@ -469,6 +519,7 @@
       if (!col || col.closest('.card') === card) return;
       col.className = 'col-12';
       row.insertBefore(col, row.firstChild);
+      revealAdvancedField(col);
     });
   }
 
@@ -537,15 +588,78 @@
   function buildHaYaml() {
     const url = field('webhook_url');
     const id = webhookId(url ? url.value : '');
+    const payload = parseObject($('action-payload-json'));
+    const selectedPreset = activePreset && PRESETS[activePreset] ? activePreset : null;
+    let description = 'Runs the selected action when a B2M code is scanned.';
+    let action = '';
+
+    if (selectedPreset === 'light') {
+      const entity = yamlQuote(payload.entity_id || 'light.kitchen');
+      const command = ['turn_on', 'turn_off'].includes(payload.command) ? payload.command : 'toggle';
+      description = 'Toggles a Home Assistant light when a B2M code is scanned.';
+      action = '  - action: light.' + command + '\n' +
+        '    target:\n      entity_id: "{{ trigger.json.entity_id | default(\'' + entity + '\') }}"\n';
+      if (command === 'turn_on' && Number.isFinite(Number(payload.brightness_pct))) {
+        action += '    data:\n      brightness_pct: "{{ trigger.json.brightness_pct | default(' + Number(payload.brightness_pct) + ') | int }}"\n';
+      }
+    } else if (selectedPreset === 'tts') {
+      const ttsEntity = yamlQuote(payload.tts_entity || 'tts.home_assistant_cloud');
+      const player = yamlQuote(payload.media_player || 'media_player.kitchen');
+      const language = yamlQuote(payload.language || 'de');
+      description = 'Speaks the B2M scan message on a Home Assistant media player.';
+      action = '  - action: tts.speak\n' +
+        '    target:\n      entity_id: "{{ trigger.json.tts_entity | default(\'' + ttsEntity + '\') }}"\n' +
+        '    data:\n      media_player_entity_id: "{{ trigger.json.media_player | default(\'' + player + '\') }}"\n' +
+        '      message: "{{ trigger.json.message | default(\'Barcode scanned\') }}"\n' +
+        '      language: "{{ trigger.json.language | default(\'' + language + '\') }}"\n';
+    } else if (selectedPreset === 'timer') {
+      const timer = yamlQuote(payload.timer || 'timer.kitchen');
+      const duration = yamlQuote(payload.duration || '00:10:00');
+      description = 'Starts a Home Assistant timer when a B2M code is scanned.';
+      action = '  - action: timer.start\n' +
+        '    target:\n      entity_id: "{{ trigger.json.timer | default(\'' + timer + '\') }}"\n' +
+        '    data:\n      duration: "{{ trigger.json.duration | default(\'' + duration + '\') }}"\n';
+    } else if (selectedPreset === 'automation') {
+      const entity = yamlQuote(payload.entity_id || 'automation.kitchen_mode');
+      description = 'Runs a Home Assistant automation when a B2M code is scanned.';
+      action = '  - action: automation.trigger\n' +
+        '    target:\n      entity_id: "{{ trigger.json.entity_id | default(\'' + entity + '\') }}"\n' +
+        '    data:\n      skip_condition: true\n';
+    } else if (selectedPreset === 'notification') {
+      const title = yamlQuote(payload.title || 'B2M scan');
+      description = 'Shows a Home Assistant notification for every scanned code.';
+      action = '  - action: persistent_notification.create\n' +
+        '    data:\n      title: "{{ trigger.json.title | default(\'' + title + '\') }}"\n' +
+        '      message: "{{ trigger.json.message | default(\'Barcode scanned\') }}"\n';
+    } else {
+      description = 'Emits a b2m_action event for custom Home Assistant automations.';
+      action = '  - event: b2m_action\n    event_data:\n' +
+        '      action_id: "{{ trigger.json.action_id | default(\'\') }}"\n' +
+        '      action_name: "{{ trigger.json.action_name | default(\'\') }}"\n' +
+        '      barcode: "{{ trigger.json.barcode | default(\'\') }}"\n' +
+        '      duration_seconds: "{{ trigger.json.params.duration_seconds | default(0) }}"\n';
+    }
+
     return "alias: 'B2M - " + yamlQuote(currentActionName()) + "'\n" +
-      "description: 'Receives this B2M Action webhook and emits a Home Assistant event.'\n" +
+      "description: '" + yamlQuote(description) + "'\n" +
       "triggers:\n  - trigger: webhook\n    webhook_id: '" + yamlQuote(id) + "'\n    allowed_methods:\n      - POST\n    local_only: true\n" +
-      "conditions: []\nactions:\n  - event: b2m_action\n    event_data:\n      action_id: \"{{ trigger.json.action_id | default('') }}\"\n      action_name: \"{{ trigger.json.action_name | default('') }}\"\n      barcode: \"{{ trigger.json.barcode | default('') }}\"\n      duration_seconds: \"{{ trigger.json.params.duration_seconds | default(0) }}\"\nmode: single\n";
+      "conditions: []\nactions:\n" + action + "mode: queued\nmax: 10\n";
   }
 
   function updateHaYaml() {
     const textarea = $('action-ha-yaml');
-    if (textarea) textarea.value = buildHaYaml();
+    if (!textarea) return;
+    textarea.value = buildHaYaml();
+    const copyButton = $('action-ha-copy');
+    const url = field('webhook_url');
+    const hasWebhookId = webhookId(url ? url.value : '') !== 'YOUR_WEBHOOK_ID';
+    if (copyButton) copyButton.disabled = !hasWebhookId || (!hasSimplePreset() && !advancedMode);
+    const status = $('action-ha-status');
+    if (status) {
+      status.textContent = hasWebhookId
+        ? (hasSimplePreset() || advancedMode ? 'Save this action in B2M, then add the copied automation in Home Assistant.' : 'Choose an example to prepare an automation.')
+        : 'Add the Home Assistant webhook URL in Settings to generate this automation.';
+    }
   }
 
   function setupHaGenerator() {
@@ -555,25 +669,53 @@
     if (!requestCard) return;
     const card = document.createElement('div');
     card.className = 'card mb-3';
-    card.innerHTML = '<div class="card-header"><div><h3 class="card-title"><i class="ti ti-home me-1"></i>Home Assistant automation</h3><p class="card-subtitle">Ready-to-paste webhook trigger. It emits <code>b2m_action</code>; attach another automation to that event or replace the action block directly.</p></div><div class="card-actions"><button class="btn btn-sm btn-outline-primary" type="button" id="action-ha-copy"><i class="ti ti-copy icon"></i>Copy YAML</button></div></div><div class="card-body"><textarea id="action-ha-yaml" class="form-control font-monospace" rows="16" readonly></textarea><div class="form-hint mt-2">The webhook ID is derived from the configured Home Assistant webhook URL. Keep webhook URLs private.</div></div>';
+    card.innerHTML = '<div class="card-header"><div><h3 class="card-title"><i class="ti ti-home me-1"></i>Home Assistant automation</h3><p class="card-subtitle">Copy the finished automation and add it in Home Assistant.</p></div><div class="card-actions"><button class="btn btn-primary" type="button" id="action-ha-copy" disabled><i class="ti ti-copy icon"></i>Copy automation</button></div></div><div class="card-body"><p id="action-ha-status" class="mb-0" role="status">Choose an example to prepare an automation.</p><details id="action-ha-yaml-details" class="mt-3"><summary>Show generated YAML</summary><textarea id="action-ha-yaml" class="form-control font-monospace mt-2" rows="16" readonly></textarea></details></div>';
     requestCard.insertAdjacentElement('afterend', card);
     updateHaYaml();
     ['input', 'change'].forEach((eventName) => {
       urlInput.addEventListener(eventName, updateHaYaml);
       const nameInput = field('name');
       if (nameInput) nameInput.addEventListener(eventName, updateHaYaml);
-    });
-    $('action-ha-copy').addEventListener('click', function () {
-      const area = $('action-ha-yaml');
-      navigator.clipboard.writeText(area.value).then(function () {
-        const button = $('action-ha-copy');
-        const old = button.innerHTML;
-        button.innerHTML = '<i class="ti ti-check icon"></i>Copied';
-        setTimeout(() => { button.innerHTML = old; }, 1500);
-      }).catch(function () {
-        area.select();
-        document.execCommand('copy');
+      const payloadInput = $('action-payload-json');
+      if (payloadInput) payloadInput.addEventListener(eventName, () => {
+        const kind = parseObject(payloadInput).kind;
+        activePreset = Object.prototype.hasOwnProperty.call(PRESETS, kind) ? kind : null;
+        document.querySelectorAll('.b2m-action-preset').forEach((button) => {
+          button.classList.toggle('active', button.dataset.preset === activePreset);
+        });
+        updateHaYaml();
       });
+    });
+    $('action-ha-copy').addEventListener('click', async function () {
+      const button = $('action-ha-copy');
+      const area = $('action-ha-yaml');
+      const old = button.innerHTML;
+      let copied = false;
+      if (window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+          await navigator.clipboard.writeText(area.value);
+          copied = true;
+        } catch (error) {
+          copied = false;
+        }
+      }
+      if (!copied) {
+        const details = $('action-ha-yaml-details');
+        const wasOpen = details.open;
+        details.open = true;
+        area.focus();
+        area.select();
+        area.setSelectionRange(0, area.value.length);
+        try { copied = document.execCommand('copy'); } catch (error) { copied = false; }
+        if (!wasOpen) details.open = false;
+      }
+      if (copied) {
+        button.innerHTML = '<i class="ti ti-check icon"></i>Copied';
+        $('action-ha-status').textContent = 'Automation copied. Add it in Home Assistant.';
+        setTimeout(() => { button.innerHTML = old; }, 1500);
+      } else {
+        $('action-ha-status').textContent = 'Copy failed. Open “Show generated YAML” and copy it manually.';
+      }
     });
   }
 
@@ -606,20 +748,32 @@
     const id = field('action_id');
     const url = field('webhook_url');
     if (!name || !url) return;
+    const isNew = window.location.pathname === '/actions/new';
     url.dataset.b2mWebhookSeed = url.value || '';
+    if (!isNew) {
+      if (id) idOverridden = true;
+      urlOverridden = true;
+    }
 
-    if (window.location.pathname === '/actions/new') {
+    if (isNew) {
       const type = field('action_type');
       const method = field('method');
       const execution = field('execution_mode');
       if (type) type.value = 'homeassistant';
       if (method) method.value = 'POST';
       if (execution) execution.value = 'async';
+      if (!name.value.trim()) {
+        name.value = 'Barcode action';
+        name.dataset.b2mGeneratedDefault = 'true';
+      }
       syncGeneratedIdentity(false);
     }
 
     name.addEventListener('input', function () {
-      if (!programmaticIdentity && window.location.pathname === '/actions/new') syncGeneratedIdentity(false);
+      if (name.dataset.b2mGeneratedDefault === 'true' && name.value !== 'Barcode action') {
+        name.dataset.b2mGeneratedDefault = 'false';
+      }
+      if (!programmaticIdentity && isNew) syncGeneratedIdentity(false);
       if (exampleActive) setPayloadField('action_name', name.value, true);
     });
 
@@ -660,7 +814,12 @@
 
     const payload = parseObject($('action-payload-json'));
     exampleActive = Object.prototype.hasOwnProperty.call(payload, 'action_name');
+    activePreset = Object.prototype.hasOwnProperty.call(PRESETS, payload.kind) ? payload.kind : null;
+    document.querySelectorAll('.b2m-action-preset').forEach((button) => {
+      button.classList.toggle('active', button.dataset.preset === activePreset);
+    });
     if (exampleActive) syncPayloadIdentity();
+    updateHaYaml();
   }
 
   if (document.readyState === 'loading') {
