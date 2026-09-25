@@ -37,6 +37,27 @@ def test_legacy_accent_migrates_without_allowing_rainbow_buttons():
     assert rainbow["color"] == rainbow["button_color"]
 
 
+def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
+    rainbow = build_theme_css({
+        "mode": "dark",
+        "logo_color": "rainbow",
+        "epaper": "true",
+    })
+    assert "animation:b2m-logo-rainbow 12s linear infinite" in rainbow
+    assert "html[data-bs-theme=dark] .navbar-brand a{" not in rainbow
+    assert "animation:none!important" not in rainbow
+
+    colored = build_theme_css({
+        "mode": "light",
+        "logo_color": "red",
+        "epaper": "true",
+    })
+    assert ".navbar-brand a{background:none!important;color:#d63939!important" in colored
+
+    live = build_theme_live_catalog_css()
+    assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a{' in live
+    assert "animation:b2m-logo-rainbow-live 12s linear infinite!important" in live
+    assert 'html[data-b2m-epaper="true"] .navbar-brand a' not in live
 def test_personal_theme_does_not_inherit_legacy_global_theme():
     source = read("app/access_v23.py")
     personal = source.split("def personal_theme", 1)[1].split("def save_personal_theme", 1)[0]
@@ -120,6 +141,7 @@ def test_v35_epaper_maps_colored_dashboard_content_to_monochrome_surfaces():
     assert 'body [class*="bg-"]:not(.bg-transparent):not(.bg-white):not(.bg-body):not([class*="bg-body"]) [class*="text-"]' in frontend
     assert "body .card:has(#item-stat-total) .avatar" in frontend
     assert "body .status-indicator-circle" in frontend
+    assert 'html[data-bs-theme="dark"][data-b2m-epaper="true"] body .navbar .navbar-brand a' not in frontend
     assert 'data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) *' in frontend
     assert "-webkit-text-fill-color: #fff !important;" in frontend
     assert '.b2m-brand-text' in frontend

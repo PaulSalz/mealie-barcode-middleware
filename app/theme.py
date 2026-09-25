@@ -319,10 +319,6 @@ def build_theme_css(theme: dict[str, str]) -> str:
         }
         light = dict(light_mono)
         dark = dict(dark_mono)
-        if t["mode"] == "dark":
-            extra.append("html[data-bs-theme=dark] .navbar-brand a{background:none!important;color:#fff!important;-webkit-text-fill-color:#fff!important;animation:none!important}")
-        else:
-            extra.append(".navbar-brand a{background:none!important;color:#000!important;-webkit-text-fill-color:#000!important;animation:none!important}")
         for key in ("--tblr-primary", "--tblr-primary-rgb", "--tblr-link-color", "--tblr-link-hover-color"):
             common.pop(key, None)
     root_values = {**light, **common}
@@ -369,7 +365,6 @@ def build_theme_live_catalog_css() -> str:
     rules.extend([
         'html[data-b2m-epaper="true"]{--b2m-page-bg:#fff;--b2m-surface-bg:var(--b2m-epaper-surface,#e8e8e8);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#d8d8d8);--b2m-epaper-utility-bg:#d0d0d0;--b2m-epaper-utility-text:#000;--b2m-input-bg:#fff;--b2m-text:#000;--b2m-muted:var(--b2m-epaper-muted,#000);--b2m-border:var(--b2m-epaper-border,#000);--b2m-card-shadow:none;--b2m-page-filter:grayscale(1);--tblr-primary:#000;--tblr-primary-rgb:0,0,0;--tblr-link-color:#000;--tblr-link-hover-color:#000}',
         'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000;--b2m-surface-bg:var(--b2m-epaper-surface,#505050);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#d8d8d8);--b2m-epaper-utility-bg:#c0c0c0;--b2m-epaper-utility-text:#000;--b2m-epaper-input-bg:var(--b2m-epaper-utility-bg,#c0c0c0);--b2m-input-bg:var(--b2m-epaper-input-bg);--b2m-text:#fff;--b2m-muted:var(--b2m-epaper-muted,#fff);--b2m-border:var(--b2m-epaper-border,#fff);--b2m-card-shadow:none;--tblr-primary:#fff;--tblr-primary-rgb:255,255,255;--tblr-link-color:#fff;--tblr-link-hover-color:#fff}',
-        'html[data-b2m-epaper="true"] .navbar-brand a{background:none!important;color:var(--b2m-text)!important;-webkit-text-fill-color:var(--b2m-text)!important;animation:none!important}',
         'html[data-b2m-epaper="false"]{--b2m-page-filter:none}',
     ])
     return "".join(rules)
