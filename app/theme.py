@@ -354,7 +354,7 @@ def build_theme_live_catalog_css() -> str:
         rules.append(f'html[data-b2m-logo-color="{name}"] .navbar-brand a{{background:none!important;color:{color["hex"]}!important;-webkit-text-fill-color:{color["hex"]}!important;animation:none!important}}')
     rules.extend([
         "@keyframes b2m-logo-rainbow-live{0%{background-position:0% 50%}100%{background-position:100% 50%}}",
-        'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{background:linear-gradient(90deg,#d63939 0%,#f76707 7.142857%,#f59f00 14.285714%,#2fb344 21.428571%,#17a2b8 28.571429%,#4263eb 35.714286%,#ae3ec9 42.857143%,#d63939 50%,#f76707 57.142857%,#f59f00 64.285714%,#2fb344 71.428571%,#17a2b8 78.571429%,#4263eb 85.714286%,#ae3ec9 92.857143%,#d63939 100%)!important;background-size:200% 100%!important;background-clip:text!important;-webkit-background-clip:text!important;color:transparent!important;-webkit-text-fill-color:transparent!important;animation:b2m-logo-rainbow-live 12s linear infinite!important}',
+        'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{background-image:linear-gradient(90deg,#d63939 0%,#f76707 7.142857%,#f59f00 14.285714%,#2fb344 21.428571%,#17a2b8 28.571429%,#4263eb 35.714286%,#ae3ec9 42.857143%,#d63939 50%,#f76707 57.142857%,#f59f00 64.285714%,#2fb344 71.428571%,#17a2b8 78.571429%,#4263eb 85.714286%,#ae3ec9 92.857143%,#d63939 100%)!important;background-size:200% 100%!important;background-clip:text!important;-webkit-background-clip:text!important;color:transparent!important;-webkit-text-fill-color:transparent!important;animation:b2m-logo-rainbow-live 12s linear infinite!important}',
     ])
 
     for name, family in FONT_CSS.items():
