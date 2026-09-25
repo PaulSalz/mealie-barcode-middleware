@@ -181,6 +181,8 @@ def _epaper_values(contrast: str) -> tuple[int, int, int]:
         value = max(0, min(100, int(float(contrast))))
     except (TypeError, ValueError):
         value = int(THEME_DEFAULTS["contrast"])
+    # Keep the UI at 0-100 while doubling its effective contrast strength.
+    value *= 2
     border = max(24, 220 - round(value * 1.7))
     muted = max(0, 112 - round(value * 0.9))
     surface = max(238, 255 - round(value * 0.12))
@@ -224,6 +226,10 @@ def build_theme_css(theme: dict[str, str]) -> str:
     common["--b2m-saved-mode"] = t["mode"]
     common["--b2m-card-shadow"] = "var(--tblr-box-shadow-card)"
     common["--b2m-page-filter"] = "none"
+    border, muted, surface = _epaper_values(t["contrast"])
+    common["--b2m-epaper-border"] = f"rgb({border},{border},{border})"
+    common["--b2m-epaper-muted"] = f"rgb({muted},{muted},{muted})"
+    common["--b2m-epaper-surface"] = f"rgb({surface},{surface},{surface})"
 
     extra: list[str] = []
     logo = t["logo_color"]
@@ -240,7 +246,6 @@ def build_theme_css(theme: dict[str, str]) -> str:
         extra.append("body{letter-spacing:.018em;word-spacing:.045em;line-height:1.55}input,select,textarea,button{letter-spacing:.012em}")
 
     if t["epaper"] == "true":
-        border, muted, surface = _epaper_values(t["contrast"])
         mono = {
             "--b2m-page-bg": "#ffffff",
             "--b2m-surface-bg": f"rgb({surface},{surface},{surface})",

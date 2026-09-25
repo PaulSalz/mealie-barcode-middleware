@@ -95,7 +95,8 @@
   }
 
   function contrastVars(value) {
-    var contrast = Math.max(0, Math.min(100, parseInt(value, 10) || 0));
+    // Match the doubled effective strength in app.theme._epaper_values.
+    var contrast = Math.max(0, Math.min(100, parseInt(value, 10) || 0)) * 2;
     return {
       border: Math.max(24, 220 - Math.round(contrast * 1.7)),
       muted: Math.max(0, 112 - Math.round(contrast * 0.9)),
