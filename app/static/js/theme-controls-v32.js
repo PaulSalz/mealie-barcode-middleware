@@ -98,18 +98,18 @@
     var contrast = Math.max(0, Math.min(100, parseInt(value, 10) || 0));
     if (mode === 'dark') {
       return {
-        border: 35 + Math.round(220 * contrast / 100),
-        muted: 145 + Math.round(110 * contrast / 100),
-        surface: 16 + Math.round(48 * contrast / 100),
-        surfaceSecondary: 24 + Math.round(72 * contrast / 100),
-        input: 12
+        border: 96 + Math.round(159 * contrast / 100),
+        muted: 255,
+        surface: 40 + Math.round(64 * contrast / 100),
+        surfaceSecondary: 72 + Math.round(48 * contrast / 100),
+        input: 48
       };
     }
     return {
-      border: 220 - Math.round(220 * contrast / 100),
-      muted: 112 - Math.round(112 * contrast / 100),
-      surface: 255 - Math.round(55 * contrast / 100),
-      surfaceSecondary: 255 - Math.round(32 * contrast / 100),
+      border: 170 - Math.round(170 * contrast / 100),
+      muted: 0,
+      surface: 248 - Math.round(72 * contrast / 100),
+      surfaceSecondary: 240 - Math.round(96 * contrast / 100),
       input: 255
     };
   }

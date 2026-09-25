@@ -95,6 +95,53 @@ def _css_vars(values: dict[str, str]) -> str:
     return ";".join(f"{key}:{value}" for key, value in values.items())
 
 
+_EPAPER_SEMANTIC_COLORS = (
+    "primary", "secondary", "success", "info", "warning", "danger", "light",
+    "dark", "blue", "azure", "indigo", "purple", "pink", "red", "orange",
+    "yellow", "lime", "green", "teal", "cyan",
+)
+
+
+def _v35_epaper_vars(mode: str) -> dict[str, str]:
+    dark = mode == "dark"
+    text = "#fff" if dark else "#000"
+    text_rgb = "255,255,255" if dark else "0,0,0"
+    action_bg = text
+    action_text = "#000" if dark else "#fff"
+    values = {
+        "--b2m-v35-page-bg": "#000" if dark else "#fff",
+        "--b2m-v35-surface-bg": "var(--b2m-epaper-surface,#686868)" if dark else "var(--b2m-epaper-surface,#b0b0b0)",
+        "--b2m-v35-surface-secondary": "var(--b2m-epaper-surface-secondary,#787878)" if dark else "var(--b2m-epaper-surface-secondary,#909090)",
+        "--b2m-v35-utility-bg": "var(--b2m-v35-surface-secondary)",
+        "--b2m-v35-utility-text": "var(--b2m-v35-text)",
+        "--b2m-v35-input-bg": "var(--b2m-epaper-input-bg,#303030)" if dark else "#fff",
+        "--b2m-v35-text": text,
+        "--b2m-v35-muted": "var(--b2m-epaper-muted," + text + ")",
+        "--b2m-v35-border": "var(--b2m-epaper-border," + text + ")",
+        "--b2m-v35-card-shadow": "none",
+        "--b2m-v35-action-bg": action_bg,
+        "--b2m-v35-action-text": action_text,
+        "--tblr-primary": text,
+        "--tblr-primary-rgb": text_rgb,
+        "--tblr-link-color": text,
+        "--tblr-link-hover-color": text,
+        "--tblr-body-bg": "var(--b2m-v35-page-bg)",
+        "--tblr-body-color": "var(--b2m-v35-text)",
+        "--tblr-bg-surface": "var(--b2m-v35-surface-bg)",
+        "--tblr-bg-surface-secondary": "var(--b2m-v35-surface-secondary)",
+        "--tblr-border-color": "var(--b2m-v35-border)",
+        "--tblr-border-color-translucent": "var(--b2m-v35-border)",
+        "--tblr-secondary-color": "var(--b2m-v35-text)",
+    }
+    for color in _EPAPER_SEMANTIC_COLORS:
+        values[f"--tblr-{color}"] = text
+        values[f"--tblr-{color}-rgb"] = text_rgb
+        values[f"--tblr-{color}-lt"] = "var(--b2m-v35-utility-bg)"
+        values[f"--tblr-{color}-fg"] = text
+        values[f"--tblr-{color}-dark"] = text
+    return values
+
+
 def _build_v35_surface_catalog_css() -> str:
     """Generate direct root-state selectors used only by the v35 renderer."""
     rules = [
@@ -107,9 +154,11 @@ def _build_v35_surface_catalog_css() -> str:
         rules.append(
             f'html[data-bs-theme="dark"][data-b2m-base="{base}"]{{{_css_vars(_v35_surface_vars(base, "dark"))}}}'
         )
+    light_epaper = _css_vars(_v35_epaper_vars("light"))
+    dark_epaper = _css_vars(_v35_epaper_vars("dark"))
     rules.extend([
-        'html[data-b2m-epaper="true"]{--b2m-v35-page-bg:#fff;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#c8c8c8);--b2m-v35-surface-secondary:var(--b2m-epaper-surface-secondary,#dfdfdf);--b2m-v35-input-bg:#fff;--b2m-v35-text:#000;--b2m-v35-muted:var(--b2m-epaper-muted,#000);--b2m-v35-border:var(--b2m-epaper-border,#000);--b2m-v35-card-shadow:none;--b2m-v35-action-bg:#000;--b2m-v35-action-text:#fff;--tblr-primary:#000;--tblr-primary-rgb:0,0,0;--tblr-link-color:#000;--tblr-link-hover-color:#000;--tblr-border-color:var(--b2m-v35-border);--tblr-border-color-translucent:var(--b2m-v35-border)}',
-        'html[data-bs-theme="dark"][data-b2m-epaper="true"]{--b2m-v35-page-bg:#000;--b2m-v35-surface-bg:var(--b2m-epaper-surface,#404040);--b2m-v35-surface-secondary:var(--b2m-epaper-surface-secondary,#606060);--b2m-v35-input-bg:var(--b2m-epaper-input-bg,#0c0c0c);--b2m-v35-text:#fff;--b2m-v35-muted:var(--b2m-epaper-muted,#fff);--b2m-v35-border:var(--b2m-epaper-border,#fff);--b2m-v35-card-shadow:none;--b2m-v35-action-bg:#fff;--b2m-v35-action-text:#000;--tblr-primary:#fff;--tblr-primary-rgb:255,255,255;--tblr-link-color:#fff;--tblr-link-hover-color:#fff;--tblr-border-color:var(--b2m-v35-border);--tblr-border-color-translucent:var(--b2m-v35-border)}',
+        f'html[data-b2m-epaper="true"]{{{light_epaper}}}',
+        f'html[data-bs-theme="dark"][data-b2m-epaper="true"]{{{dark_epaper}}}',
     ])
     return "".join(rules)
 
@@ -188,10 +237,29 @@ html[data-b2m-epaper="true"] body [class*="btn-outline-"] {
   color: var(--b2m-v35-action-bg) !important;
 }
 html[data-b2m-epaper="true"] body [class*="bg-"]:not(.bg-transparent):not(.bg-white):not(.bg-body):not([class*="bg-body"]) {
-  background: var(--b2m-v35-action-bg) !important;
+  background: var(--b2m-v35-utility-bg) !important;
   background-image: none !important;
-  border-color: var(--b2m-v35-action-bg) !important;
-  color: var(--b2m-v35-action-text) !important;
+  border-color: var(--b2m-v35-border) !important;
+  color: var(--b2m-v35-utility-text) !important;
+}
+html[data-b2m-epaper="true"] body .avatar,
+html[data-b2m-epaper="true"] body .badge,
+html[data-b2m-epaper="true"] body [class*="alert-"],
+html[data-b2m-epaper="true"] body mark {
+  background: var(--b2m-v35-utility-bg) !important;
+  background-image: none !important;
+  border-color: var(--b2m-v35-border) !important;
+  color: var(--b2m-v35-utility-text) !important;
+}
+html[data-b2m-epaper="true"] body [class*="bg-"] *,
+html[data-b2m-epaper="true"] body .avatar *,
+html[data-b2m-epaper="true"] body .badge *,
+html[data-b2m-epaper="true"] body [class*="alert-"] *,
+html[data-b2m-epaper="true"] body mark * {
+  color: var(--b2m-v35-utility-text) !important;
+}
+html[data-b2m-epaper="true"] body [class*="text-"]:not(.text-reset) {
+  color: var(--b2m-v35-text) !important;
 }
 html[data-b2m-epaper="true"] body .bg-white,
 html[data-b2m-epaper="true"] body [class*="bg-body"] {
@@ -204,10 +272,7 @@ html[data-b2m-epaper="true"] body .btn-check:checked + .btn,
 html[data-b2m-epaper="true"] body .dropdown-item.active,
 html[data-b2m-epaper="true"] body .list-group-item.active,
 html[data-b2m-epaper="true"] body .nav-link.active,
-html[data-b2m-epaper="true"] body .badge,
-html[data-b2m-epaper="true"] body [class*="alert-"],
-html[data-b2m-epaper="true"] body .progress-bar,
-html[data-b2m-epaper="true"] body mark {
+html[data-b2m-epaper="true"] body .progress-bar {
   background: var(--b2m-v35-action-bg) !important;
   background-image: none !important;
   border-color: var(--b2m-v35-action-bg) !important;
@@ -224,6 +289,23 @@ html[data-b2m-epaper="true"] body [class*="btn-outline-"]:active {
   border-color: var(--b2m-v35-action-bg) !important;
   color: var(--b2m-v35-action-text) !important;
 }
+html[data-b2m-epaper="true"] body .btn:not(.btn-link):not([class*="btn-outline-"]) *,
+html[data-b2m-epaper="true"] body .btn-check:checked + .btn *,
+html[data-b2m-epaper="true"] body .dropdown-item.active *,
+html[data-b2m-epaper="true"] body .list-group-item.active *,
+html[data-b2m-epaper="true"] body .nav-link.active *,
+html[data-b2m-epaper="true"] body .btn:hover *,
+html[data-b2m-epaper="true"] body .btn:focus *,
+html[data-b2m-epaper="true"] body .btn:active *,
+html[data-b2m-epaper="true"] body [class*="btn-outline-"]:hover *,
+html[data-b2m-epaper="true"] body [class*="btn-outline-"]:focus *,
+html[data-b2m-epaper="true"] body [class*="btn-outline-"]:active * {
+  color: var(--b2m-v35-action-text) !important;
+}
+html[data-b2m-epaper="true"] body .btn-link *,
+html[data-b2m-epaper="true"] body [class*="btn-outline-"] * {
+  color: var(--b2m-v35-action-bg) !important;
+}
 html[data-b2m-epaper="true"] body svg {
   color: var(--b2m-v35-text) !important;
 }
@@ -235,9 +317,35 @@ html[data-b2m-epaper="true"] body svg[stroke]:not([stroke="none"]),
 html[data-b2m-epaper="true"] body svg [stroke]:not([stroke="none"]) {
   stroke: currentColor !important;
 }
+html[data-b2m-epaper="true"].b2m-epaper-v9 body .b2m-brand-text {
+  background: none !important;
+  color: var(--b2m-v35-text) !important;
+  -webkit-text-fill-color: var(--b2m-v35-text) !important;
+  animation: none !important;
+}
+html[data-b2m-epaper="true"].b2m-epaper-v9 body .b2m-scan-link-card {
+  background: var(--b2m-v35-surface-bg) !important;
+  border-color: var(--b2m-v35-border) !important;
+}
+html[data-b2m-epaper="true"].b2m-epaper-v9 body #activity-table tbody tr[data-href]:hover > td {
+  background: var(--b2m-v35-surface-secondary) !important;
+}
+html[data-b2m-epaper="true"].b2m-epaper-v9 body #notif-dropdown > a.nav-link.b2m-v12-bell-flash {
+  background: var(--b2m-v35-utility-bg) !important;
+  outline-color: var(--b2m-v35-text) !important;
+  box-shadow: inset 0 0 0 1px var(--b2m-v35-text), 0 0 0 2px transparent !important;
+}
+html[data-b2m-epaper="true"].b2m-epaper-v9 body #notif-dropdown > a.nav-link.b2m-v12-bell-flash > .b2m-stable-bell {
+  color: var(--b2m-v35-text) !important;
+}
 html[data-b2m-epaper="true"] body input,
 html[data-b2m-epaper="true"] body progress {
   accent-color: var(--b2m-v35-action-bg) !important;
+}
+html[data-b2m-epaper="true"] body input::placeholder,
+html[data-b2m-epaper="true"] body textarea::placeholder {
+  color: var(--b2m-v35-text) !important;
+  opacity: .75 !important;
 }
 /* Theme switches update every surface in the same frame. */
 html body, html body .page, html body .page-wrapper, html body .page-body,

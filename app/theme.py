@@ -182,15 +182,15 @@ def _epaper_values(contrast: str, mode: str = "light") -> tuple[int, int, int]:
     except (TypeError, ValueError):
         value = int(THEME_DEFAULTS["contrast"])
     if mode == "dark":
-        # Black page, brighter cards and near-white text at maximum contrast.
-        border = 35 + (220 * value + 50) // 100
-        muted = 145 + (110 * value + 50) // 100
-        surface = 16 + (48 * value + 50) // 100
+        # Keep cards distinct from black while preserving white text contrast.
+        border = 96 + (159 * value + 50) // 100
+        muted = 255
+        surface = 40 + (64 * value + 50) // 100
         return border, muted, surface
-    # White page, black text/borders and darker cards at maximum contrast.
-    border = 220 - (220 * value + 50) // 100
-    muted = 112 - (112 * value + 50) // 100
-    surface = 255 - (55 * value + 50) // 100
+    # Light mode keeps all text pure black and progressively deepens surfaces.
+    border = 170 - (170 * value + 50) // 100
+    muted = 0
+    surface = 248 - (72 * value + 50) // 100
     return border, muted, surface
 
 
@@ -200,8 +200,8 @@ def _epaper_surface_secondary(contrast: str, mode: str = "light") -> int:
     except (TypeError, ValueError):
         value = int(THEME_DEFAULTS["contrast"])
     if mode == "dark":
-        return 24 + (72 * value + 50) // 100
-    return 255 - (32 * value + 50) // 100
+        return 72 + (48 * value + 50) // 100
+    return 240 - (96 * value + 50) // 100
 
 
 def _css_vars(values: dict[str, str]) -> str:
@@ -285,7 +285,7 @@ def build_theme_css(theme: dict[str, str]) -> str:
             "--b2m-page-bg": "#000000",
             "--b2m-surface-bg": f"rgb({dark_epaper[2]},{dark_epaper[2]},{dark_epaper[2]})",
             "--b2m-surface-secondary": f"rgb({dark_secondary},{dark_secondary},{dark_secondary})",
-            "--b2m-input-bg": "rgb(12,12,12)",
+            "--b2m-input-bg": "rgb(48,48,48)",
             "--b2m-text": "#ffffff",
             "--b2m-muted": f"rgb({dark_epaper[1]},{dark_epaper[1]},{dark_epaper[1]})",
             "--b2m-border": f"rgb({dark_epaper[0]},{dark_epaper[0]},{dark_epaper[0]})",
@@ -295,7 +295,7 @@ def build_theme_css(theme: dict[str, str]) -> str:
             "--b2m-epaper-muted": f"rgb({dark_epaper[1]},{dark_epaper[1]},{dark_epaper[1]})",
             "--b2m-epaper-surface": f"rgb({dark_epaper[2]},{dark_epaper[2]},{dark_epaper[2]})",
             "--b2m-epaper-surface-secondary": f"rgb({dark_secondary},{dark_secondary},{dark_secondary})",
-            "--b2m-epaper-input-bg": "rgb(12,12,12)",
+            "--b2m-epaper-input-bg": "rgb(48,48,48)",
             "--tblr-primary": "#ffffff",
             "--tblr-primary-rgb": "255,255,255",
             "--tblr-link-color": "#ffffff",
@@ -351,8 +351,8 @@ def build_theme_live_catalog_css() -> str:
         rules.append(f'html[data-b2m-radius="{name}"]{{{_css_vars(_radius_vars(name))}}}')
 
     rules.extend([
-        'html[data-b2m-epaper="true"]{--b2m-page-bg:#fff;--b2m-surface-bg:var(--b2m-epaper-surface,#c8c8c8);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#dfdfdf);--b2m-input-bg:#fff;--b2m-text:#000;--b2m-muted:var(--b2m-epaper-muted,#000);--b2m-border:var(--b2m-epaper-border,#000);--b2m-card-shadow:none;--b2m-page-filter:grayscale(1);--tblr-primary:#000;--tblr-primary-rgb:0,0,0;--tblr-link-color:#000;--tblr-link-hover-color:#000}',
-        'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000;--b2m-surface-bg:var(--b2m-epaper-surface,#404040);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#606060);--b2m-input-bg:var(--b2m-epaper-input-bg,#0c0c0c);--b2m-text:#fff;--b2m-muted:var(--b2m-epaper-muted,#fff);--b2m-border:var(--b2m-epaper-border,#fff);--b2m-card-shadow:none;--tblr-primary:#fff;--tblr-primary-rgb:255,255,255;--tblr-link-color:#fff;--tblr-link-hover-color:#fff}',
+        'html[data-b2m-epaper="true"]{--b2m-page-bg:#fff;--b2m-surface-bg:var(--b2m-epaper-surface,#b0b0b0);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#909090);--b2m-input-bg:#fff;--b2m-text:#000;--b2m-muted:var(--b2m-epaper-muted,#000);--b2m-border:var(--b2m-epaper-border,#000);--b2m-card-shadow:none;--b2m-page-filter:grayscale(1);--tblr-primary:#000;--tblr-primary-rgb:0,0,0;--tblr-link-color:#000;--tblr-link-hover-color:#000}',
+        'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000;--b2m-surface-bg:var(--b2m-epaper-surface,#686868);--b2m-surface-secondary:var(--b2m-epaper-surface-secondary,#787878);--b2m-input-bg:var(--b2m-epaper-input-bg,#303030);--b2m-text:#fff;--b2m-muted:var(--b2m-epaper-muted,#fff);--b2m-border:var(--b2m-epaper-border,#fff);--b2m-card-shadow:none;--tblr-primary:#fff;--tblr-primary-rgb:255,255,255;--tblr-link-color:#fff;--tblr-link-hover-color:#fff}',
         'html[data-b2m-epaper="true"] .navbar-brand a{background:none!important;color:var(--b2m-text)!important;-webkit-text-fill-color:var(--b2m-text)!important;animation:none!important}',
         'html[data-b2m-epaper="false"]{--b2m-page-filter:none}',
     ])

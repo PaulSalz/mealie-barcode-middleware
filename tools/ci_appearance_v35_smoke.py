@@ -154,7 +154,7 @@ def main() -> None:
         assert body_epaper == "rgb(255, 255, 255)", (body_epaper, theme_debug())
 
         contrast = page.locator('input[name="theme_contrast"]')
-        contrast.fill("95")
+        contrast.fill("0")
         contrast.dispatch_event("input")
         border_after = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--b2m-epaper-border').trim()")
         assert epaper.is_checked()
@@ -191,12 +191,38 @@ def main() -> None:
         assert page.locator('input[name="theme_button_color"][value="green"]').is_checked()
         assert page.locator('input[name="theme_logo_color"][value="rainbow"]').is_checked()
         assert page.locator('input[name="theme_epaper"]').is_checked()
-        assert page.locator('input[name="theme_contrast"]').input_value() == "95"
+        assert page.locator('input[name="theme_contrast"]').input_value() == "0"
         assert "grayscale" in page.evaluate("getComputedStyle(document.documentElement).filter")
         assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--tblr-border-radius').trim()") == "1.1rem"
         primary_reload = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--tblr-primary').trim()")
         assert page.locator("html").get_attribute("data-bs-theme") == "dark"
         assert primary_reload.lower() in ("#fff", "#ffffff"), (primary_reload, theme_debug())
+
+        # Dashboard icons and status text stay legible in dark e-paper at the
+        # lowest contrast setting; legacy semantic colors must be neutralized.
+        page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
+        dashboard_colors = page.evaluate("""() => {
+            const card = document.querySelector('.b2m-stat-card');
+            const avatar = document.querySelector('.b2m-stat-card .avatar');
+            const icon = avatar && avatar.querySelector('i');
+            const status = document.getElementById('health-status');
+            return {
+                page: getComputedStyle(document.body).backgroundColor,
+                text: getComputedStyle(document.body).color,
+                card: card ? getComputedStyle(card).backgroundColor : '',
+                avatar: avatar ? getComputedStyle(avatar).backgroundColor : '',
+                icon: icon ? getComputedStyle(icon).color : '',
+                status: status ? getComputedStyle(status).color : ''
+            };
+        }""")
+        assert dashboard_colors == {
+            "page": "rgb(0, 0, 0)",
+            "text": "rgb(255, 255, 255)",
+            "card": "rgb(40, 40, 40)",
+            "avatar": "rgb(72, 72, 72)",
+            "icon": "rgb(255, 255, 255)",
+            "status": "rgb(255, 255, 255)"
+        }, (dashboard_colors, theme_debug())
 
         if errors:
             raise AssertionError("Appearance browser JavaScript errors: " + " | ".join(errors))
