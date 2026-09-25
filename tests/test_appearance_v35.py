@@ -57,7 +57,7 @@ def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
     assert ".navbar-brand a{background:none!important;color:#d63939!important" in colored
 
     live = build_theme_live_catalog_css()
-    assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{' in live
+    assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{background-image:linear-gradient(90deg,' in live
     assert "animation:b2m-logo-rainbow-live 12s linear infinite!important" in live
     assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{' in live
     assert "background-position:100% 50%" in live
@@ -146,6 +146,7 @@ def test_v35_epaper_maps_colored_dashboard_content_to_monochrome_surfaces():
     assert "body .card:has(#item-stat-total) .avatar" in frontend
     assert "body .status-indicator-circle" in frontend
     assert 'html[data-bs-theme="dark"][data-b2m-epaper="true"] body .navbar .navbar-brand a' not in frontend
+    assert 'html[data-b2m-epaper="true"].b2m-epaper-v9 body .b2m-brand-text' not in frontend
     assert 'data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) *' in frontend
     assert "-webkit-text-fill-color: #fff !important;" in frontend
     assert '.b2m-brand-text' in frontend
