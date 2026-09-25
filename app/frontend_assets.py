@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from app.theme import GRAY_CSS, THEME_CHOICES, THEME_DEFAULTS, build_theme_live_catalog_css
+from app.theme import GRAY_CSS, PAGE_BACKGROUND_CSS, THEME_CHOICES, THEME_DEFAULTS, build_theme_live_catalog_css
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 GENERATED_DIR = STATIC_DIR / "generated"
@@ -69,9 +69,10 @@ BUNDLES = {
 def _v35_surface_vars(base: str, mode: str) -> dict[str, str]:
     """Return private v35 surface values with no dependency on legacy vars."""
     gray = GRAY_CSS.get(base, GRAY_CSS[THEME_DEFAULTS["base"]])
+    page = PAGE_BACKGROUND_CSS.get(base, PAGE_BACKGROUND_CSS[THEME_DEFAULTS["base"]])
     if mode == "dark":
         return {
-            "--b2m-v35-page-bg": gray["950"],
+            "--b2m-v35-page-bg": page["dark"],
             "--b2m-v35-surface-bg": gray["900"],
             "--b2m-v35-surface-secondary": gray["800"],
             "--b2m-v35-input-bg": gray["800"],
@@ -80,7 +81,7 @@ def _v35_surface_vars(base: str, mode: str) -> dict[str, str]:
             "--b2m-v35-border": gray["700"],
         }
     return {
-        "--b2m-v35-page-bg": gray["50"],
+        "--b2m-v35-page-bg": page["light"],
         "--b2m-v35-surface-bg": "#ffffff",
         "--b2m-v35-surface-secondary": gray["100"],
         "--b2m-v35-input-bg": "#ffffff",
@@ -153,6 +154,17 @@ html body .form-selectgroup-label {
   background: var(--b2m-v35-input-bg) !important;
   color: var(--b2m-v35-text) !important;
   border-color: var(--b2m-v35-border) !important;
+}
+/* Preserve radio selection states over the generic input surface rules. */
+html body .form-selectgroup-input:checked + .form-selectgroup-label {
+  background: color-mix(in srgb, var(--tblr-primary) 14%, var(--b2m-v35-input-bg)) !important;
+  color: var(--b2m-v35-text) !important;
+  border-color: var(--tblr-primary) !important;
+  box-shadow: inset 0 0 0 1px var(--tblr-primary) !important;
+}
+html body .form-selectgroup-input:focus-visible + .form-selectgroup-label {
+  outline: 2px solid var(--tblr-primary);
+  outline-offset: 2px;
 }
 html body .table,
 html body .table > :not(caption) > * > * {
