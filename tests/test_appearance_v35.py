@@ -63,26 +63,33 @@ def test_persisted_theme_contains_complete_first_paint_state():
     assert "b2m-logo-rainbow" in css
 
 
-def test_epaper_palette_uses_full_mode_aware_monochrome_range():
-    assert _epaper_values("100", "light") == (0, 0, 200)
-    assert _epaper_surface_secondary("100", "light") == 223
-    assert _epaper_values("100", "dark") == (255, 255, 64)
-    assert _epaper_surface_secondary("100", "dark") == 96
+def test_epaper_palette_uses_mode_aware_surfaces_and_readable_text():
+    assert _epaper_values("0", "light") == (170, 0, 248)
+    assert _epaper_surface_secondary("0", "light") == 240
+    assert _epaper_values("100", "light") == (0, 0, 176)
+    assert _epaper_surface_secondary("100", "light") == 144
+    assert _epaper_values("0", "dark") == (96, 255, 40)
+    assert _epaper_surface_secondary("0", "dark") == 72
+    assert _epaper_values("100", "dark") == (255, 255, 104)
+    assert _epaper_surface_secondary("100", "dark") == 120
 
     css = build_theme_css({"mode": "dark", "epaper": "true", "contrast": "100"})
     light, dark = css.split("[data-bs-theme=dark]{", 1)
     assert "--b2m-page-bg:#ffffff" in light
     assert "--b2m-text:#000000" in light
-    assert "--b2m-surface-bg:rgb(200,200,200)" in light
+    assert "--b2m-surface-bg:rgb(176,176,176)" in light
     assert "--tblr-primary:#000000" in light
     assert "--b2m-page-bg:#000000" in dark
     assert "--b2m-text:#ffffff" in dark
-    assert "--b2m-surface-bg:rgb(64,64,64)" in dark
+    assert "--b2m-surface-bg:rgb(104,104,104)" in dark
+    assert "--b2m-surface-secondary:rgb(120,120,120)" in dark
+    assert "--b2m-input-bg:rgb(48,48,48)" in dark
     assert "--tblr-primary:#ffffff" in dark
 
     live = build_theme_live_catalog_css()
     assert 'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000' in live
     assert "--b2m-text:#fff" in live
+    assert "#303030" in live
 
 
 def test_personal_stylesheet_exports_complete_saved_state_for_head_bootstrap():
@@ -94,6 +101,16 @@ def test_personal_stylesheet_exports_complete_saved_state_for_head_bootstrap():
     for dataset in ("b2mBase", "b2mButtonColor", "b2mLogoColor", "b2mRadius", "b2mFont", "b2mEpaper"):
         assert f"root.dataset.{dataset}" in init
     assert "fetch(" not in init
+
+
+def test_v35_epaper_maps_colored_dashboard_content_to_monochrome_surfaces():
+    frontend = read("app/frontend_assets.py")
+    assert '"green"' in frontend and '"blue"' in frontend
+    assert 'values[f"--tblr-{color}-lt"]' in frontend
+    assert "--b2m-v35-utility-bg" in frontend
+    assert '[class*="bg-"] *' in frontend
+    assert '.b2m-brand-text' in frontend
+    assert '#activity-table tbody tr[data-href]:hover > td' in frontend
 
 
 def test_live_catalog_controls_entire_page_synchronously():
