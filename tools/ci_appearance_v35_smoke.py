@@ -220,12 +220,12 @@ def main() -> None:
         assert dashboard_colors == {
             "page": "rgb(0, 0, 0)",
             "text": "rgb(255, 255, 255)",
-            "card": "rgb(80, 80, 80)",
+            "card": "rgb(184, 184, 184)",
             "avatar": "rgb(192, 192, 192)",
             "icon": "rgb(0, 0, 0)",
-            "status": "rgb(255, 255, 255)",
-            "statValue": "rgb(255, 255, 255)",
-            "statusCircle": "rgb(255, 255, 255)"
+            "status": "rgb(0, 0, 0)",
+            "statValue": "rgb(0, 0, 0)",
+            "statusCircle": "rgb(0, 0, 0)"
         }, (dashboard_colors, theme_debug())
 
         if errors:
