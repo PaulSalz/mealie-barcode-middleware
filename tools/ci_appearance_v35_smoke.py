@@ -217,6 +217,26 @@ def main() -> None:
                 statusCircle: document.querySelector('#health-indicator .status-indicator-circle') ? getComputedStyle(document.querySelector('#health-indicator .status-indicator-circle')).backgroundColor : ''
             };
         }""")
+        logo_animation = page.evaluate("""() => {
+            const style = getComputedStyle(document.querySelector('.navbar-brand a'));
+            return {
+                name: style.animationName,
+                duration: style.animationDuration,
+                timing: style.animationTimingFunction,
+                iterations: style.animationIterationCount,
+                state: style.animationPlayState,
+                gradient: style.backgroundImage.includes('linear-gradient')
+            };
+        }""")
+        assert logo_animation == {
+            "name": "b2m-logo-rainbow-live",
+            "duration": "12s",
+            "timing": "linear",
+            "iterations": "infinite",
+            "state": "running",
+            "gradient": True,
+        }, (logo_animation, theme_debug())
+
         assert dashboard_colors == {
             "page": "rgb(0, 0, 0)",
             "text": "rgb(255, 255, 255)",
