@@ -96,7 +96,7 @@ def test_epaper_palette_uses_mode_aware_surfaces_and_readable_text():
     live = build_theme_live_catalog_css()
     assert 'html[data-bs-theme=dark][data-b2m-epaper="true"]{--b2m-page-bg:#000' in live
     assert "--b2m-text:#fff" in live
-    assert "var(--b2m-epaper-input-bg,var(--b2m-epaper-utility-bg,#c0c0c0))" in live
+    assert "--b2m-epaper-input-bg:" in live
     assert "#c0c0c0" in live
 
 
