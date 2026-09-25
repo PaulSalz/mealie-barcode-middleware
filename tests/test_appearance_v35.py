@@ -44,6 +44,8 @@ def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
         "epaper": "true",
     })
     assert "animation:b2m-logo-rainbow 12s linear infinite" in rainbow
+    assert ".navbar-brand a .b2m-brand-text{background-image:linear-gradient(90deg," in rainbow
+    assert "background-position:100% 50%" in rainbow
     assert "html[data-bs-theme=dark] .navbar-brand a{" not in rainbow
     assert "animation:none!important" not in rainbow
 
@@ -55,8 +57,10 @@ def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
     assert ".navbar-brand a{background:none!important;color:#d63939!important" in colored
 
     live = build_theme_live_catalog_css()
-    assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a{' in live
+    assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{background-image:linear-gradient(90deg,' in live
     assert "animation:b2m-logo-rainbow-live 12s linear infinite!important" in live
+    assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{' in live
+    assert "background-position:100% 50%" in live
     assert 'html[data-b2m-epaper="true"] .navbar-brand a' not in live
 def test_personal_theme_does_not_inherit_legacy_global_theme():
     source = read("app/access_v23.py")
@@ -144,7 +148,6 @@ def test_v35_epaper_maps_colored_dashboard_content_to_monochrome_surfaces():
     assert 'html[data-bs-theme="dark"][data-b2m-epaper="true"] body .navbar .navbar-brand a' not in frontend
     assert 'data-bs-theme="light"] body .btn:not(.btn-link):not([class*="btn-outline-"]) *' in frontend
     assert "-webkit-text-fill-color: #fff !important;" in frontend
-    assert '.b2m-brand-text' in frontend
     assert '#activity-table tbody tr[data-href]:hover > td' in frontend
 
 
