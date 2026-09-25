@@ -319,10 +319,6 @@ def build_theme_css(theme: dict[str, str]) -> str:
         }
         light = dict(light_mono)
         dark = dict(dark_mono)
-        if t["mode"] == "dark":
-            extra.append("html[data-bs-theme=dark] .navbar-brand a{background:none!important;color:#fff!important;-webkit-text-fill-color:#fff!important;animation:none!important}")
-        else:
-            extra.append(".navbar-brand a{background:none!important;color:#000!important;-webkit-text-fill-color:#000!important;animation:none!important}")
         for key in ("--tblr-primary", "--tblr-primary-rgb", "--tblr-link-color", "--tblr-link-hover-color"):
             common.pop(key, None)
     root_values = {**light, **common}
