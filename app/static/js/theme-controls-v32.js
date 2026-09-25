@@ -94,13 +94,23 @@
     };
   }
 
-  function contrastVars(value) {
-    // Match the full-range contrast curve in app.theme._epaper_values.
+  function contrastVars(value, mode) {
     var contrast = Math.max(0, Math.min(100, parseInt(value, 10) || 0));
+    if (mode === 'dark') {
+      return {
+        border: 35 + Math.round(220 * contrast / 100),
+        muted: 145 + Math.round(110 * contrast / 100),
+        surface: 16 + Math.round(48 * contrast / 100),
+        surfaceSecondary: 24 + Math.round(72 * contrast / 100),
+        input: 12
+      };
+    }
     return {
       border: 220 - Math.round(220 * contrast / 100),
       muted: 112 - Math.round(112 * contrast / 100),
-      surface: 255 - Math.round(55 * contrast / 100)
+      surface: 255 - Math.round(55 * contrast / 100),
+      surfaceSecondary: 255 - Math.round(32 * contrast / 100),
+      input: 255
     };
   }
 
@@ -125,10 +135,12 @@
     var mono = state.epaper === 'true';
     root.classList.toggle('b2m-epaper-v9', mono);
     root.classList.toggle('b2m-epaper', mono);
-    var values = contrastVars(state.contrast);
+    var values = contrastVars(state.contrast, state.mode);
     root.style.setProperty('--b2m-epaper-border', 'rgb(' + values.border + ',' + values.border + ',' + values.border + ')');
     root.style.setProperty('--b2m-epaper-muted', 'rgb(' + values.muted + ',' + values.muted + ',' + values.muted + ')');
     root.style.setProperty('--b2m-epaper-surface', 'rgb(' + values.surface + ',' + values.surface + ',' + values.surface + ')');
+    root.style.setProperty('--b2m-epaper-surface-secondary', 'rgb(' + values.surfaceSecondary + ',' + values.surfaceSecondary + ',' + values.surfaceSecondary + ')');
+    root.style.setProperty('--b2m-epaper-input-bg', 'rgb(' + values.input + ',' + values.input + ',' + values.input + ')');
 
     // Compatibility only; visual styling comes from global-ui.css v35 rules.
     compatPreview.textContent = mono ? 'html{filter:grayscale(1)}' : '';
