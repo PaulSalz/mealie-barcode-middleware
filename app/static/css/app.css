@@ -145,6 +145,7 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
 }
 
 /* Mobile-only navigation and dashboard layout. Desktop rules stay untouched. */
+.b2m-dashboard-mobile-flow { display: contents; }
 @media (max-width: 767.98px) {
   .navbar > .container-xl {
     display: flex;
