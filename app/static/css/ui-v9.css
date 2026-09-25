@@ -27,54 +27,7 @@
 #v9-printer-runtime .datagrid { grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); }
 #v9-printer-runtime .card-actions { flex-wrap: wrap; }
 
-/* Strong monochrome overrides for dark-mode + e-paper. */
-html.b2m-epaper-v9[data-bs-theme="dark"] { color-scheme: light; }
-html.b2m-epaper-v9[data-bs-theme="dark"] body,
-html.b2m-epaper-v9[data-bs-theme="dark"] .page,
-html.b2m-epaper-v9[data-bs-theme="dark"] .page-wrapper,
-html.b2m-epaper-v9[data-bs-theme="dark"] .navbar,
-html.b2m-epaper-v9[data-bs-theme="dark"] .card,
-html.b2m-epaper-v9[data-bs-theme="dark"] .card-header,
-html.b2m-epaper-v9[data-bs-theme="dark"] .card-body,
-html.b2m-epaper-v9[data-bs-theme="dark"] .card-footer,
-html.b2m-epaper-v9[data-bs-theme="dark"] .dropdown-menu,
-html.b2m-epaper-v9[data-bs-theme="dark"] .modal-content,
-html.b2m-epaper-v9[data-bs-theme="dark"] .list-group-item,
-html.b2m-epaper-v9[data-bs-theme="dark"] .table,
-html.b2m-epaper-v9[data-bs-theme="dark"] .form-control,
-html.b2m-epaper-v9[data-bs-theme="dark"] .form-select,
-html.b2m-epaper-v9[data-bs-theme="dark"] .input-group-text {
-  background: #fff !important;
-  color: #000 !important;
-}
-html.b2m-epaper-v9[data-bs-theme="dark"] .page-title,
-html.b2m-epaper-v9[data-bs-theme="dark"] .card-title,
-html.b2m-epaper-v9[data-bs-theme="dark"] .form-label,
-html.b2m-epaper-v9[data-bs-theme="dark"] .form-check-label,
-html.b2m-epaper-v9[data-bs-theme="dark"] .nav-link,
-html.b2m-epaper-v9[data-bs-theme="dark"] .dropdown-item,
-html.b2m-epaper-v9[data-bs-theme="dark"] .datagrid-title,
-html.b2m-epaper-v9[data-bs-theme="dark"] .datagrid-content,
-html.b2m-epaper-v9[data-bs-theme="dark"] .table th,
-html.b2m-epaper-v9[data-bs-theme="dark"] .table td,
-html.b2m-epaper-v9[data-bs-theme="dark"] code,
-html.b2m-epaper-v9[data-bs-theme="dark"] a:not(.btn) {
-  color: #000 !important;
-}
-html.b2m-epaper-v9[data-bs-theme="dark"] .text-secondary,
-html.b2m-epaper-v9[data-bs-theme="dark"] .form-hint,
-html.b2m-epaper-v9[data-bs-theme="dark"] .card-subtitle {
-  color: #444 !important;
-}
-html.b2m-epaper-v9[data-bs-theme="dark"] .form-control::placeholder { color: #666 !important; }
-html.b2m-epaper-v9[data-bs-theme="dark"] .border,
-html.b2m-epaper-v9[data-bs-theme="dark"] .card,
-html.b2m-epaper-v9[data-bs-theme="dark"] .form-control,
-html.b2m-epaper-v9[data-bs-theme="dark"] .form-select,
-html.b2m-epaper-v9[data-bs-theme="dark"] .input-group-text,
-html.b2m-epaper-v9[data-bs-theme="dark"] .list-group-item {
-  border-color: #555 !important;
-}
+/* E-paper palettes are now supplied by generated appearance v35 CSS. */
 
 @media (max-width: 767.98px) {
   #v9-printer-runtime .datagrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
