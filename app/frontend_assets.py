@@ -110,11 +110,11 @@ def _v35_epaper_vars(mode: str) -> dict[str, str]:
     action_text = "#000" if dark else "#fff"
     values = {
         "--b2m-v35-page-bg": "#000" if dark else "#fff",
-        "--b2m-v35-surface-bg": "var(--b2m-epaper-surface,#686868)" if dark else "var(--b2m-epaper-surface,#b0b0b0)",
-        "--b2m-v35-surface-secondary": "var(--b2m-epaper-surface-secondary,#787878)" if dark else "var(--b2m-epaper-surface-secondary,#909090)",
-        "--b2m-v35-utility-bg": "var(--b2m-v35-surface-secondary)",
-        "--b2m-v35-utility-text": "var(--b2m-v35-text)",
-        "--b2m-v35-input-bg": "var(--b2m-epaper-input-bg,#303030)" if dark else "#fff",
+        "--b2m-v35-surface-bg": "var(--b2m-epaper-surface,#505050)" if dark else "var(--b2m-epaper-surface,#e8e8e8)",
+        "--b2m-v35-surface-secondary": "var(--b2m-epaper-surface-secondary,#707070)" if dark else "var(--b2m-epaper-surface-secondary,#d8d8d8)",
+        "--b2m-v35-utility-bg": "var(--b2m-epaper-utility-bg,#c0c0c0)" if dark else "var(--b2m-epaper-utility-bg,#d0d0d0)",
+        "--b2m-v35-utility-text": "#000",
+        "--b2m-v35-input-bg": "var(--b2m-epaper-input-bg,#505050)" if dark else "#fff",
         "--b2m-v35-text": text,
         "--b2m-v35-muted": "var(--b2m-epaper-muted," + text + ")",
         "--b2m-v35-border": "var(--b2m-epaper-border," + text + ")",
@@ -244,7 +244,9 @@ html[data-b2m-epaper="true"] body [class*="bg-"]:not(.bg-transparent):not(.bg-wh
 }
 html[data-b2m-epaper="true"] body .avatar,
 html[data-b2m-epaper="true"] body .badge,
+html[data-b2m-epaper="true"] body .alert,
 html[data-b2m-epaper="true"] body [class*="alert-"],
+html[data-b2m-epaper="true"] body .status,
 html[data-b2m-epaper="true"] body mark {
   background: var(--b2m-v35-utility-bg) !important;
   background-image: none !important;
@@ -254,12 +256,56 @@ html[data-b2m-epaper="true"] body mark {
 html[data-b2m-epaper="true"] body [class*="bg-"] *,
 html[data-b2m-epaper="true"] body .avatar *,
 html[data-b2m-epaper="true"] body .badge *,
+html[data-b2m-epaper="true"] body .alert *,
 html[data-b2m-epaper="true"] body [class*="alert-"] *,
+html[data-b2m-epaper="true"] body .status *,
 html[data-b2m-epaper="true"] body mark * {
   color: var(--b2m-v35-utility-text) !important;
 }
 html[data-b2m-epaper="true"] body [class*="text-"]:not(.text-reset) {
   color: var(--b2m-v35-text) !important;
+}
+
+/* Text classes and high-specificity legacy item avatars must not undo the
+   black foreground used on light monochrome utility tiles. */
+html[data-b2m-epaper="true"] body [class*="bg-"]:not(.bg-transparent):not(.bg-white):not(.bg-body):not([class*="bg-body"]),
+html[data-b2m-epaper="true"] body .avatar[class*="text-"],
+html[data-b2m-epaper="true"] body .badge[class*="text-"],
+html[data-b2m-epaper="true"] body .alert[class*="text-"],
+html[data-b2m-epaper="true"] body .status[class*="text-"],
+html[data-b2m-epaper="true"] body mark[class*="text-"],
+html[data-b2m-epaper="true"] body .card:has(#item-stat-total) .avatar,
+html[data-b2m-epaper="true"] body .card:has(#item-stat-7) .avatar,
+html[data-b2m-epaper="true"] body .card:has(#item-stat-30) .avatar,
+html[data-b2m-epaper="true"] body .card:has(#item-stat-last) .avatar {
+  color: var(--b2m-v35-utility-text) !important;
+}
+html[data-b2m-epaper="true"] body [class*="bg-"]:not(.bg-transparent):not(.bg-white):not(.bg-body):not([class*="bg-body"]) [class*="text-"],
+html[data-b2m-epaper="true"] body .avatar [class*="text-"],
+html[data-b2m-epaper="true"] body .badge [class*="text-"],
+html[data-b2m-epaper="true"] body .alert [class*="text-"],
+html[data-b2m-epaper="true"] body .status [class*="text-"],
+html[data-b2m-epaper="true"] body mark [class*="text-"],
+html[data-b2m-epaper="true"] body .card:has(#item-stat-total) .avatar *,
+html[data-b2m-epaper="true"] body .card:has(#item-stat-7) .avatar *,
+html[data-b2m-epaper="true"] body .card:has(#item-stat-30) .avatar *,
+html[data-b2m-epaper="true"] body .card:has(#item-stat-last) .avatar * {
+  color: var(--b2m-v35-utility-text) !important;
+}
+
+/* The secondary surface is a light tile in both E-paper palettes; use a
+   black foreground there, while preserving native input and button colors. */
+html[data-b2m-epaper="true"] body .card-header,
+html[data-b2m-epaper="true"] body .card-footer,
+html[data-b2m-epaper="true"] body .dropdown-header,
+html[data-b2m-epaper="true"] body .table thead th {
+  color: var(--b2m-v35-utility-text) !important;
+}
+html[data-b2m-epaper="true"] body .card-header *:not(input):not(select):not(textarea):not(.form-control):not(.form-select),
+html[data-b2m-epaper="true"] body .card-footer *:not(input):not(select):not(textarea):not(.form-control):not(.form-select),
+html[data-b2m-epaper="true"] body .dropdown-header *:not(input):not(select):not(textarea):not(.form-control):not(.form-select),
+html[data-b2m-epaper="true"] body .table thead th *:not(input):not(select):not(textarea):not(.form-control):not(.form-select) {
+  color: var(--b2m-v35-utility-text) !important;
 }
 html[data-b2m-epaper="true"] body .bg-white,
 html[data-b2m-epaper="true"] body [class*="bg-body"] {
@@ -316,6 +362,31 @@ html[data-b2m-epaper="true"] body svg [fill]:not([fill="none"]) {
 html[data-b2m-epaper="true"] body svg[stroke]:not([stroke="none"]),
 html[data-b2m-epaper="true"] body svg [stroke]:not([stroke="none"]) {
   stroke: currentColor !important;
+}
+
+/* Status marks are black or white too, so their state does not disappear into
+   a colored or low-contrast fill. */
+html[data-b2m-epaper="true"] body .status-indicator {
+  --tblr-status-color: var(--b2m-v35-action-bg) !important;
+}
+html[data-b2m-epaper="true"] body .status-indicator-circle,
+html[data-b2m-epaper="true"] body .status-dot {
+  background: var(--b2m-v35-action-bg) !important;
+}
+html[data-b2m-epaper="true"] body [class*="bg-"]:not(.bg-transparent):not(.bg-white):not(.bg-body):not([class*="bg-body"]) svg,
+html[data-b2m-epaper="true"] body .avatar svg,
+html[data-b2m-epaper="true"] body .badge svg,
+html[data-b2m-epaper="true"] body .alert svg,
+html[data-b2m-epaper="true"] body .status svg,
+html[data-b2m-epaper="true"] body mark svg {
+  color: var(--b2m-v35-utility-text) !important;
+}
+html[data-b2m-epaper="true"] body .card:has(#item-stat-total) .avatar,
+html[data-b2m-epaper="true"] body .card:has(#item-stat-7) .avatar,
+html[data-b2m-epaper="true"] body .card:has(#item-stat-30) .avatar,
+html[data-b2m-epaper="true"] body .card:has(#item-stat-last) .avatar {
+  background: var(--b2m-v35-utility-bg) !important;
+  background-image: none !important;
 }
 html[data-b2m-epaper="true"].b2m-epaper-v9 body .b2m-brand-text {
   background: none !important;
