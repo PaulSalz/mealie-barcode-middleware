@@ -73,13 +73,18 @@ def print_images_base64(
             "imagePosition": "centre",
             "threshold": resolved_threshold,
         }
-        # A multi-page job legitimately takes longer than one label. Scale the
-        # HTTP wait window with the requested quantity but keep an upper bound.
-        timeout = max(float(cfg["timeout"]), min(300.0, 20.0 + total_quantity * 20.0))
+        # Multi-page BLE output can take several minutes. Run the call in a
+        # background job and allow a generous bounded window for niimblue-node.
+        timeout = max(float(cfg["timeout"]), min(600.0, 45.0 + total_quantity * 30.0))
         try:
             response = niimblue._request("POST", "/print", json=payload, timeout=timeout)
         except Exception as exc:
-            raise RuntimeError(niimblue._http_error_message(exc, action="queue print")) from exc
+            # Once POST /print has been sent, a lost response does not prove that
+            # the printer stopped. Callers must ask the user to inspect the output
+            # before retrying, to avoid duplicate labels.
+            raise niimblue.PrintOutcomeUnknown(
+                niimblue._http_error_message(exc, action="queue print")
+            ) from exc
 
     try:
         data = response.json()

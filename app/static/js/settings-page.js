@@ -289,3 +289,54 @@
             if (box) box.textContent = 'Backup status could not be loaded.';
         });
 })();
+
+
+(function settingsPrinterDisconnect() {
+    'use strict';
+    if (window.location.pathname !== '/settings') return;
+
+    var status = document.getElementById('b2m-printer-connection-status');
+    var button = document.getElementById('b2m-printer-force-disconnect');
+    if (!status || !button) return;
+
+    function show(text, tone) {
+        status.className = 'small ' + (tone || 'text-secondary');
+        status.textContent = text;
+    }
+
+    async function refresh() {
+        try {
+            var response = await fetch('/labels/b21/status', {headers:{'Accept':'application/json'}, cache:'no-store'});
+            var data = await response.json().catch(function () { return {}; });
+            if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+            if (!data.configured) show('Printer not configured', 'text-secondary');
+            else if (data.connected) show('Connected · ' + (data.address || 'printer'), 'text-success');
+            else show('Disconnected · ' + (data.address || 'printer'), 'text-warning');
+        } catch (error) {
+            show('Printer status unavailable · ' + error.message, 'text-warning');
+        }
+    }
+
+    button.addEventListener('click', async function () {
+        button.disabled = true;
+        show('Disconnecting…', 'text-secondary');
+        try {
+            var response = await fetch('/labels/b21/disconnect', {
+                method:'POST',
+                headers:{'Accept':'application/json','Content-Type':'application/json'},
+                body:'{}'
+            });
+            var data = await response.json().catch(function () { return {}; });
+            if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+            show('Disconnect requested · ' + (data.address || 'printer'), 'text-success');
+            await refresh();
+        } catch (error) {
+            show('Disconnect failed · ' + error.message, 'text-danger');
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    refresh();
+    window.setInterval(refresh, 8000);
+})();

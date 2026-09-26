@@ -200,7 +200,7 @@
       '<div class="fw-semibold mb-1">Typography</div><div class="form-hint mb-3">Formatting applies to the selected text field and is included in B21 printing.</div>' +
       '<div class="row g-2">' +
         '<div class="col-12"><label class="form-label">Font</label><select class="form-select" id="b21-v22-font"><option value="sans">Sans serif</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></div>' +
-        '<div class="col-12"><label class="form-label">Style</label><div class="btn-group w-100" id="b21-v22-style-buttons"><button class="btn btn-outline-secondary" type="button" data-style="bold" title="Bold"><strong>B</strong></button><button class="btn btn-outline-secondary" type="button" data-style="italic" title="Italic"><em>I</em></button><button class="btn btn-outline-secondary" type="button" data-style="underline" title="Underline"><u>U</u></button><button class="btn btn-outline-secondary" type="button" data-style="invert" title="Invert black/white"><i class="ti ti-square-half"></i></button></div></div>' +
+        '<div class="col-12"><label class="form-label">Style</label><div class="btn-group w-100" id="b21-v22-style-buttons"><button class="btn btn-outline-secondary" type="button" data-style="bold" title="Bold"><strong>B</strong></button><button class="btn btn-outline-secondary" type="button" data-style="italic" title="Italic"><em>I</em></button><button class="btn btn-outline-secondary" type="button" data-style="underline" title="Underline"><u>U</u></button></div></div><div class="col-12"><label class="form-label" for="b21-v22-text-color">Text color</label><select class="form-select" id="b21-v22-text-color"><option value="black">Black</option><option value="white">White</option></select><div class="form-hint">White text prints on a black background.</div></div>' +
         '<div class="col-12"><label class="form-label">Text alignment</label>' + buttonGroup('b21-v22-text-align', [['left','align-left','Left'],['center','align-center','Center'],['right','align-right','Right']]) + '</div>' +
         '<div class="col-12"><label class="form-label">Vertical alignment</label>' + buttonGroup('b21-v22-vertical-align', [['top','layout-align-top','Top'],['middle','layout-align-middle','Middle'],['bottom','layout-align-bottom','Bottom']]) + '</div>' +
         '<div class="col-12"><label class="form-label">Letter spacing: <strong id="b21-v22-letter-spacing-value">0</strong> pt</label><input class="form-range" id="b21-v22-letter-spacing" type="range" min="-1" max="5" step="0.1" value="0"><div class="form-hint">0 pt uses normal spacing. Increase for short headings or compact labels.</div></div>' +
@@ -210,6 +210,7 @@
     (addRow || inspector).insertAdjacentElement('beforebegin', section);
 
     $('b21-v22-font').addEventListener('change', () => updateTextStyle({fontFamily:$('b21-v22-font').value}));
+    $('b21-v22-text-color').addEventListener('change', () => updateTextStyle({invert:$('b21-v22-text-color').value === 'white'}));
     section.querySelectorAll('[data-style]').forEach((button) => button.addEventListener('click', function () {
       const current = currentTextStyle();
       if (!current) return;
@@ -248,6 +249,7 @@
     section.classList.toggle('d-none', !style);
     if (!style) return;
     $('b21-v22-font').value = style.fontFamily || 'sans';
+    $('b21-v22-text-color').value = style.invert ? 'white' : 'black';
     section.querySelectorAll('[data-style]').forEach((button) => button.classList.toggle('active', !!style[button.dataset.style]));
     section.querySelectorAll('#b21-v22-text-align [data-value]').forEach((button) => button.classList.toggle('active', button.dataset.value === style.textAlign));
     section.querySelectorAll('#b21-v22-vertical-align [data-value]').forEach((button) => button.classList.toggle('active', button.dataset.value === style.verticalAlign));
@@ -267,7 +269,7 @@
       const section = document.createElement('div');
       section.id = 'b21-v22-frame-section';
       section.className = 'b21-section b21-v22-frame-section';
-      section.innerHTML = '<div><div class="fw-semibold">Label frame</div><div class="form-hint">Print a border inside the physical label. Useful for cutting/alignment and intentionally kept as a primary control.</div></div>';
+      section.innerHTML = '<div class="fw-semibold">Label frame</div>';
       if (frameLabel) section.appendChild(frameLabel);
       const typography = $('b21-v22-typography');
       (typography || inspector).insertAdjacentElement('afterend', section);
@@ -487,18 +489,50 @@
     } catch (e) {}
   }
 
+  async function renderQueuePages() {
+    await refreshPrinterData();
+    if (window.__b2mB21LabelEditor) window.__b2mB21LabelEditor.prepareQueue();
+    const queue = queueRows();
+    const scope = ($('b21-v2-print-scope') || {}).value || 'queue';
+    const indices = scope === 'current' ? [currentIndex()] : queue.map((_, index) => index);
+    const pages = [];
+    for (const index of indices) {
+      const c = context(index);
+      if (!c) continue;
+      const profile = clone(profileById(c.state.profileId));
+      const def = {entry:clone(c.entry), state:clone(c.state), profile, calibration:clone(calibrationFor(profile.id)), key:c.key};
+      pages.push({
+        image_base64: await renderSnapshot(def),
+        width_mm:profile.width_mm, height_mm:profile.height_mm,
+        quantity:Number(c.state.copies || 1), density:Number(profile.density || 3),
+        label_type:Number(profile.label_type || 1), dpi:Number(profile.dpi || 300),
+        threshold:thresholdFor(profile.id, c.state.threshold)
+      });
+    }
+    return pages;
+  }
+
+  window.__b2mB21StyledPrint = {renderQueuePages:renderQueuePages};
+
   function pollJob(id, button, status) {
     clearInterval(jobPoll);
     jobPoll = setInterval(async function () {
       try {
         const job = await fetchJson('/labels/b21/jobs/' + encodeURIComponent(id), {cache:'no-store'});
         if (status) { status.className='small text-secondary b21-v2-job-state'; status.textContent=job.status+' · '+job.completed_pages+'/'+job.page_count+' · '+job.printed_labels+' labels'; }
-        if (job.status === 'completed' || job.status === 'failed') {
+        if (job.status === 'completed' || job.status === 'failed' || job.status === 'unknown') {
           clearInterval(jobPoll);
-          if (status) { status.className='small '+(job.status==='completed'?'text-success':'text-danger')+' b21-v2-job-state'; status.textContent=job.error ? 'Failed · '+job.error : 'Completed · '+job.printed_labels+' labels'; }
+          if (status) {
+            status.className='small '+(job.status==='completed'?'text-success':job.status==='unknown'?'text-warning':'text-danger')+' b21-v2-job-state';
+            status.textContent=job.status==='unknown'?'Check printer output before retrying · '+(job.error || 'print result unknown'):job.error?'Failed · '+job.error:'Completed · '+job.printed_labels+' labels';
+          }
           if (button) button.disabled=false;
         }
-      } catch (e) { clearInterval(jobPoll); if (button) button.disabled=false; if (status) { status.className='small text-danger'; status.textContent=e.message; } }
+      } catch (e) {
+        clearInterval(jobPoll);
+        if (button) button.disabled=false;
+        if (status) { status.className='small text-warning b21-v2-job-state'; status.textContent='Print status unavailable. Check printer output before retrying.'; }
+      }
     }, 600);
   }
 
@@ -508,8 +542,10 @@
     const queue = queueRows(); if (!queue.length) return;
     const status = $('b21-v2-job-state');
     button.disabled = true; if (status) { status.className='small text-secondary b21-v2-job-state'; status.textContent='Preparing styled labels…'; }
+    let submitting = false;
     try {
       await refreshPrinterData();
+      if (window.__b2mB21LabelEditor) window.__b2mB21LabelEditor.prepareQueue();
       const scope = ($('b21-v2-print-scope') || {}).value || 'queue';
       const indices = scope === 'current' ? [currentIndex()] : queue.map((_, index) => index);
       const defs = indices.map((index) => {
@@ -526,12 +562,18 @@
           dpi:Number(def.profile.dpi || 300), threshold:thresholdFor(def.profile.id, def.state.threshold)
         });
       }
+      if (!pages.length) throw new Error('No labels to print');
+      submitting = true;
       const job = await fetchJson('/labels/b21/jobs', {method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pages})});
+      submitting = false;
       if (status) status.textContent='Queued · '+job.id;
       pollJob(job.id,button,status);
     } catch (e) {
       button.disabled=false;
-      if (status) { status.className='small text-danger b21-v2-job-state'; status.textContent=e.message; }
+      if (status) {
+        status.className='small '+(submitting?'text-warning':'text-danger')+' b21-v2-job-state';
+        status.textContent=submitting?'Could not confirm print job submission. Check printer output before retrying.':e.message;
+      }
     }
   }
 

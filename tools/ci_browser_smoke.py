@@ -169,9 +169,11 @@ def main() -> None:
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
 
-        layer_switch = page.locator('[data-layer-visible="label"]')
-        assert layer_switch.is_checked()
-        layer_switch.uncheck()
+        assert page.locator("[data-layer-visible]").count() == 0
+        page.locator('[data-layer-select="label"]').click()
+        inspector_visibility = page.locator("#b21-v2-visible")
+        assert inspector_visibility.is_checked()
+        inspector_visibility.uncheck()
         label_element.wait_for(state="detached", timeout=3_000)
         assert not page.get_by_text("Label / calibration", exact=True).is_visible()
 

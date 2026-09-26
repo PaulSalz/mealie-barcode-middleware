@@ -61,25 +61,10 @@
   function persist(c){c.states[c.key]=c.state;writeJson(ENTRY_KEY,c.states);}
   function layerName(element){return element.name||(element.type==='code'?'Code':element.type==='line'?'Line':'Text');}
   function selectLayer(id){const select=$('b21-v2-element-select');if(!select)return;select.value=String(id);refreshEditor();renderLayers();}
-  function setVisible(id,visible){
-    /* Do not write localStorage behind the canonical editor's back. Its entryStates
-       object is intentionally kept in memory, so direct storage writes only become
-       visible after reload. Drive the hidden canonical Visible control instead. */
-    const select=$('b21-v2-element-select'),input=$('b21-v2-visible');
-    if(!select||!input)return;
-    const previous=String(select.value||'');
-    if(previous!==String(id)){select.value=String(id);refreshEditor();}
-    input.checked=!!visible;
-    input.dispatchEvent(new Event('change',{bubbles:true}));
-    if(previous&&previous!==String(id)){select.value=previous;refreshEditor();}
-    requestAnimationFrame(renderLayers);
-  }
   function moveLayer(id,direction){
-    const c=context();if(!c||!Array.isArray(c.state.elements))return;
-    const index=c.state.elements.findIndex(row=>String(row.id)===String(id)),next=index+direction;
-    if(index<0||next<0||next>=c.state.elements.length)return;
-    [c.state.elements[index],c.state.elements[next]]=[c.state.elements[next],c.state.elements[index]];
-    persist(c);refreshEditor();renderLayers();
+    const editor=window.__b2mB21LabelEditor;
+    if(!editor||!editor.moveLayer(id,direction))return;
+    renderLayers();
   }
   function renderLayers(){
     const root=$('b21-v24-layer-list'),c=context();if(!root||!c||!Array.isArray(c.state.elements))return;
@@ -88,11 +73,9 @@
       const id=String(element.id),active=id===selected;
       return '<div class="b21-v24-layer'+(active?' active':'')+'">'+
         '<button type="button" class="b21-v24-layer-select" data-layer-select="'+esc(id)+'"><i class="ti ti-'+(element.type==='code'?'qrcode':element.type==='line'?'minus':'letter-t')+'"></i><span><strong>'+esc(layerName(element))+'</strong><small>'+esc(element.type||'element')+'</small></span></button>'+
-        '<label class="form-check form-switch b21-v24-layer-visible" title="Visibility"><input class="form-check-input" type="checkbox" data-layer-visible="'+esc(id)+'" '+(element.visible!==false?'checked':'')+'></label>'+
         '<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary" type="button" data-layer-forward="'+esc(id)+'" title="Bring forward" '+(index<c.state.elements.length-1?'':'disabled')+'><i class="ti ti-arrow-up"></i></button><button class="btn btn-outline-secondary" type="button" data-layer-back="'+esc(id)+'" title="Send backward" '+(index>0?'':'disabled')+'><i class="ti ti-arrow-down"></i></button></div></div>';
     }).join('');
     root.querySelectorAll('[data-layer-select]').forEach(button=>button.addEventListener('click',()=>selectLayer(button.dataset.layerSelect)));
-    root.querySelectorAll('[data-layer-visible]').forEach(input=>input.addEventListener('change',()=>setVisible(input.dataset.layerVisible,input.checked)));
     root.querySelectorAll('[data-layer-forward]').forEach(button=>button.addEventListener('click',()=>moveLayer(button.dataset.layerForward,1)));
     root.querySelectorAll('[data-layer-back]').forEach(button=>button.addEventListener('click',()=>moveLayer(button.dataset.layerBack,-1)));
   }
@@ -127,7 +110,7 @@
   function installLayerInspector(){
     const inspector=$('b21-v2-inspector'),select=$('b21-v2-element-select');if(!inspector||!select)return;
     const header=$('b21-v2-reset-all')?.parentElement||Array.from(inspector.children).find(node=>node.querySelector?.('#b21-v2-reset-all'));
-    if(header){const title=header.querySelector('.fw-semibold'),subtitle=header.querySelector('.text-secondary.small');if(title)title.textContent='Layers';if(subtitle)subtitle.textContent='Visibility and stacking order. Select a layer to edit it below.';}
+    if(header){const title=header.querySelector('.fw-semibold'),subtitle=header.querySelector('.text-secondary.small');if(title)title.textContent='Layers';if(subtitle)subtitle.textContent='Stacking order. Select a layer to edit it below.';}
     select.classList.add('d-none');
     if(!$('b21-v24-layer-list')){
       const list=document.createElement('div');list.id='b21-v24-layer-list';list.className='b21-v24-layer-list mb-3';select.insertAdjacentElement('beforebegin',list);

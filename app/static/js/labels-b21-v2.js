@@ -391,6 +391,24 @@
     const queue=$('label-queue');if(queue)new MutationObserver(()=>setTimeout(()=>{syncEntryControls();},0)).observe(queue,{childList:true,subtree:true});
   }
 
+  window.__b2mB21LabelEditor = {
+    moveLayer: function (id, direction) {
+      const state = currentState();
+      if (!state || !Array.isArray(state.elements)) return false;
+      const index = state.elements.findIndex((row) => String(row.id) === String(id));
+      const next = index + Number(direction);
+      if (index < 0 || next < 0 || next >= state.elements.length) return false;
+      [state.elements[index], state.elements[next]] = [state.elements[next], state.elements[index]];
+      persistAndRender();
+      return true;
+    },
+    prepareQueue: function () {
+      readQueue().forEach((entry, index) => getEntryState(entry, index));
+      saveEntryStates();
+      return true;
+    }
+  };
+
   async function init(){
     if(!$('b21-layout-body')||!$('b21-label-stage')){setTimeout(init,120);return;}
     try{const data=await fetchJson('/labels/b21/profiles');profiles=data.profiles||[];}catch(e){profiles=[];}
