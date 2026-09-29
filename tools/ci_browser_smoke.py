@@ -182,12 +182,14 @@ def main() -> None:
         page.locator('[data-layer-forward="label"]').click()
         saved_order = page.evaluate("""() => {
           const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          return state['ci-label-1'].elements.map(element => element.id);
+          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          return entry ? entry.elements.map(element => element.id) : [];
         }""")
         page.locator('[data-layer-select="code"]').click()
         reloaded_order = page.evaluate("""() => {
           const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          return state['ci-label-1'].elements.map(element => element.id);
+          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          return entry ? entry.elements.map(element => element.id) : [];
         }""")
         assert saved_order == reloaded_order
         assert saved_order.index("label") > saved_order.index("code")
