@@ -169,13 +169,28 @@ def main() -> None:
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
 
-        assert page.locator("[data-layer-visible]").count() == 0
+        assert page.locator("[data-layer-visible]").count() > 0
+        assert page.locator("#b21-v2-visible").count() == 0
         page.locator('[data-layer-select="label"]').click()
-        inspector_visibility = page.locator("#b21-v2-visible")
-        assert inspector_visibility.is_checked()
-        inspector_visibility.uncheck()
+        page.locator('[data-layer-visible="label"]').click()
         label_element.wait_for(state="detached", timeout=3_000)
         assert not page.get_by_text("Label / calibration", exact=True).is_visible()
+        page.locator('[data-layer-visible="label"]').click()
+        label_element.wait_for(state="attached", timeout=3_000)
+
+        # Layer order remains saved when a different layer is selected.
+        page.locator('[data-layer-forward="label"]').click()
+        saved_order = page.evaluate("""() => {
+          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return state['ci-label-1'].elements.map(element => element.id);
+        }""")
+        page.locator('[data-layer-select="code"]').click()
+        reloaded_order = page.evaluate("""() => {
+          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return state['ci-label-1'].elements.map(element => element.id);
+        }""")
+        assert saved_order == reloaded_order
+        assert saved_order.index("label") > saved_order.index("code")
 
         # Current label only must use the canonical job endpoint, never v30 batch queue.
         label_hits = {"batch": 0, "jobs_post": 0}
