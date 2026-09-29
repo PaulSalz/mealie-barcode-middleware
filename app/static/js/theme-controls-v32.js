@@ -10,6 +10,24 @@
   window.__b2mThemeV32Loaded = true;
 
   var root = document.documentElement;
+  var savedAppearanceMarker = 'b2m-appearance-saved-v1';
+
+  function markAppearanceSave() {
+    try { window.sessionStorage.setItem(savedAppearanceMarker, '1'); } catch (e) {}
+  }
+  function clearAppearanceSave() {
+    try { window.sessionStorage.removeItem(savedAppearanceMarker); } catch (e) {}
+  }
+  window.addEventListener('pageshow', function (event) {
+    if (!event.persisted) return;
+    var saved = false;
+    try {
+      saved = window.sessionStorage.getItem(savedAppearanceMarker) === '1';
+      if (saved) window.sessionStorage.removeItem(savedAppearanceMarker);
+    } catch (e) {}
+    if (saved) window.location.reload();
+  });
+
   var toggleModes = {
     'theme-toggle-dark': 'dark',
     'theme-toggle-light': 'light',
@@ -18,11 +36,19 @@
   };
 
   function postMode(mode) {
+    markAppearanceSave();
     return fetch('/api/appearance-v24/mode', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
       cache: 'no-store',
+      keepalive: true,
       body: JSON.stringify({mode: mode})
+    }).then(function (response) {
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return response;
+    }).catch(function (error) {
+      clearAppearanceSave();
+      throw error;
     });
   }
 
@@ -178,10 +204,12 @@
     if (button) button.disabled = true;
     if (status) status.textContent = 'Saving…';
 
+    markAppearanceSave();
     fetch('/api/appearance-v24', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
       cache: 'no-store',
+      keepalive: true,
       body: JSON.stringify({theme: state})
     }).then(function (response) {
       if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -190,6 +218,7 @@
       if (seq !== saveSeq) return;
       if (status) status.textContent = 'Saved';
     }).catch(function () {
+      clearAppearanceSave();
       if (seq !== saveSeq) return;
       if (status) status.textContent = 'Save failed';
     }).finally(function () {

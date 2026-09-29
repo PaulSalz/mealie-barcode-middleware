@@ -14,7 +14,7 @@
 
 <!-- BEGIN PAGE BODY -->
 
-<div class="card mb-3 d-none d-md-block" id="b2m-printer-connection-card">
+<div class="card mb-3" id="b2m-printer-connection-card">
     <div class="card-body d-flex align-items-center justify-content-between gap-3">
         <div>
             <div class="fw-semibold">Label printer connection</div>
@@ -270,6 +270,27 @@
 
                     {% endfor %}
                     {% endfor %}
+
+                    {% if current_tab == 'homeassistant' %}
+                    <div class="card mt-3" id="homeassistant-scan-automation">
+                        <div class="card-header card-header-light">
+                            <div>
+                                <h3 class="card-title">Scan notification automation</h3>
+                                <p class="card-subtitle">Copy this into Home Assistant to receive a persistent notification with every detail from a B2M scan.</p>
+                            </div>
+                            <div class="card-actions">
+                                <button class="btn btn-primary" type="button" id="copy-ha-scan-automation"><i class="ti ti-copy icon"></i> Copy automation</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            {% if not scan_webhook_configured %}
+                            <div class="alert alert-warning py-2">Set the Home Assistant webhook URL above first. Replace <code>YOUR_WEBHOOK_ID</code> in the automation if you configure the webhook later.</div>
+                            {% endif %}
+                            <textarea class="form-control font-monospace" id="ha-scan-automation-yaml" rows="18" readonly>{{ scan_notification_automation }}</textarea>
+                            <div class="form-hint mt-2" id="ha-scan-automation-status" role="status">The automation listens to the same webhook URL configured above.</div>
+                        </div>
+                    </div>
+                    {% endif %}
 
                     {% if not config_groups and current_tab != 'scanning' %}
                     <div class="empty">

@@ -73,11 +73,15 @@
       const id=String(element.id),active=id===selected;
       return '<div class="b21-v24-layer'+(active?' active':'')+'">'+
         '<button type="button" class="b21-v24-layer-select" data-layer-select="'+esc(id)+'"><i class="ti ti-'+(element.type==='code'?'qrcode':element.type==='line'?'minus':'letter-t')+'"></i><span><strong>'+esc(layerName(element))+'</strong><small>'+esc(element.type||'element')+'</small></span></button>'+
-        '<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary" type="button" data-layer-forward="'+esc(id)+'" title="Bring forward" '+(index<c.state.elements.length-1?'':'disabled')+'><i class="ti ti-arrow-up"></i></button><button class="btn btn-outline-secondary" type="button" data-layer-back="'+esc(id)+'" title="Send backward" '+(index>0?'':'disabled')+'><i class="ti ti-arrow-down"></i></button></div></div>';
+        '<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary" type="button" data-layer-visible="'+esc(id)+'" data-visible="'+(element.visible!==false)+'" title="'+(element.visible===false?'Show element':'Hide element')+'"><i class="ti ti-'+(element.visible===false?'eye-off':'eye')+'"></i></button><button class="btn btn-outline-secondary" type="button" data-layer-forward="'+esc(id)+'" title="Bring forward" '+(index<c.state.elements.length-1?'':'disabled')+'><i class="ti ti-arrow-up"></i></button><button class="btn btn-outline-secondary" type="button" data-layer-back="'+esc(id)+'" title="Send backward" '+(index>0?'':'disabled')+'><i class="ti ti-arrow-down"></i></button></div></div>';
     }).join('');
     root.querySelectorAll('[data-layer-select]').forEach(button=>button.addEventListener('click',()=>selectLayer(button.dataset.layerSelect)));
     root.querySelectorAll('[data-layer-forward]').forEach(button=>button.addEventListener('click',()=>moveLayer(button.dataset.layerForward,1)));
     root.querySelectorAll('[data-layer-back]').forEach(button=>button.addEventListener('click',()=>moveLayer(button.dataset.layerBack,-1)));
+    root.querySelectorAll('[data-layer-visible]').forEach(button=>button.addEventListener('click',()=>{
+      const editor=window.__b2mB21LabelEditor;
+      if(editor&&editor.setVisibility(button.dataset.layerVisible,button.dataset.visible!=='true'))renderLayers();
+    }));
   }
   function repairLegacyStage(stage){
     cancelAnimationFrame(stageRepairRaf);
