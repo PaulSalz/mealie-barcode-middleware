@@ -228,7 +228,7 @@ actions:
         Quantity: {{ trigger.json.get('quantity', '—') }}
         Item ID: {{ trigger.json.get('item_id', '—') }}
         Unit ID: {{ trigger.json.get('unit_id', '—') }}
-        Full payload: {{ trigger.json | tojson }}
+        Full payload: {{ trigger.json | to_json }}
 mode: queued
 max: 10
 """

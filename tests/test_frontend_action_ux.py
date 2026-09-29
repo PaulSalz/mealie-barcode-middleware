@@ -56,8 +56,9 @@ def test_home_assistant_scan_automation_uses_configured_webhook_and_includes_pay
     assert "persistent_notification.create" in automation
     for field in ("barcode", "item", "result_type", "action_url", "added_to_list", "paused", "route", "quantity", "item_id", "unit_id"):
         assert "trigger.json.get('" + field + "'" in automation
-    assert "Full payload: {{ trigger.json | tojson }}" in automation
+    assert "Full payload: {{ trigger.json | to_json }}" in automation
     assert "YOUR_WEBHOOK_ID" not in automation
+    assert "target:" not in automation
 
 
 def test_mobile_dashboard_focuses_on_printing_recent_scans_and_code_linking():
