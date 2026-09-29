@@ -145,7 +145,7 @@ def main() -> None:
             return {name: style.animationName, duration: style.animationDuration, timing: style.animationTimingFunction, state: style.animationPlayState, position: style.backgroundPosition};
         }""")
         assert normal_animation["name"] == "b2m-logo-rainbow-live", (normal_animation, theme_debug())
-        assert normal_animation["duration"] == "12s" and normal_animation["timing"] == "linear" and normal_animation["state"] == "running", (normal_animation, theme_debug())
+        assert normal_animation["duration"] == "8s" and normal_animation["timing"] == "linear" and normal_animation["state"] == "running", (normal_animation, theme_debug())
         normal_position_before = normal_animation["position"]
         page.wait_for_timeout(250)
         normal_position_after = normal_logo.evaluate("el => getComputedStyle(el).backgroundPosition")
@@ -245,7 +245,7 @@ def main() -> None:
         }""")
         assert logo_animation == {
             "name": "b2m-logo-rainbow-live",
-            "duration": "12s",
+            "duration": "8s",
             "timing": "linear",
             "iterations": "infinite",
             "state": "running",
