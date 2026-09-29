@@ -10,7 +10,7 @@
     if (!body) return;
 
     var advancedFields = [
-        'lookup_primary', 'lookup_strategy', 'lookup_enrich_in_background',
+        'lookup_enrich_in_background',
         'fuzzy_match_threshold', 'fuzzy_ambiguity_gap', 'item_sync_interval_hours',
         'lookup_ttl_days', 'max_retry_attempts', 'notification_toast_seconds',
         'notification_group_window_seconds', 'dashboard_poll_interval_seconds',
@@ -41,16 +41,6 @@
             advancedNodes.push(card);
         }
     });
-    Array.from(form.querySelectorAll('label.form-label')).forEach(function(label) {
-        if (label.textContent.trim().replace(/\s+/g, ' ') !== 'API endpoint') return;
-        var node = label.closest('.col-md-6');
-        if (node && advancedNodes.indexOf(node) === -1) {
-            node.classList.add('b2m-advanced-setting');
-            node.dataset.advancedSetting = '1';
-            advancedNodes.push(node);
-        }
-    });
-
     var toolbar = document.createElement('div');
     toolbar.className = 'card bg-muted-lt mb-3';
     toolbar.id = 'settings-view-tools';
@@ -339,4 +329,33 @@
 
     refresh();
     window.setInterval(refresh, 8000);
+})();
+
+
+(function copyHomeAssistantScanAutomation() {
+    'use strict';
+    var button = document.getElementById('copy-ha-scan-automation');
+    var area = document.getElementById('ha-scan-automation-yaml');
+    var status = document.getElementById('ha-scan-automation-status');
+    if (!button || !area) return;
+    button.addEventListener('click', async function() {
+        var copied = false;
+        if (window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            try { await navigator.clipboard.writeText(area.value); copied = true; } catch (error) {}
+        }
+        if (!copied) {
+            area.focus();
+            area.select();
+            area.setSelectionRange(0, area.value.length);
+            try { copied = document.execCommand('copy'); } catch (error) {}
+        }
+        if (status) status.textContent = copied
+            ? 'Automation copied. Add it in Home Assistant.'
+            : 'Copy failed. Select the YAML above and copy it manually.';
+        if (copied) {
+            var old = button.innerHTML;
+            button.innerHTML = '<i class="ti ti-check icon"></i> Copied';
+            window.setTimeout(function() { button.innerHTML = old; }, 1500);
+        }
+    });
 })();

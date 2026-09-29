@@ -55,6 +55,7 @@
 
   function getEntryState(entry, index) {
     if (!entry) return null;
+    entryStates = loadJson(ENTRY_KEY, entryStates);
     const key = entryKey(entry, index);
     if (!entryStates[key]) {
       const profileId = localStorage.getItem(PROFILE_KEY) || (profiles[0] && profiles[0].id) || '50x30';
@@ -183,7 +184,7 @@
       '<div class="d-flex align-items-center justify-content-between gap-2 mb-2"><div><div class="fw-semibold">Element inspector</div><div class="text-secondary small">Click an element on the label to edit it.</div></div><button class="btn btn-sm btn-outline-secondary" id="b21-v2-reset-all" type="button"><i class="ti ti-restore"></i> Reset all</button></div>' +
       '<select class="form-select mb-2" id="b21-v2-element-select"></select>' +
       '<div class="mb-2 d-none" id="b21-v2-content-row"><label class="form-label">Content / encoded value</label><input class="form-control" id="b21-v2-content"></div>' +
-      '<div class="row g-2 mb-2"><div class="col-6"><label class="form-check form-switch"><input class="form-check-input" type="checkbox" id="b21-v2-visible"><span class="form-check-label">Visible</span></label></div><div class="col-6 text-end"><button class="btn btn-sm btn-outline-danger" type="button" id="b21-v2-delete-element"><i class="ti ti-trash"></i> Delete</button></div></div>' +
+      '<div class="d-flex justify-content-end mb-2"><button class="btn btn-sm btn-outline-danger" type="button" id="b21-v2-delete-element"><i class="ti ti-trash"></i> Delete</button></div>' +
       '<div class="row g-2" id="b21-v2-ranges">' +
         rangeHtml('X','x',0,100,1) + rangeHtml('Y','y',0,100,1) + rangeHtml('Width','w',2,100,1) + rangeHtml('Height','h',1,100,1) + rangeHtml('Rotation','rotation',0,359,1) + rangeHtml('Font size','fontSizePt',5,48,1) + rangeHtml('Line width','lineWidthMm',.1,3,.05) +
       '</div>' +
@@ -205,7 +206,6 @@
     body.appendChild(inspector);
 
     $('b21-v2-element-select').addEventListener('change', function(){ selectedElementId=this.value; renderStage(); syncInspector(); });
-    $('b21-v2-visible').addEventListener('change', updateSelectedFromInspector);
     $('b21-v2-content').addEventListener('input', updateSelectedFromInspector);
     body.querySelectorAll('.b21-v2-range').forEach((range) => {
       range.addEventListener('input', updateSelectedFromInspector);
@@ -270,7 +270,6 @@
     else if(el.source==='value') content.value=s.codeValue||currentEntry().code||'';
     else content.value=el.text||'';
     content.readOnly=el.source==='label'||el.source==='value';
-    $('b21-v2-visible').checked=el.visible!==false;
     const defs=defaultForElement(el.type,el.id);
     ['x','y','w','h','rotation','fontSizePt','lineWidthMm'].forEach((key)=>{
       const input=$('b21-v2-'+key); const wrap=input && input.closest('.b21-v2-range-wrap'); if(!input)return;
@@ -285,7 +284,6 @@
 
   function updateSelectedFromInspector(){
     const s=currentState(), el=selectedElement(); if(!s||!el)return;
-    el.visible=$('b21-v2-visible').checked;
     if(el.type==='code' && !$('b21-v2-content').readOnly) s.codeValue=$('b21-v2-content').value;
     if(el.type==='text' && !el.source && !$('b21-v2-content').readOnly) el.text=$('b21-v2-content').value;
     document.querySelectorAll('.b21-v2-range:not(.d-none)').forEach((input)=>{const key=input.dataset.key;if(key in el || ['fontSizePt','lineWidthMm'].includes(key)) el[key]=Number(input.value);const out=$('b21-v2-'+key+'-value');if(out)out.textContent=input.value;});
@@ -381,7 +379,25 @@
       const job=await fetchJson('/labels/b21/jobs',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pages})});activeJobId=job.id;if(status)status.textContent='Queued · '+job.id;pollJob(job.id);
     }catch(error){if(status){status.className='small text-danger b21-v2-job-state';status.textContent=error.message;}if(button)button.disabled=false;}
   }
-  function pollJob(id){clearInterval(jobPoll);const status=$('b21-v2-job-state'),button=$('label-niim-print');jobPoll=setInterval(async()=>{try{const job=await fetchJson('/labels/b21/jobs/'+encodeURIComponent(id));if(status){status.className='small text-secondary b21-v2-job-state';status.textContent=job.status+' · '+job.completed_pages+'/'+job.page_count+' · '+job.printed_labels+' labels';}if(job.status==='completed'||job.status==='failed'){clearInterval(jobPoll);if(status)status.className='small '+(job.status==='completed'?'text-success':'text-danger')+' b21-v2-job-state';if(job.error&&status)status.textContent='Failed · '+job.error;if(button)button.disabled=false;refreshPrinterHeader();}}catch(e){clearInterval(jobPoll);if(button)button.disabled=false;}},600);}
+  function pollJob(id){
+    clearInterval(jobPoll);
+    const status=$('b21-v2-job-state'),button=$('label-niim-print');
+    jobPoll=setInterval(async()=>{
+      try{
+        const job=await fetchJson('/labels/b21/jobs/'+encodeURIComponent(id));
+        if(status){status.className='small text-secondary b21-v2-job-state';status.textContent=job.status+' · '+job.completed_pages+'/'+job.page_count+' · '+job.printed_labels+' labels';}
+        if(job.status==='completed'||job.status==='failed'||job.status==='unknown'){
+          clearInterval(jobPoll);
+          const tone=job.status==='completed'?'text-success':job.status==='unknown'?'text-warning':'text-danger';
+          if(status)status.className='small '+tone+' b21-v2-job-state';
+          if(job.status==='unknown'&&status)status.textContent='Print result unknown · check printer output before retrying'+(job.error?' · '+job.error:'');
+          else if(job.error&&status)status.textContent='Failed · '+job.error;
+          if(button)button.disabled=false;
+          refreshPrinterHeader();
+        }
+      }catch(e){clearInterval(jobPoll);if(button)button.disabled=false;}
+    },600);
+  }
   async function printCalibrationTest(){const entry=currentEntry(),s=currentState(),p=currentProfile(),cal=getCalibration(p.id);if(!entry)return;const status=$('b21-v2-job-state');try{if(status)status.textContent='Preparing calibration…';const image=await renderSnapshot(entry,clone(s),clone(p),clone(cal),true);const job=await fetchJson('/labels/b21/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pages:[{image_base64:image,width_mm:p.width_mm,height_mm:p.height_mm,quantity:1,density:p.density,label_type:p.label_type,dpi:p.dpi,threshold:128}]})});pollJob(job.id);}catch(e){if(status){status.className='small text-danger';status.textContent=e.message;}}}
 
   function bindExistingControls(){
@@ -395,10 +411,21 @@
     moveLayer: function (id, direction) {
       const state = currentState();
       if (!state || !Array.isArray(state.elements)) return false;
+      const step = Number(direction);
       const index = state.elements.findIndex((row) => String(row.id) === String(id));
-      const next = index + Number(direction);
-      if (index < 0 || next < 0 || next >= state.elements.length) return false;
+      const next = index + step;
+      if (!Number.isInteger(step) || Math.abs(step) !== 1 || index < 0 || next < 0 || next >= state.elements.length) return false;
       [state.elements[index], state.elements[next]] = [state.elements[next], state.elements[index]];
+      selectedElementId = String(id);
+      persistAndRender();
+      return true;
+    },
+    setVisibility: function (id, visible) {
+      const state = currentState();
+      const element = state && Array.isArray(state.elements) && state.elements.find((row) => String(row.id) === String(id));
+      if (!element) return false;
+      element.visible = !!visible;
+      selectedElementId = String(id);
       persistAndRender();
       return true;
     },

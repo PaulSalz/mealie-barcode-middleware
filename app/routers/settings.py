@@ -11,6 +11,7 @@ from app.auth import generate_token, hash_token
 from app.config import settings, EDITABLE_SETTINGS, READONLY_SETTINGS
 from app.database import get_db
 from app.models import ApiToken, BarcodeCache, BarcodeMapping, Item, Activity, RetryQueue, SystemState, User
+from app.services.homeassistant import build_scan_notification_automation, homeassistant_webhook_id
 from app.templating import templates, set_cached_theme, get_cached_theme_css
 from app.theme import THEME_CHOICES, THEME_DEFAULTS, get_theme, save_theme
 
@@ -154,6 +155,8 @@ def settings_page(request: Request, tab: str = Query("mealie"), db: Session = De
         "config_groups": tab_groups, "has_editable": has_editable,
         "tokens": tokens, "new_token": None, "users": users,
         "theme": theme, "theme_choices": THEME_CHOICES, "admin_info": admin_info,
+        "scan_notification_automation": build_scan_notification_automation(settings.ha_webhook_url) if tab == "homeassistant" else "",
+        "scan_webhook_configured": bool(homeassistant_webhook_id(settings.ha_webhook_url)) if tab == "homeassistant" else False,
     })
 
 

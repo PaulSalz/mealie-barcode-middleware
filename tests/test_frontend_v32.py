@@ -17,7 +17,7 @@ def test_v35_assets_keep_one_theme_runtime():
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-scope-v32.js" in LABEL_JS
     assert LABEL_JS.index("js/labels-scope-v32.js") < LABEL_JS.index("js/labels-fixes-v30.js")
-    assert APP_VERSION == "2026.09.25.1"
+    assert APP_VERSION == "2026.09.29.1"
 
 
 def test_navbar_mode_is_atomic_and_persisted_per_user():
@@ -67,9 +67,11 @@ def test_layer_order_uses_canonical_editor_state_without_duplicate_visibility():
     assert "editor.moveLayer(id,direction)" in layers
     assert "data-layer-forward" in layers
     assert "data-layer-back" in layers
-    assert "data-layer-visible" not in layers
+    assert "data-layer-visible" in layers
+    assert "setVisibility" in editor
+    assert "entryStates = loadJson(ENTRY_KEY, entryStates)" in editor
     assert "b21-v2-visible" not in layers
-    assert "b21-v2-visible" in editor
+    assert "b21-v2-visible" not in editor
     assert "oldSection.classList.add('d-none')" in layers
 
 
@@ -88,3 +90,39 @@ def test_current_print_scope_bypasses_v30_queue_capture():
     assert "currentScope() !== 'current'" in source
     assert "label-niim-print-current-v32" in source
     assert "button.id = 'label-niim-print'" in source
+
+
+
+def test_theme_back_navigation_and_mobile_settings_are_updated():
+    theme = read("app/static/js/theme-controls-v32.js")
+    css = read("app/static/css/app.css")
+    settings = read("app/templates/settings.html")
+    assert "savedAppearanceMarker" in theme
+    assert "window.addEventListener('pageshow'" in theme
+    assert "if (!event.persisted) return;" in theme
+    assert "keepalive: true" in theme
+    assert ".navbar > .container-xl > .navbar-brand" in css
+    assert ".navbar > .container-xl > .navbar-toggler" in css
+    assert "b2m-mobile-nav-divider" in css
+    assert 'id="b2m-printer-force-disconnect"' in settings
+    assert 'class="card mb-3 d-none d-md-block" id="b2m-printer-connection-card"' not in settings
+
+
+
+def test_barcode_lookup_urls_and_strategy_are_visible_without_advanced_mode():
+    settings = read("app/static/js/settings-page.js")
+    config = read("app/config.py")
+    assert "'lookup_primary', 'lookup_strategy'" not in settings
+    assert "if (label.textContent.trim().replace(/\\s+/g, ' ') !== 'API endpoint') return;" not in settings
+    assert '("failover", "Fail over to the other source")' in config
+    assert '("complement", "Fill missing fields from the other source")' in config
+
+
+def test_generated_ha_settings_automation_has_a_copyable_textarea():
+    template = read("app/templates/settings.html")
+    router = read("app/routers/settings.py")
+    client = read("app/static/js/settings-page.js")
+    assert 'id="homeassistant-scan-automation"' in template
+    assert 'id="ha-scan-automation-yaml"' in template
+    assert "build_scan_notification_automation(settings.ha_webhook_url)" in router
+    assert "copy-ha-scan-automation" in client

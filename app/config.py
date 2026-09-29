@@ -71,7 +71,8 @@ EDITABLE_SETTINGS: dict[str, dict[str, Any]] = {
     "lookup_strategy": {
         "type": "choice", "label": "LOOKUP_STRATEGY", "description": "Lookup strategy",
         "help": "Failover: try secondary only when primary returns nothing. Complement: fill missing fields from the secondary source.",
-        "choices": ["failover", "complement"], "group": "Barcode Lookup Sources", "section": "Strategy",
+        "choices": [("failover", "Fail over to the other source"), ("complement", "Fill missing fields from the other source")],
+        "group": "Barcode Lookup Sources", "section": "Strategy",
     },
     "lookup_enrich_in_background": {
         "type": "bool", "label": "LOOKUP_ENRICH_IN_BACKGROUND", "description": "Enabled",

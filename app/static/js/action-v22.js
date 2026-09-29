@@ -44,6 +44,31 @@
     }
   };
 
+  const PRESET_SETTINGS = {
+    light: [
+      {key: 'entity_id', label: 'Light entity ID', placeholder: 'light.living_room', hint: 'Copy the entity ID from Home Assistant and paste it here.'},
+      {key: 'command', label: 'When scanned', type: 'select', options: [['toggle', 'Toggle'], ['turn_on', 'Turn on'], ['turn_off', 'Turn off']]},
+      {key: 'brightness_pct', label: 'Brightness (%)', type: 'number', placeholder: '100', showWhen: (payload) => payload.command === 'turn_on'}
+    ],
+    tts: [
+      {key: 'tts_entity', label: 'Text-to-speech entity ID', placeholder: 'tts.home_assistant_cloud', hint: 'Paste the TTS entity ID from Home Assistant.'},
+      {key: 'media_player', label: 'Media player entity ID', placeholder: 'media_player.living_room', hint: 'Paste the target speaker entity ID from Home Assistant.'},
+      {key: 'message', label: 'Spoken message', type: 'textarea', placeholder: 'Barcode {{ scan.barcode }} scanned', wide: true},
+      {key: 'language', label: 'Language', placeholder: 'de'}
+    ],
+    timer: [
+      {key: 'timer', label: 'Timer entity ID', placeholder: 'timer.kitchen', hint: 'Paste the timer entity ID from Home Assistant.'},
+      {key: 'duration', label: 'Timer duration (HH:MM:SS)', placeholder: '00:10:00'}
+    ],
+    automation: [
+      {key: 'entity_id', label: 'Automation entity ID', placeholder: 'automation.kitchen_mode', hint: 'Paste the automation entity ID from Home Assistant.'}
+    ],
+    notification: [
+      {key: 'title', label: 'Notification title', placeholder: 'B2M scan'},
+      {key: 'message', label: 'Notification text', type: 'textarea', placeholder: 'Barcode {{ scan.barcode }} scanned', wide: true}
+    ]
+  };
+
   const HELP = {
     action_id: 'Stable ID encoded in printed labels as ACTION:<id>. Keep it short and do not reuse an ID for a different purpose.',
     name: 'Human-readable name shown in B2M. It does not change an already printed Action code.',
@@ -241,6 +266,7 @@
         '<div class="b2m-action-preset-grid mb-3">' + Object.entries(PRESETS).map(([key, preset]) =>
           '<button class="b2m-action-preset" type="button" data-preset="' + key + '"><span class="avatar bg-primary-lt text-primary"><i class="ti ti-' + preset.icon + '"></i></span><span><strong>' + esc(preset.title) + '</strong><small>' + esc(preset.subtitle) + '</small></span></button>'
         ).join('') + '</div>' +
+        '<div id="action-v22-preset-settings" class="border rounded p-3 mb-3 d-none"></div>' +
         '<div class="alert alert-info py-2 mb-3" id="action-v22-preset-note" role="status">Choose an example, save the action in B2M, then copy the automation below into Home Assistant.</div>' +
         '<div class="accordion" id="action-v22-editor-accordion">' +
           editorSection('params', 'Parameters', 'Parameters are reusable server-side values stored with the Action. They are not sent automatically; reference one in the Payload as {{ params.key }}. Use them for values you may want to change later without printing a new barcode.') +
@@ -277,6 +303,57 @@
       const helperCard = timerCol.querySelector('.card');
       if (helperCard) helperCard.classList.add('mb-0');
     }
+  }
+
+  function renderPresetSettings() {
+    const root = $('action-v22-preset-settings');
+    if (!root) return;
+    const definitions = PRESET_SETTINGS[activePreset];
+    if (!definitions || activePreset === 'data') {
+      root.classList.add('d-none');
+      root.innerHTML = '';
+      return;
+    }
+    const payload = parseObject($('action-payload-json'));
+    const fields = definitions.filter((definition) => !definition.showWhen || definition.showWhen(payload));
+    root.classList.remove('d-none');
+    root.innerHTML =
+      '<div class="fw-semibold mb-1">Quick settings</div>' +
+      '<div class="form-hint mb-3">Paste entity IDs from Home Assistant. These settings are available in both normal and Advanced mode.</div>' +
+      '<div class="row g-3">' + fields.map((definition) => {
+        const value = payload[definition.key] == null ? '' : String(payload[definition.key]);
+        const wide = definition.wide || definition.type === 'textarea';
+        const wrap = '<div class="' + (wide ? 'col-12' : 'col-md-6') + '">' +
+          '<label class="form-label" for="action-preset-' + esc(definition.key) + '">' + esc(definition.label) + '</label>';
+        let control = '';
+        if (definition.type === 'select') {
+          control = '<select class="form-select" id="action-preset-' + esc(definition.key) + '" data-preset-key="' + esc(definition.key) + '">' +
+            definition.options.map(([optionValue, label]) => '<option value="' + esc(optionValue) + '"' + (value === optionValue ? ' selected' : '') + '>' + esc(label) + '</option>').join('') +
+            '</select>';
+        } else if (definition.type === 'textarea') {
+          control = '<textarea class="form-control" rows="2" id="action-preset-' + esc(definition.key) + '" data-preset-key="' + esc(definition.key) + '" placeholder="' + esc(definition.placeholder || '') + '">' + esc(value) + '</textarea>';
+        } else {
+          control = '<input class="form-control" type="' + (definition.type || 'text') + '" id="action-preset-' + esc(definition.key) + '" data-preset-key="' + esc(definition.key) + '" value="' + esc(value) + '" placeholder="' + esc(definition.placeholder || '') + '"' + (definition.type === 'number' ? ' min="0" max="100" step="1"' : '') + '>';
+        }
+        return wrap + control + (definition.hint ? '<div class="form-hint">' + esc(definition.hint) + '</div>' : '') + '</div>';
+      }).join('') + '</div>';
+    root.querySelectorAll('[data-preset-key]').forEach((input) => {
+      const eventName = input.tagName === 'SELECT' ? 'change' : 'input';
+      input.addEventListener(eventName, function () {
+        const textarea = $('action-payload-json');
+        const next = parseObject(textarea);
+        next[this.dataset.presetKey] = this.value;
+        if (this.dataset.presetKey === 'brightness_pct' && this.value.trim() !== '') {
+          const brightness = Number(this.value);
+          if (!Number.isFinite(brightness)) return;
+          next.brightness_pct = Math.max(0, Math.min(100, Math.round(brightness)));
+        }
+        textarea.value = JSON.stringify(next, null, 2);
+        renderObjectEditor('payload', next);
+        if (this.dataset.presetKey === 'command') renderPresetSettings();
+        updateHaYaml();
+      });
+    });
   }
 
   function slug(value) {
@@ -384,6 +461,7 @@
     renderObjectEditor('params', preset.params);
     renderObjectEditor('payload', payload);
     activePreset = name;
+    renderPresetSettings();
 
     document.querySelectorAll('.b2m-action-preset').forEach((button) => {
       button.classList.toggle('active', button.dataset.preset === name);
@@ -567,7 +645,12 @@
   }
 
   function yamlQuote(value) {
-    return String(value || '').replace(/'/g, "''");
+    return String(value || '').replace(/[\r\n]+/g, ' ').replace(/'/g, "''");
+  }
+
+  function validEntity(value, domain, fallback) {
+    const candidate = String(value || '').trim();
+    return new RegExp('^' + domain + '\\.[a-zA-Z0-9_]+$').test(candidate) ? candidate : fallback;
   }
 
   function webhookId(url) {
@@ -594,50 +677,52 @@
     let action = '';
 
     if (selectedPreset === 'light') {
-      const entity = yamlQuote(payload.entity_id || 'light.kitchen');
+      const entity = yamlQuote(validEntity(payload.entity_id, 'light', 'light.kitchen'));
       const command = ['turn_on', 'turn_off'].includes(payload.command) ? payload.command : 'toggle';
-      description = 'Toggles a Home Assistant light when a B2M code is scanned.';
+      description = 'Controls a Home Assistant light when a B2M code is scanned.';
       action = '  - action: light.' + command + '\n' +
-        '    target:\n      entity_id: "{{ trigger.json.entity_id | default(\'' + entity + '\') }}"\n';
-      if (command === 'turn_on' && Number.isFinite(Number(payload.brightness_pct))) {
-        action += '    data:\n      brightness_pct: "{{ trigger.json.brightness_pct | default(' + Number(payload.brightness_pct) + ') | int }}"\n';
+        '    target:\n      entity_id: \'' + entity + '\'\n';
+      const rawBrightness = payload.brightness_pct;
+      if (command === 'turn_on' && rawBrightness !== '' && rawBrightness != null && Number.isFinite(Number(rawBrightness))) {
+        const brightness = Math.max(0, Math.min(100, Math.round(Number(rawBrightness))));
+        action += '    data:\n      brightness_pct: ' + brightness + '\n';
       }
     } else if (selectedPreset === 'tts') {
-      const ttsEntity = yamlQuote(payload.tts_entity || 'tts.home_assistant_cloud');
-      const player = yamlQuote(payload.media_player || 'media_player.kitchen');
-      const language = yamlQuote(payload.language || 'de');
-      description = 'Speaks the B2M scan message on a Home Assistant media player.';
+      const ttsEntity = yamlQuote(validEntity(payload.tts_entity, 'tts', 'tts.home_assistant_cloud'));
+      const player = yamlQuote(validEntity(payload.media_player, 'media_player', 'media_player.kitchen'));
+      const language = /^[a-zA-Z]{2}([_-][a-zA-Z0-9]+)?$/.test(String(payload.language || '')) ? String(payload.language).replace('_', '-') : 'de';
+      description = 'Speaks the configured B2M scan message on a Home Assistant media player.';
       action = '  - action: tts.speak\n' +
-        '    target:\n      entity_id: "{{ trigger.json.tts_entity | default(\'' + ttsEntity + '\') }}"\n' +
-        '    data:\n      media_player_entity_id: "{{ trigger.json.media_player | default(\'' + player + '\') }}"\n' +
-        '      message: "{{ trigger.json.message | default(\'Barcode scanned\') }}"\n' +
-        '      language: "{{ trigger.json.language | default(\'' + language + '\') }}"\n';
+        '    target:\n      entity_id: \'' + ttsEntity + '\'\n' +
+        '    data:\n      media_player_entity_id: \'' + player + '\'\n' +
+        '      message: "{{ ((trigger | default({})).json | default({})).get(\'message\', \'Barcode scanned\') }}"\n' +
+        '      language: \'' + yamlQuote(language) + '\'\n';
     } else if (selectedPreset === 'timer') {
-      const timer = yamlQuote(payload.timer || 'timer.kitchen');
-      const duration = yamlQuote(payload.duration || '00:10:00');
+      const timer = yamlQuote(validEntity(payload.timer, 'timer', 'timer.kitchen'));
+      const durationRaw = String(payload.duration || '00:10:00').trim();
+      const duration = /^\d{1,3}:\d{2}:\d{2}$/.test(durationRaw) ? yamlQuote(durationRaw) : '00:10:00';
       description = 'Starts a Home Assistant timer when a B2M code is scanned.';
       action = '  - action: timer.start\n' +
-        '    target:\n      entity_id: "{{ trigger.json.timer | default(\'' + timer + '\') }}"\n' +
-        '    data:\n      duration: "{{ trigger.json.duration | default(\'' + duration + '\') }}"\n';
+        '    target:\n      entity_id: \'' + timer + '\'\n' +
+        '    data:\n      duration: \'' + duration + '\'\n';
     } else if (selectedPreset === 'automation') {
-      const entity = yamlQuote(payload.entity_id || 'automation.kitchen_mode');
+      const entity = yamlQuote(validEntity(payload.entity_id, 'automation', 'automation.kitchen_mode'));
       description = 'Runs a Home Assistant automation when a B2M code is scanned.';
       action = '  - action: automation.trigger\n' +
-        '    target:\n      entity_id: "{{ trigger.json.entity_id | default(\'' + entity + '\') }}"\n' +
+        '    target:\n      entity_id: \'' + entity + '\'\n' +
         '    data:\n      skip_condition: true\n';
     } else if (selectedPreset === 'notification') {
-      const title = yamlQuote(payload.title || 'B2M scan');
       description = 'Shows a Home Assistant notification for every scanned code.';
       action = '  - action: persistent_notification.create\n' +
-        '    data:\n      title: "{{ trigger.json.title | default(\'' + title + '\') }}"\n' +
-        '      message: "{{ trigger.json.message | default(\'Barcode scanned\') }}"\n';
+        '    data:\n      title: "{{ ((trigger | default({})).json | default({})).get(\'title\', \'B2M scan\') }}"\n' +
+        '      message: "{{ ((trigger | default({})).json | default({})).get(\'message\', \'Barcode scanned\') }}"\n';
     } else {
       description = 'Emits a b2m_action event for custom Home Assistant automations.';
       action = '  - event: b2m_action\n    event_data:\n' +
-        '      action_id: "{{ trigger.json.action_id | default(\'\') }}"\n' +
-        '      action_name: "{{ trigger.json.action_name | default(\'\') }}"\n' +
-        '      barcode: "{{ trigger.json.barcode | default(\'\') }}"\n' +
-        '      duration_seconds: "{{ trigger.json.params.duration_seconds | default(0) }}"\n';
+        '      action_id: "{{ ((trigger | default({})).json | default({})).get(\'action_id\', \'\') }}"\n' +
+        '      action_name: "{{ ((trigger | default({})).json | default({})).get(\'action_name\', \'\') }}"\n' +
+        '      barcode: "{{ ((trigger | default({})).json | default({})).get(\'barcode\', \'\') }}"\n' +
+        '      duration_seconds: "{{ (((trigger | default({})).json | default({})).get(\'params\', {})).get(\'duration_seconds\', 0) }}"\n';
     }
 
     return "alias: 'B2M - " + yamlQuote(currentActionName()) + "'\n" +
@@ -683,6 +768,7 @@
         document.querySelectorAll('.b2m-action-preset').forEach((button) => {
           button.classList.toggle('active', button.dataset.preset === activePreset);
         });
+        renderPresetSettings();
         updateHaYaml();
       });
     });
@@ -819,6 +905,7 @@
       button.classList.toggle('active', button.dataset.preset === activePreset);
     });
     if (exampleActive) syncPayloadIdentity();
+    renderPresetSettings();
     updateHaYaml();
   }
 

@@ -1,7 +1,9 @@
 """Home Assistant webhook integration."""
 
 import logging
+import re
 import time
+from urllib.parse import unquote, urlsplit
 
 import httpx
 
@@ -180,3 +182,54 @@ def dismiss_notification(barcode: str, result: str | None = None) -> None:
     except Exception:
         _log_slow("dismiss notification", started)
         logger.warning("HA dismiss webhook failed for barcode %s", barcode, exc_info=True)
+
+
+
+def homeassistant_webhook_id(url: str | None) -> str | None:
+    """Return a safe Home Assistant webhook ID from a configured webhook URL."""
+    if not url:
+        return None
+    try:
+        path = urlsplit(url.strip()).path
+        match = re.fullmatch(r"/api/webhook/([^/]+)/?", path)
+        if not match:
+            return None
+        webhook_id = unquote(match.group(1))
+        return webhook_id if re.fullmatch(r"[A-Za-z0-9_-]+", webhook_id) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def build_scan_notification_automation(webhook_url: str | None) -> str:
+    """Build a copy-ready HA automation that displays the complete B2M webhook payload."""
+    webhook_id = homeassistant_webhook_id(webhook_url) or "YOUR_WEBHOOK_ID"
+    yaml = """alias: B2M - Show scan details
+description: Show all details sent by B2M when a code is scanned.
+triggers:
+  - trigger: webhook
+    webhook_id: '__WEBHOOK_ID__'
+    allowed_methods:
+      - POST
+    local_only: true
+conditions: []
+actions:
+  - action: persistent_notification.create
+    data:
+      title: "{{ trigger.json.get('item', 'B2M code scanned') }}"
+      message: >-
+        Barcode: {{ trigger.json.get('barcode', '—') }}
+        Item: {{ trigger.json.get('item', '—') }}
+        Result: {{ trigger.json.get('result_type', '—') }}
+        Action: {{ trigger.json.get('action', '—') }}
+        Action URL: {{ trigger.json.get('action_url', '—') }}
+        Added to list: {{ trigger.json.get('added_to_list', '—') }}
+        Paused: {{ trigger.json.get('paused', '—') }}
+        Route: {{ trigger.json.get('route', '—') }}
+        Quantity: {{ trigger.json.get('quantity', '—') }}
+        Item ID: {{ trigger.json.get('item_id', '—') }}
+        Unit ID: {{ trigger.json.get('unit_id', '—') }}
+        Full payload: {{ trigger.json | to_json }}
+mode: queued
+max: 10
+"""
+    return yaml.replace("__WEBHOOK_ID__", webhook_id)

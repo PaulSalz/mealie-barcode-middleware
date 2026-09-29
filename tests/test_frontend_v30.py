@@ -17,7 +17,7 @@ def test_v30_assets_are_retained_without_legacy_theme_runtime():
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/shopping-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-fixes-v30.js" in LABEL_JS
-    assert APP_VERSION == "2026.09.25.1"
+    assert APP_VERSION == "2026.09.29.1"
 
 
 def test_label_queue_uses_one_native_multipage_job():
@@ -33,12 +33,13 @@ def test_label_queue_uses_one_native_multipage_job():
     assert "PrintOutcomeUnknown" in service
 
 
-def test_settings_force_disconnect_is_always_available_on_desktop():
+def test_settings_force_disconnect_is_available_on_desktop_and_mobile():
     template = read("app/templates/settings.html")
     client = read("app/static/js/settings-page.js")
     service = read("app/services/niimblue.py")
     assert 'id="b2m-printer-force-disconnect"' in template
-    assert "d-none d-md-block" in template
+    assert '<div class="card mb-3" id="b2m-printer-connection-card">' in template
+    assert '<div class="card mb-3 d-none d-md-block" id="b2m-printer-connection-card">' not in template
     assert "method:'POST'" in client
     assert '_request("POST", "/disconnect", json={}, timeout=5)' in service
     assert "Disconnect requested" in service
