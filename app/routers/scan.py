@@ -71,6 +71,7 @@ def _queue_ha_notification(resp: ScanResponse, barcode: str, background_tasks: B
         resp.action_url or _build_action_url(barcode),
         added_to_list,
         resp.paused,
+        resp.model_dump(),
     )
 
 
