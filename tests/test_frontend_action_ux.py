@@ -58,9 +58,11 @@ def test_home_assistant_scan_automation_uses_configured_webhook_and_includes_pay
     automation = build_scan_notification_automation(url)
     assert "webhook_id: 'b2m_scan_test'" in automation
     assert "persistent_notification.create" in automation
-    for field in ("barcode", "item", "result_type", "action_url", "added_to_list", "paused", "quantity", "via", "needs_action", "brand", "item_source"):
-        assert "((trigger | default({})).json | default({})).get('" + field + "'" in automation
-    assert "Full payload: {{ ((trigger | default({})).json | default({})) | to_json }}" in automation
+    assert "{% set scan = ((trigger | default({})).json | default({})) %}" in automation
+    for field in ("barcode", "item", "result_type", "action_url", "added_to_list", "paused", "quantity", "via", "needs_action", "brand", "item_source", "barcode_state", "barcode_known", "barcode_linked", "barcode_pending"):
+        assert "scan.get('" + field + "'" in automation
+    assert "Full payload" not in automation
+    assert "processing" in automation
     assert "trigger.json.get(" not in automation
     assert "YOUR_WEBHOOK_ID" not in automation
     assert "target:" not in automation
