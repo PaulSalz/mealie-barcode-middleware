@@ -39,6 +39,7 @@ def _theme_from_form(form) -> dict[str, str]:
         "logo_color": str(form.get("theme_logo_color", THEME_DEFAULTS["logo_color"])),
         "button_color": str(form.get("theme_button_color", THEME_DEFAULTS["button_color"])),
         "font": str(form.get("theme_font", THEME_DEFAULTS["font"])),
+        "font_size": str(form.get("theme_font_size", THEME_DEFAULTS["font_size"])),
         "base": str(form.get("theme_base", THEME_DEFAULTS["base"])),
         "radius": str(form.get("theme_radius", THEME_DEFAULTS["radius"])),
         "date_style": str(form.get("theme_date_style", THEME_DEFAULTS["date_style"])),
@@ -65,6 +66,7 @@ def appearance_v24_get(request: Request, db: Session = Depends(get_db)):
             "logo_color": THEME_CHOICES["logo_color"],
             "button_color": THEME_CHOICES["button_color"],
             "font": THEME_CHOICES["font"],
+            "font_size": THEME_CHOICES["font_size"],
             "base": THEME_CHOICES["base"],
             "radius": THEME_CHOICES["radius"],
             "date_style": THEME_CHOICES["date_style"],
@@ -113,7 +115,7 @@ async def appearance_v24_save(request: Request, db: Session = Depends(get_db)):
     payload = body.get("theme") if isinstance(body.get("theme"), dict) else body
     theme_fields = {
         key: value for key, value in payload.items()
-        if key in {"mode", "logo_color", "button_color", "font", "base", "radius", "epaper", "contrast", "date_style", "color"}
+        if key in {"mode", "logo_color", "button_color", "font", "font_size", "base", "radius", "epaper", "contrast", "date_style", "color"}
     }
     theme = save_personal_theme(db, user_id, theme_fields) if theme_fields else personal_theme(db, user_id)
     return {"ok": True, "theme": theme, "advanced_settings": _advanced_settings_preference(db, user_id)}

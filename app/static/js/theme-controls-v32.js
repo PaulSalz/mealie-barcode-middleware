@@ -112,6 +112,7 @@
       logo_color: checkedValue('theme_logo_color', 'blue'),
       button_color: checkedValue('theme_button_color', 'blue'),
       font: fieldValue('theme_font', 'sans-serif'),
+      font_size: fieldValue('theme_font_size', '100'),
       base: fieldValue('theme_base', 'gray'),
       radius: checkedValue('theme_radius', '1'),
       date_style: fieldValue('theme_date_style', 'medium'),
@@ -158,6 +159,7 @@
     root.dataset.b2mLogoColor = state.logo_color;
     root.dataset.b2mRadius = state.radius;
     root.dataset.b2mFont = state.font;
+    root.dataset.b2mFontSize = state.font_size;
     root.dataset.b2mEpaper = state.epaper;
 
     var mono = state.epaper === 'true';
@@ -174,6 +176,8 @@
 
     // Compatibility only; visual styling comes from global-ui.css v35 rules.
     compatPreview.textContent = mono ? 'html{filter:grayscale(1)}' : '';
+    var fontSizeOut = document.getElementById('profile-font-size-value');
+    if (fontSizeOut) fontSizeOut.textContent = state.font_size;
     var contrastOut = document.getElementById('profile-contrast-value');
     if (contrastOut) contrastOut.textContent = state.contrast;
   }

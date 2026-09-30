@@ -63,6 +63,11 @@
             <div class="col-md-6"><label class="form-label">Font family</label><select name="theme_font" class="form-select">{% for opt in theme_choices.font %}<option value="{{ opt }}" {% if theme.font == opt %}selected{% endif %}>{{ opt|replace('-', ' ')|title }}</option>{% endfor %}</select></div>
             <div class="col-md-6"><label class="form-label">Background</label><select name="theme_base" class="form-select">{% for opt in theme_choices.base %}<option value="{{ opt }}" {% if theme.base == opt %}selected{% endif %}>{{ opt|title }}</option>{% endfor %}</select></div>
             <div class="col-12">
+              <label class="form-label" for="profile-font-size">Font size: <strong id="profile-font-size-value">{{ theme.font_size }}</strong>%</label>
+              <input type="range" class="form-range" name="theme_font_size" id="profile-font-size" min="80" max="130" step="5" value="{{ theme.font_size }}">
+              <div class="form-hint">Scales text and the app layout. Changes preview immediately.</div>
+            </div>
+            <div class="col-12">
               <label class="form-label">Corner radius</label>
               <div class="form-selectgroup">
                 {% for opt in theme_choices.radius %}

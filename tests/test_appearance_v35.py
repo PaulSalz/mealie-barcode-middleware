@@ -222,3 +222,37 @@ def test_legacy_ui_preferences_save_date_style_per_user():
     assert "save_personal_theme(db, user_id, {\"date_style\": date_style})" in source
     assert "save_theme(" not in source
     assert "set_cached_theme" not in source
+
+
+
+def test_font_size_is_validated_and_applies_to_saved_and_live_themes():
+    assert THEME_DEFAULTS["font_size"] == "100"
+    assert normalize_theme({"font_size": "132"})["font_size"] == "130"
+    assert normalize_theme({"font_size": "not-a-number"})["font_size"] == "100"
+
+    saved = build_theme_css({"font_size": "115"})
+    assert "--b2m-saved-font-size:115" in saved
+    assert "font-size:115%" in saved
+
+    live = build_theme_live_catalog_css()
+    assert 'html[data-b2m-font-size="115"]{font-size:115%}' in live
+
+
+def test_personal_font_size_setting_is_wired_end_to_end():
+    profile = read("app/templates/profile_appearance.html")
+    base = read("app/templates/base.html")
+    access = read("app/access_v23.py")
+    route = read("app/routers/appearance_v24.py")
+    controller = read("app/static/js/theme-controls-v32.js")
+    init = read("app/static/js/theme-init.js")
+
+    assert 'name="theme_font_size"' in profile
+    assert 'min="80" max="130" step="5"' in profile
+    assert 'data-b2m-font-size="{{ t.font_size }}"' in base
+    assert '"font-size": theme["font_size"]' in access
+    assert 'theme_font_size", THEME_DEFAULTS["font_size"]' in route
+    assert '"font_size": THEME_CHOICES["font_size"]' in route
+    assert "font_size: fieldValue('theme_font_size', '100')" in controller
+    assert "root.dataset.b2mFontSize = state.font_size" in controller
+    assert "--b2m-saved-font-size" in init
+    assert "root.dataset.b2mFontSize = fontSize" in init
