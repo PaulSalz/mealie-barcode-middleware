@@ -148,7 +148,7 @@
 
         var printerCard = document.createElement('div');
         printerCard.id = 'b21-printer-card';
-        printerCard.className = 'card mb-3 d-print-none' + (configured ? '' : ' d-none');
+        printerCard.className = 'card mb-3 d-print-none';
         printerCard.innerHTML = `
             <div class="card-header"><div><h3 class="card-title">Printer</h3><p class="card-subtitle">Manage the B21 Pro connection. This control stays available for either print output.</p></div></div>
             <div class="card-body">
