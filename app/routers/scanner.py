@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.access_v23 import has_permission
 from app.auth import require_token
 from app.config import settings
 from app.database import get_db
@@ -114,9 +115,9 @@ def scanner_recent_scans(limit: int = Query(5, ge=1, le=25), db: Session = Depen
     } for row in rows]}
 
 
-def _require_admin_json(request: Request):
-    if not request.session.get("is_admin", False):
-        return JSONResponse({"error": "admin required"}, status_code=403)
+def _require_permission_json(request: Request, db: Session, permission: str):
+    if not has_permission(db, request.session.get("user_id"), permission):
+        return JSONResponse({"error": f"{permission} permission required"}, status_code=403)
     return None
 
 
@@ -134,7 +135,7 @@ def shopping_list_counts(force: bool = Query(False)):
 
 @router.post("/api/settings/mealie/default-list")
 async def save_default_list(request: Request, db: Session = Depends(get_db)):
-    if denied := _require_admin_json(request): return denied
+    if denied := _require_permission_json(request, db, "configuration"): return denied
     body = await request.json()
     try: list_id = set_default_shopping_list_id(str(body.get("list_id") or ""), db)
     except ValueError as exc: return JSONResponse({"error": str(exc)}, status_code=400)
@@ -142,22 +143,21 @@ async def save_default_list(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/api/settings/mealie/test")
-def test_mealie(request: Request):
-    if denied := _require_admin_json(request): return denied
+def test_mealie(request: Request, db: Session = Depends(get_db)):
+    if denied := _require_permission_json(request, db, "configuration"): return denied
     result = test_mealie_connection()
     return JSONResponse(result, status_code=200 if result.get("ok") else 502)
 
 
 @router.get("/api/settings/notifications")
 def notification_settings():
-    # Non-sensitive UI timing is readable by any authenticated web session; the
-    # auth middleware still protects /api/* pages. Mutations stay admin-only.
+    # Non-sensitive UI timing is readable by any authenticated web session.
     return {"toast_seconds": settings.notification_toast_seconds, "group_window_seconds": settings.notification_group_window_seconds}
 
 
 @router.post("/api/settings/notifications")
 async def save_notification_settings(request: Request, db: Session = Depends(get_db)):
-    if denied := _require_admin_json(request): return denied
+    if denied := _require_permission_json(request, db, "configuration"): return denied
     body = await request.json()
     try:
         toast = max(3, min(120, int(body.get("toast_seconds", settings.notification_toast_seconds))))
@@ -239,15 +239,15 @@ def _validated_niim_settings(body: dict) -> dict[str, str]:
 
 
 @router.get("/api/settings/niim")
-def niim_settings(request: Request):
-    if denied := _require_admin_json(request): return denied
+def niim_settings(request: Request, db: Session = Depends(get_db)):
+    if denied := _require_permission_json(request, db, "printer"): return denied
     from app.services.niimblue import config, printer_status
     return {"config": config(), "status": printer_status()}
 
 
 @router.post("/api/settings/niim")
 async def save_niim_settings(request: Request, db: Session = Depends(get_db)):
-    if denied := _require_admin_json(request): return denied
+    if denied := _require_permission_json(request, db, "printer"): return denied
     body = await request.json()
     if not isinstance(body, dict): return JSONResponse({"error": "JSON object required"}, status_code=400)
     try: values = _validated_niim_settings(body)

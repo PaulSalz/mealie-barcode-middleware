@@ -54,7 +54,7 @@ def _backup_response() -> FileResponse | JSONResponse:
 
 def _allowed(request: Request, db: Session) -> bool:
     user_id = request.session.get("user_id")
-    return bool(request.session.get("is_admin", False) or has_permission(db, user_id, "database"))
+    return has_permission(db, user_id, "database")
 
 
 @router.get("/api/database/backup-status")
@@ -74,10 +74,10 @@ def backup_status(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/settings/admin/backup")
-def admin_backup(request: Request):
-    """Create a WAL-safe verified backup for the admin settings page."""
-    if not request.session.get("is_admin", False):
-        return RedirectResponse("/settings?tab=mealie", status_code=303)
+def admin_backup(request: Request, db: Session = Depends(get_db)):
+    """Create a WAL-safe verified backup for database administrators."""
+    if not _allowed(request, db):
+        return RedirectResponse("/?permission_denied=database", status_code=303)
     return _backup_response()
 
 

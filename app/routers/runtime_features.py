@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.auth import require_token
+from app.access_v23 import has_permission
 from app.database import SessionLocal, get_db
 from app.models import ApiToken, SystemState
 from app.services.niimblue import print_image_base64, printer_status
@@ -76,9 +77,9 @@ def _scanner_config(db: Session) -> dict:
     return result
 
 
-def _require_admin(request: Request):
-    if not request.session.get("is_admin", False):
-        return JSONResponse({"error": "admin required"}, status_code=403)
+def _require_configuration(request: Request, db: Session):
+    if not has_permission(db, request.session.get("user_id"), "configuration"):
+        return JSONResponse({"error": "configuration permission required"}, status_code=403)
     return None
 
 
@@ -141,7 +142,7 @@ def scanner_runtime_config(
 
 @router.get("/api/settings/scanner-bridge")
 def scanner_bridge_settings(request: Request, db: Session = Depends(get_db)):
-    if denied := _require_admin(request):
+    if denied := _require_configuration(request, db):
         return denied
     return {"config": _scanner_config(db)}
 

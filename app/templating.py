@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from app.access_v23 import personal_theme
+from app.access_v23 import DEFAULT_USER_PERMISSIONS, permissions_for_user, personal_theme
 from app.config import settings
 from app.database import SessionLocal
 from app.i18n import template_language, template_translate
@@ -43,6 +43,26 @@ def set_cached_theme(theme: dict[str, str]) -> None:
     global _current_theme_css
     _current_theme.update(theme)
     _current_theme_css = build_theme_css(theme)
+
+
+@pass_context
+def get_template_access(context) -> dict[str, bool]:
+    """Return the current account's granular permissions for navigation."""
+    request = context.get("request")
+    if request is None:
+        return {key: False for key in DEFAULT_USER_PERMISSIONS}
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return {key: False for key in DEFAULT_USER_PERMISSIONS}
+    db = SessionLocal()
+    try:
+        from app.models import User
+        user = db.get(User, int(user_id))
+        return permissions_for_user(db, user)
+    except (TypeError, ValueError):
+        return {key: False for key in DEFAULT_USER_PERMISSIONS}
+    finally:
+        db.close()
 
 
 @pass_context
@@ -130,6 +150,7 @@ templates.env.filters["relative_time"] = _relative_time
 templates.env.filters["fromjson"] = _fromjson
 templates.env.globals["v"] = ASSET_VERSION
 templates.env.globals["get_theme"] = get_template_theme
+templates.env.globals["get_user_access"] = get_template_access
 templates.env.globals["t"] = template_translate
 templates.env.globals["tr"] = template_translate
 templates.env.globals["ui_language"] = template_language

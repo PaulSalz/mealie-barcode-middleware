@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from sqlalchemy.orm import Session
 
 from app.auth import generate_token, hash_token
+from app.access_v23 import has_permission
 from app.config import settings, EDITABLE_SETTINGS, READONLY_SETTINGS
 from app.database import get_db
 from app.models import ApiToken, BarcodeCache, BarcodeMapping, Item, Activity, RetryQueue, SystemState, User
@@ -34,6 +35,7 @@ _TAB_DESCRIPTIONS = {
     "matching": "Control how scanned products are matched and synced with Mealie.",
     "scanning": "What happens when a barcode is scanned — unknown barcode handling and list pause controls.",
     "system": "Timezone, logging, and other system-level settings.",
+    "printer": "Connect or disconnect the B21 label printer and open label printing.",
     "appearance": "Customize the look and feel of the web dashboard.",
     "tokens": "API tokens for authenticating barcode scanners.",
     "users": "Manage user accounts for the web dashboard.",
@@ -112,6 +114,7 @@ _TABS = [
     ("lookup", "Barcode Lookup", "ti-barcode"),
     ("matching", "Matching & Sync", "ti-arrows-sort"),
     ("scanning", "Scanning", "ti-scan"),
+    ("printer", "Label Printer", "ti-printer"),
     ("system", "System", "ti-settings"),
     ("appearance", "Appearance", "ti-palette"),
     ("tokens", "API Tokens", "ti-key"),
@@ -122,6 +125,7 @@ _TABS = [
 _SIDEBAR_GROUPS = {
     "Integrations": ["mealie", "homeassistant"],
     "Configuration": ["lookup", "matching", "scanning", "system"],
+    "Printing": ["printer"],
     "Personalization": ["appearance"],
     "Security": ["tokens", "users"],
     "Administration": ["admin"],
@@ -136,17 +140,61 @@ _TAB_GROUPS = {
     "system": ["System"],
 }
 
+_TAB_PERMISSIONS = {
+    "mealie": "configuration",
+    "homeassistant": "configuration",
+    "lookup": "configuration",
+    "matching": "configuration",
+    "scanning": "configuration",
+    "system": "configuration",
+    "appearance": "configuration",
+    "printer": "printer",
+    "tokens": "tokens",
+    "users": "users",
+    "admin": "database",
+}
 
-def _require_admin(request: Request) -> RedirectResponse | None:
-    if not request.session.get("is_admin", False):
+
+def _allowed(request: Request, db: Session, permission: str) -> bool:
+    return has_permission(db, request.session.get("user_id"), permission)
+
+
+def _require_permission(request: Request, db: Session, permission: str) -> RedirectResponse | None:
+    if _allowed(request, db, permission):
+        return None
+    return RedirectResponse(f"/?permission_denied={permission}", status_code=303)
+
+
+def _visible_settings_tabs(request: Request, db: Session):
+    tabs = [
+        tab for tab in _TABS
+        if _TAB_PERMISSIONS.get(tab[0]) and _allowed(request, db, _TAB_PERMISSIONS[tab[0]])
+    ]
+    tab_ids = {tab[0] for tab in tabs}
+    groups = {
+        label: [tab_id for tab_id in group_ids if tab_id in tab_ids]
+        for label, group_ids in _SIDEBAR_GROUPS.items()
+    }
+    return tabs, {label: tab_ids for label, tab_ids in groups.items() if tab_ids}
+
+
+def _require_admin(request: Request, db: Session) -> RedirectResponse | None:
+    user = db.get(User, request.session.get("user_id"))
+    if not user or not user.is_admin:
         return RedirectResponse("/", status_code=303)
     return None
 
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, tab: str = Query("mealie"), db: Session = Depends(get_db)):
-    if redirect := _require_admin(request):
-        return redirect
+    tabs, sidebar_groups = _visible_settings_tabs(request, db)
+    permission = _TAB_PERMISSIONS.get(tab)
+    if not permission or not _allowed(request, db, permission):
+        if tab == "mealie" and tabs:
+            tab = tabs[0][0]
+            permission = _TAB_PERMISSIONS.get(tab)
+        if not permission or not _allowed(request, db, permission):
+            return RedirectResponse("/?permission_denied=" + str(permission or "settings"), status_code=303)
     all_groups = _build_config_groups()
     active_groups = _TAB_GROUPS.get(tab, [])
     tab_groups = [(name, sections) for name, sections in all_groups if name in active_groups]
@@ -157,12 +205,13 @@ def settings_page(request: Request, tab: str = Query("mealie"), db: Session = De
     admin_info = _get_admin_info(db) if tab == "admin" else {}
     tab_label = next((label for tid, label, _ in _TABS if tid == tab), tab.title())
     return templates.TemplateResponse(request, "settings.html", {
-        "tabs": _TABS, "sidebar_groups": _SIDEBAR_GROUPS,
+        "tabs": tabs, "sidebar_groups": sidebar_groups,
         "current_tab": tab, "current_tab_label": tab_label,
         "tab_description": _TAB_DESCRIPTIONS.get(tab, ""),
         "section_descriptions": _SECTION_DESCRIPTIONS,
         "config_groups": tab_groups, "has_editable": has_editable,
         "tokens": tokens, "new_token": None, "users": users,
+        "is_admin": bool(db.get(User, request.session.get("user_id")) and db.get(User, request.session.get("user_id")).is_admin),
         "theme": theme, "theme_choices": THEME_CHOICES, "admin_info": admin_info,
         "scan_notification_automation": build_scan_notification_automation(settings.ha_webhook_url) if tab == "homeassistant" else "",
         "scan_webhook_configured": bool(homeassistant_webhook_id(settings.ha_webhook_url)) if tab == "homeassistant" else False,
@@ -171,7 +220,7 @@ def settings_page(request: Request, tab: str = Query("mealie"), db: Session = De
 
 @router.post("/settings/configuration", response_class=HTMLResponse)
 async def save_settings(request: Request, db: Session = Depends(get_db)):
-    if redirect := _require_admin(request):
+    if redirect := _require_permission(request, db, "configuration"):
         return redirect
     form_data = await request.form()
     tab = form_data.get("_tab", "mealie")
@@ -201,7 +250,7 @@ async def save_settings(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/settings/configuration/{field}/reset")
 def reset_setting(field: str, request: Request, db: Session = Depends(get_db)):
-    if redirect := _require_admin(request):
+    if redirect := _require_permission(request, db, "configuration"):
         return redirect
     if field not in EDITABLE_SETTINGS:
         return RedirectResponse("/settings?tab=mealie", status_code=303)
@@ -214,7 +263,7 @@ def reset_setting(field: str, request: Request, db: Session = Depends(get_db)):
 
 @router.post("/settings/tokens/create", response_class=HTMLResponse)
 def create_token(request: Request, name: str = Form(...), db: Session = Depends(get_db)):
-    if redirect := _require_admin(request):
+    if redirect := _require_permission(request, db, "tokens"):
         return redirect
     raw = generate_token()
     token = ApiToken(name=name, token_hash=hash_token(raw), token_prefix=raw[:8])
@@ -222,18 +271,20 @@ def create_token(request: Request, name: str = Form(...), db: Session = Depends(
     db.commit()
     db.refresh(token)
     tokens = db.query(ApiToken).order_by(ApiToken.created_at.desc()).all()
+    tabs, sidebar_groups = _visible_settings_tabs(request, db)
     return templates.TemplateResponse(request, "settings.html", {
-        "tabs": _TABS, "sidebar_groups": _SIDEBAR_GROUPS, "config_groups": [],
+        "tabs": tabs, "sidebar_groups": sidebar_groups, "config_groups": [],
         "tokens": tokens, "current_tab": "tokens", "current_tab_label": "API Tokens",
         "tab_description": _TAB_DESCRIPTIONS.get("tokens", ""),
         "section_descriptions": _SECTION_DESCRIPTIONS, "new_token": raw,
+        "is_admin": bool(db.get(User, request.session.get("user_id")) and db.get(User, request.session.get("user_id")).is_admin),
         "new_token_name": name, "theme": {}, "theme_choices": THEME_CHOICES,
     })
 
 
 @router.post("/settings/tokens/{token_id}/delete")
 def delete_token(token_id: str, request: Request, db: Session = Depends(get_db)):
-    if redirect := _require_admin(request):
+    if redirect := _require_permission(request, db, "tokens"):
         return redirect
     token = db.get(ApiToken, token_id)
     if token:
@@ -250,8 +301,8 @@ def api_pause_status(db: Session = Depends(get_db)):
 
 @router.post("/api/settings/pause")
 async def api_pause(request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
-        return JSONResponse({"error": "admin required"}, status_code=403)
+    if not _allowed(request, db, "scanning"):
+        return JSONResponse({"error": "scanning permission required"}, status_code=403)
     from app.events import scan_events
     from app.pause import get_pause_status, pause_until
     body = await request.json()
@@ -266,8 +317,8 @@ async def api_pause(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/api/settings/resume")
 def api_resume(request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
-        return JSONResponse({"error": "admin required"}, status_code=403)
+    if not _allowed(request, db, "scanning"):
+        return JSONResponse({"error": "scanning permission required"}, status_code=403)
     from app.events import scan_events
     from app.pause import resume_now
     resume_now(db)
@@ -297,7 +348,7 @@ async def api_set_theme_mode(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/settings/theme")
 async def save_theme_settings(request: Request, db: Session = Depends(get_db)):
-    if redirect := _require_admin(request):
+    if redirect := _require_permission(request, db, "configuration"):
         return redirect
     form_data = await request.form()
     values = {
@@ -352,7 +403,7 @@ def _get_admin_info(db: Session) -> dict:
 
 @router.post("/settings/admin/purge/{table}")
 def admin_purge_table(table: str, request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
+    if not _allowed(request, db, "database"):
         return RedirectResponse("/settings?tab=mealie", status_code=303)
     table_map = {
         "barcode_cache": BarcodeCache, "barcode_mappings": BarcodeMapping,
@@ -371,7 +422,7 @@ def admin_purge_table(table: str, request: Request, db: Session = Depends(get_db
 
 @router.post("/settings/admin/reset")
 def admin_reset(request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
+    if not _allowed(request, db, "database"):
         return RedirectResponse("/settings?tab=mealie", status_code=303)
     db.query(BarcodeMapping).delete()
     db.query(BarcodeCache).delete()
@@ -385,7 +436,7 @@ def admin_reset(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/settings/admin/factory-reset")
 def admin_factory_reset(request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
+    if not _allowed(request, db, "database"):
         return RedirectResponse("/settings?tab=mealie", status_code=303)
     db.query(BarcodeMapping).delete()
     db.query(BarcodeCache).delete()
@@ -428,7 +479,7 @@ def add_user(
     admin_current_password: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    if not request.session.get("is_admin", False):
+    if not _allowed(request, db, "users"):
         return RedirectResponse("/settings?tab=mealie", status_code=303)
     username = username.strip()
     if len(username) < 3:
@@ -436,6 +487,9 @@ def add_user(
     if len(password) < 8 or len(password) > 128:
         return _users_redirect("invalid_password")
     grant_admin = is_admin.strip().lower() in {"1", "true", "on"}
+    actor = db.get(User, request.session.get("user_id"))
+    if grant_admin and not (actor and actor.is_admin):
+        return _users_redirect("admin_required")
     if grant_admin and not admin_current_password:
         return _users_redirect("admin_password_required")
     if grant_admin and not _current_user_password_matches(request, admin_current_password, db):
@@ -450,11 +504,14 @@ def add_user(
 
 @router.post("/settings/users/{user_id}/delete")
 def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
+    if not _allowed(request, db, "users"):
         return RedirectResponse("/settings?tab=mealie", status_code=303)
     if user_id == request.session.get("user_id"):
         return RedirectResponse("/settings?tab=users", status_code=303)
     user = db.get(User, user_id)
+    actor = db.get(User, request.session.get("user_id"))
+    if user and user.is_admin and not (actor and actor.is_admin):
+        return _users_redirect("admin_required")
     if user:
         logger.info("User deleted: %s", user.username)
         db.delete(user)
@@ -472,7 +529,8 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     current_user_id = request.session.get("user_id")
-    is_admin = request.session.get("is_admin", False)
+    actor = db.get(User, current_user_id) if current_user_id is not None else None
+    is_admin = bool(actor and actor.is_admin)
     if not is_admin and user_id != current_user_id:
         return _users_redirect("access_denied")
     if len(password) < 8 or len(password) > 128:

@@ -38,11 +38,52 @@ def test_settings_layout_has_mobile_navigation_and_user_cards():
     base = read("app/templates/base.html")
 
     assert 'settings-shell' in template
-    assert 'settings-sidebar' in template
+    assert 'settings-tab-select' in template
     assert 'settings-content' in template
     assert 'data-label="Username"' in template and 'data-label="Role"' in template
-    assert '.settings-sidebar .list-group {' in css
+    assert '.settings-tab-picker .form-select' in css
     assert 'overflow-x: auto;' in css
     assert '.settings-users-table > tbody > tr:not(:has(td[colspan]))' in css
     assert '#b2m-printer-connection-card .card-body' in css
-    assert 'app.css?v={{ v }}&rev=11' in base
+    assert 'app.css?v={{ v }}&rev=12' in base
+
+
+def test_settings_dropdown_and_printer_panel_are_scoped_to_printer_tab():
+    template = read("app/templates/settings.html")
+    routes = read("app/routers/settings.py")
+    base = read("app/templates/base.html")
+
+    assert 'name="tab"' in template and 'optgroup label="{{ group_label }}"' in template
+    assert '{% if current_tab == \'printer\' %}' in template
+    assert template.count('id="b2m-printer-connection-card"') == 1
+    assert '("printer", "Label Printer", "ti-printer")' in routes
+    assert 'href="/settings?tab=printer"' in base
+    assert 'user_access.printer' in base
+
+
+def test_user_permission_controls_use_existing_access_api_and_server_checks():
+    template = read("app/templates/settings.html")
+    script = read("app/static/js/settings-page.js")
+    routes = read("app/routers/settings.py")
+
+    assert 'id="user-permissions-panel"' in template
+    assert template.count('id="user-permissions-modal"') == 1
+    assert "fetch('/api/access/users'" in script
+    assert "fetch('/api/access/users/'" in script
+    assert '"mealie": "configuration"' in routes
+    assert '"printer": "printer"' in routes
+    assert '"admin": "database"' in routes
+    assert 'if not _allowed(request, db, "database")' in routes
+
+
+def test_admin_role_changes_are_password_confirmed_and_cannot_self_lock_out():
+    template = read("app/templates/settings.html")
+    client = read("app/static/js/settings-page.js")
+    access = read("app/routers/access_v23.py")
+
+    assert 'id="user-permissions-admin"' in template
+    assert 'id="user-permissions-current-password"' in template
+    assert 'current_password:currentPassword.value' in client
+    assert "current password confirmation failed" in access
+    assert "you cannot remove your own administrator access" in access
+    assert '"configured_permissions": configured_permissions_for_user(db, user)' in access

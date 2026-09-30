@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.access_v23 import has_permission
 from app.database import get_db
 from app.models import Action, ActionExecution, Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
 from app.services import mealie_http
@@ -18,8 +19,17 @@ from app.theme import build_theme_css, get_theme, save_theme
 router = APIRouter()
 
 
+def _is_current_admin(request: Request, db: Session) -> bool:
+    user_id = request.session.get("user_id")
+    from app.models import User
+    user = db.get(User, int(user_id)) if user_id is not None else None
+    return bool(user and user.is_admin)
+
+
 @router.post("/api/settings/test-ha-webhook")
-def test_ha_webhook():
+def test_ha_webhook(request: Request, db: Session = Depends(get_db)):
+    if not has_permission(db, request.session.get("user_id"), "configuration"):
+        return JSONResponse({"error":"configuration permission required"}, status_code=403)
     url = settings.ha_webhook_url
     if not url:
         return JSONResponse({"ok": False, "error": "HA_WEBHOOK_URL is empty"}, status_code=400)
@@ -37,7 +47,9 @@ def test_ha_webhook():
 
 
 @router.post("/api/barcodes/{barcode:path}/test-route")
-def test_barcode_route(barcode: str, db: Session = Depends(get_db)):
+def test_barcode_route(barcode: str, request: Request, db: Session = Depends(get_db)):
+    if not has_permission(db, request.session.get("user_id"), "actions"):
+        return JSONResponse({"error":"actions permission required"}, status_code=403)
     targets = ensure_targets(barcode, db)
     if not targets:
         return JSONResponse({"ok":False,"error":"No targets configured for this barcode"}, status_code=404)
@@ -54,7 +66,7 @@ def test_barcode_route(barcode: str, db: Session = Depends(get_db)):
 
 @router.post("/api/theme/accessibility")
 async def save_accessibility_theme(request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
+    if not _is_current_admin(request, db):
         return JSONResponse({"error":"admin required"}, status_code=403)
     body = await request.json()
     values = {"epaper": "true" if bool(body.get("epaper")) else "false"}
@@ -76,7 +88,7 @@ async def save_accessibility_theme(request: Request, db: Session = Depends(get_d
 @router.post("/api/theme/preview")
 async def preview_accessibility_theme(request: Request, db: Session = Depends(get_db)):
     """Render e-paper/contrast CSS without persisting it."""
-    if not request.session.get("is_admin", False):
+    if not _is_current_admin(request, db):
         return JSONResponse({"error":"admin required"}, status_code=403)
     body = await request.json()
     current = get_theme(db)
@@ -113,8 +125,8 @@ def _delete_mealie_item_upstream(item: Item) -> str | None:
 @router.delete("/api/items/{item_id}")
 def delete_item(item_id: str, request: Request, db: Session = Depends(get_db)):
     """Delete one item explicitly; Mealie-backed items are deleted upstream first."""
-    if not request.session.get("is_admin", False):
-        return JSONResponse({"error":"admin required"}, status_code=403)
+    if not has_permission(db, request.session.get("user_id"), "items"):
+        return JSONResponse({"error":"items permission required"}, status_code=403)
     item = db.get(Item, item_id)
     if not item:
         return JSONResponse({"error":"item not found"}, status_code=404)
@@ -133,8 +145,9 @@ class BulkDeleteRequest(BaseModel):
 
 @router.post("/api/bulk-delete")
 def bulk_delete(body: BulkDeleteRequest, request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
-        return JSONResponse({"error":"admin required"}, status_code=403)
+    required = "actions" if body.kind == "actions" else "items"
+    if not has_permission(db, request.session.get("user_id"), required):
+        return JSONResponse({"error":f"{required} permission required"}, status_code=403)
     ids = list(dict.fromkeys(str(value).strip() for value in body.ids if str(value).strip()))
     if not ids:
         return {"ok":True,"deleted":0,"skipped":[],"errors":[]}
