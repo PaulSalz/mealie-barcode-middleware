@@ -14,6 +14,7 @@
   var frequentRefreshTimer = null;
   var frequentAddModal = null;
   var frequentAddTarget = null;
+  var frequentAddBackdrop = null;
 
   function onScanningSettings() {
     if (window.location.pathname !== '/settings') return false;
@@ -155,6 +156,39 @@
     }).join('');
   }
 
+  function showFrequentAddModal(modal) {
+    if (window.bootstrap && window.bootstrap.Modal) {
+      frequentAddModal = window.bootstrap.Modal.getOrCreateInstance(modal);
+      frequentAddModal.show();
+      return;
+    }
+    modal.style.display = 'block';
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    if (!frequentAddBackdrop) {
+      frequentAddBackdrop = document.createElement('div');
+      frequentAddBackdrop.className = 'modal-backdrop fade show';
+      frequentAddBackdrop.addEventListener('click', function () { hideFrequentAddModal(modal); });
+      document.body.appendChild(frequentAddBackdrop);
+    }
+  }
+
+  function hideFrequentAddModal(modal) {
+    if (window.bootstrap && window.bootstrap.Modal && frequentAddModal) {
+      frequentAddModal.hide();
+      return;
+    }
+    modal.classList.remove('show');
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+    if (frequentAddBackdrop) {
+      frequentAddBackdrop.remove();
+      frequentAddBackdrop = null;
+    }
+  }
+
   function ensureFrequentAddModal() {
     var modal = document.getElementById('b2m-frequent-add-modal');
     if (modal) return modal;
@@ -177,7 +211,7 @@
     document.body.appendChild(modal);
     modal.querySelectorAll('[data-bs-dismiss="modal"]').forEach(function (button) {
       button.addEventListener('click', function () {
-        if (window.bootstrap && window.bootstrap.Modal) window.bootstrap.Modal.getOrCreateInstance(modal).hide();
+        hideFrequentAddModal(modal);
       });
     });
     modal.querySelector('#b2m-frequent-add-form').addEventListener('submit', submitFrequentAdd);
@@ -205,8 +239,7 @@
     submit.disabled = true;
     status.textContent = 'Loading shopping lists…';
     list.innerHTML = '<option value="">Loading…</option>';
-    if (window.bootstrap && window.bootstrap.Modal) frequentAddModal = window.bootstrap.Modal.getOrCreateInstance(modal);
-    if (frequentAddModal) frequentAddModal.show();
+    showFrequentAddModal(modal);
     fetch('/api/dashboard', {headers: {Accept: 'application/json'}, cache: 'no-store'})
       .then(function (response) {
         if (!response.ok) throw new Error('Could not load shopping lists');
@@ -256,7 +289,7 @@
         status.textContent = 'Added to ' + (data.list_name || 'shopping list') + '.';
         window.dispatchEvent(new CustomEvent('b2m:shopping-list-updated'));
         window.setTimeout(function () {
-          if (frequentAddModal) frequentAddModal.hide();
+          hideFrequentAddModal(modal);
         }, 700);
       });
     }).catch(function (error) {
