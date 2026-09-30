@@ -53,18 +53,52 @@ class ScanResponse(BaseModel):
     quantity: str | None = None
     item_source: str | None = None
     paused: bool = False
+    barcode_state: str = "unknown"
+    barcode_known: bool | None = None
+    barcode_linked: bool | None = None
+    barcode_pending: bool | None = None
 
 
-def _queue_ha_notification(resp: ScanResponse, barcode: str, background_tasks: BackgroundTasks) -> None:
-    if not should_send_scan_webhook(resp.result, resp.needs_action):
+def _barcode_resolution(known: bool, linked: bool) -> tuple[str, bool, bool, bool]:
+    if linked:
+        return "linked", True, True, False
+    if known:
+        return "pending", True, False, True
+    return "unknown", False, False, False
+
+
+def _set_barcode_resolution(resp: ScanResponse, barcode: str, db: Session) -> None:
+    if barcode.startswith("ACTION:"):
+        resp.barcode_state = "action"
         return
+    if barcode.startswith("GENERIC:"):
+        resp.barcode_state = "generic"
+        return
+
+    linked = (
+        db.query(BarcodeTarget)
+        .filter(BarcodeTarget.barcode == barcode, BarcodeTarget.enabled == True)
+        .first()
+        is not None
+    )
+    cached = db.get(BarcodeCache, barcode)
+    known = linked or bool(cached and cached.found)
+    state, is_known, is_linked, is_pending = _barcode_resolution(known, linked)
+    resp.barcode_state = state
+    resp.barcode_known = is_known
+    resp.barcode_linked = is_linked
+    resp.barcode_pending = is_pending
+
+
+def _ha_notification_args(resp: ScanResponse, barcode: str):
+    if not should_send_scan_webhook(resp.result, resp.needs_action):
+        return None
     added_to_list = (
         resp.via is not None
         and resp.result not in {"unknown", "unknown_action", "needs_mapping", "error", "partial"}
         and not resp.paused
     )
-    background_tasks.add_task(
-        ha_notify_scan,
+    return (
         barcode,
         resp.item,
         resp.result,
@@ -75,13 +109,25 @@ def _queue_ha_notification(resp: ScanResponse, barcode: str, background_tasks: B
     )
 
 
+def _send_scan_notification(resp: ScanResponse, barcode: str) -> None:
+    args = _ha_notification_args(resp, barcode)
+    if args:
+        ha_notify_scan(*args)
+
+
+def _queue_ha_notification(resp: ScanResponse, barcode: str, background_tasks: BackgroundTasks) -> None:
+    args = _ha_notification_args(resp, barcode)
+    if args:
+        background_tasks.add_task(ha_notify_scan, *args)
+
+
 def _scan_failure(barcode: str, db: Session, background_tasks: BackgroundTasks) -> ScanResponse:
     db.rollback()
     try:
         _save_activity(barcode, "Scan failed", barcode, "error", db)
     except Exception:
         db.rollback()
-    resp = ScanResponse(result="error", item=barcode, needs_action=True, action_url=_build_action_url(barcode))
+    resp = ScanResponse(result="error", item=barcode, needs_action=True, action_url=_build_action_url(barcode), barcode_state="error")
     _queue_ha_notification(resp, barcode, background_tasks)
     return resp
 
@@ -98,6 +144,7 @@ def scan_barcode(
         raise HTTPException(status_code=422, detail="Barcode cannot be empty")
     try:
         resp = _process_scan(barcode, db, background_tasks)
+        _set_barcode_resolution(resp, barcode, db)
         _queue_ha_notification(resp, barcode, background_tasks)
         return resp
     except HTTPException:
@@ -578,6 +625,7 @@ def scan_barcode_app(
         raise HTTPException(status_code=422, detail="Barcode cannot be empty")
     try:
         resp = _process_scan(barcode, db, background_tasks)
+        _set_barcode_resolution(resp, barcode, db)
         _queue_ha_notification(resp, barcode, background_tasks)
         return resp
     except HTTPException:
