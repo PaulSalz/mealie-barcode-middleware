@@ -195,6 +195,8 @@ def test_mobile_dashboard_shows_recent_scans_and_remaining_cards():
     assert '#barcodes-table > tbody > tr:not(.barcodes-empty-row)' in css
     assert 'label-generator-layout' in read("app/templates/labels.html")
     assert 'shopping-print-layout' in read("app/templates/shopping_print.html")
+    assert ".table.table-vcenter {\n    border-collapse: separate;\n    border-spacing: 0 .35rem;" in css
+    assert ".table.table-vcenter > tbody > tr:not(.barcodes-empty-row)" in css
     assert ".label-page-header > .row > .col {\n    flex: 0 0 100%;" in css
     assert ".navbar-brand .ti-scan {\n    display: inline-flex;" in css
     assert "font-size: 1.5rem;" in css and ".navbar-brand .b2m-brand-text { font-size: 1rem;" in css
