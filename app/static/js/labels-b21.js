@@ -144,15 +144,22 @@
                     <label class="b2m-choice-card"><input class="form-check-input me-2" type="radio" name="label-output" value="browser"><span><strong>Browser print</strong><small>Sheet/page layout</small></span></label>
                     <label class="b2m-choice-card${configured ? '' : ' b2m-choice-disabled'}"><input class="form-check-input me-2" type="radio" name="label-output" value="b21"${configured ? '' : ' disabled'}><span><strong>B21 Pro</strong><small>niimblue-node · physical label preview</small></span></label>
                 </div>
-                <div class="b21-connection-bar d-none" id="b21-connection-bar">
-                    <div class="d-flex align-items-center gap-3 flex-wrap">
-                        <span class="b21-status-dot" id="b21-status-dot"></span>
-                        <div class="flex-fill min-w-0"><div class="fw-semibold" id="b21-status-title">Not connected</div><div class="text-secondary small" id="b21-status-detail">Connection is manual.</div></div>
-                        <button class="btn btn-outline-primary" type="button" id="b21-connect-button"><i class="ti ti-bluetooth icon"></i> Connect</button>
-                    </div>
-                </div>
             </div>`;
         row.parentNode.insertBefore(output, row);
+
+        var printerCard = document.createElement('div');
+        printerCard.id = 'b21-printer-card';
+        printerCard.className = 'card mb-3 d-print-none' + (configured ? '' : ' d-none');
+        printerCard.innerHTML = `
+            <div class="card-header"><div><h3 class="card-title">Printer</h3><p class="card-subtitle">Manage the B21 Pro connection. This control stays available for either print output.</p></div></div>
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3 flex-wrap" id="b21-connection-bar">
+                    <span class="b21-status-dot" id="b21-status-dot"></span>
+                    <div class="flex-fill min-w-0"><div class="fw-semibold" id="b21-status-title">Not connected</div><div class="text-secondary small" id="b21-status-detail">Connection is manual.</div></div>
+                    <button class="btn btn-outline-primary" type="button" id="b21-connect-button"><i class="ti ti-bluetooth icon"></i> Connect</button>
+                </div>
+            </div>`;
+        layoutCard.parentNode.insertBefore(printerCard, layoutCard.nextSibling);
 
         var b21Preview = document.createElement('div');
         b21Preview.id = 'b21-preview-body';
@@ -314,7 +321,6 @@
         $('browser-layout-body').classList.toggle('d-none', !browser);
         $('b21-preview-body').classList.toggle('d-none', browser);
         $('b21-layout-body').classList.toggle('d-none', browser);
-        $('b21-connection-bar').classList.toggle('d-none', browser);
         var browserBtn = $('label-print');
         var b21Btn = $('label-niim-print');
         if (browserBtn) browserBtn.classList.toggle('d-none', !browser);
@@ -330,9 +336,11 @@
         if (layoutTitle) layoutTitle.textContent = browser ? 'Print layout' : 'B21 label setup';
         if (layoutSubtitle) layoutSubtitle.textContent = browser ? 'Physical label/page settings. Code type is configured in the queue.' : 'Roll profile, RFID binding and label element geometry.';
         document.querySelectorAll('input[name="label-output"]').forEach(function(input) { input.checked = input.value === state.mode; });
+        refreshStatus();
         if (!browser) {
-            refreshStatus(); loadProfiles(); syncQueueSelector(); renderB21Preview(); startPolling();
-        } else stopPolling();
+            loadProfiles(); syncQueueSelector(); renderB21Preview();
+        }
+        if (configured) startPolling(); else stopPolling();
     }
 
     function startPolling() {
