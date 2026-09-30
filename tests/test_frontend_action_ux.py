@@ -177,6 +177,10 @@ def test_mobile_dashboard_shows_recent_scans_and_remaining_cards():
     assert '<summary class="card-header b2m-mobile-collapse-summary d-md-none"><span class="card-title">Frequently used</span>' in dashboard
     assert ".b2m-dashboard-frequent-cards { margin: 0; padding: .55rem; }" in css
     assert ".b2m-dashboard-frequent .list-group-item { padding: .35rem .55rem; }" in css
+    assert ".b2m-dashboard-mobile-flow {\n    display: flex;\n    flex-direction: column;\n    gap: .5rem;" in css
+    assert ".b2m-dashboard-overview .card-body { padding: .65rem; }" in css
+    assert ".b2m-stat-card .card-body {\n    min-height: unset;\n    padding: .6rem;" in css
+    assert "#recent-scans-card #recent-scans-body tr {" in css and "padding: .35rem .45rem;" in css
     for card in ("b2m-dashboard-overview", "b2m-dashboard-counts", "b2m-dashboard-shopping", "b2m-dashboard-frequent"):
         assert card in dashboard
     assert 'id="b2m-printer-connection-card"' in template
