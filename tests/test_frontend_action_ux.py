@@ -181,6 +181,9 @@ def test_mobile_dashboard_shows_recent_scans_and_remaining_cards():
     assert ".b2m-dashboard-overview .card-body { padding: .65rem; }" in css
     assert ".b2m-stat-card .card-body {\n    min-height: unset;\n    padding: .6rem;" in css
     assert "#recent-scans-card #recent-scans-body tr {" in css and "padding: .35rem .45rem;" in css
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in css
+    assert "@media (max-width: 359.98px)" in css
+    assert "if (media.matches && recentScans) recentScans.open = false;" in read("app/static/js/dashboard-v2.js")
     for card in ("b2m-dashboard-overview", "b2m-dashboard-counts", "b2m-dashboard-shopping", "b2m-dashboard-frequent"):
         assert card in dashboard
     assert 'id="b2m-printer-connection-card"' in template
