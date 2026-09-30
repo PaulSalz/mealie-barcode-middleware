@@ -54,7 +54,7 @@ def _backup_response() -> FileResponse | JSONResponse:
 
 def _allowed(request: Request, db: Session) -> bool:
     user_id = request.session.get("user_id")
-    return bool(request.session.get("is_admin", False) or has_permission(db, user_id, "database"))
+    return has_permission(db, user_id, "database")
 
 
 @router.get("/api/database/backup-status")
