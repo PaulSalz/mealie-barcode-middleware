@@ -182,7 +182,12 @@ def main() -> None:
         global_advanced = page.locator("#b2m-global-advanced-toggle")
         global_advanced.wait_for(state="visible", timeout=5_000)
         if global_advanced.is_checked():
-            global_advanced.uncheck(force=True)
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/appearance-v24")
+                and response.request.method == "POST",
+                timeout=5_000,
+            ):
+                global_advanced.uncheck(force=True)
         wait_until(
             lambda: not page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
             "Global Advanced mode did not switch off.",
@@ -209,7 +214,15 @@ def main() -> None:
             tools.click()
             global_advanced.wait_for(state="visible", timeout=5_000)
         if not global_advanced.is_checked():
-            global_advanced.check(force=True)
+            if not global_advanced.is_visible():
+                tools.click()
+                global_advanced.wait_for(state="visible", timeout=5_000)
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/appearance-v24")
+                and response.request.method == "POST",
+                timeout=5_000,
+            ):
+                global_advanced.check(force=True)
         wait_until(
             lambda: page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
             "Global Advanced mode did not switch on.",
