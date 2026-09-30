@@ -207,7 +207,7 @@ def main() -> None:
                 body=json.dumps({
                     "foods": [{"id": "ci-food-" + str(i), "name": "Food " + str(i), "uses": 12 - i} for i in range(10)],
                     "recipes": [{"id": "ci-recipe-" + str(i), "name": "Recipe " + str(i), "uses": 10 - i} for i in range(10)],
-                    "actions": [],
+                    "actions": [{"id": "ci-action", "name": "Kitchen light", "uses": 7}],
                     "limit": 9,
                 }),
             ),
@@ -223,16 +223,37 @@ def main() -> None:
             )
 
         page.route("**/api/dashboard/frequent/add", handle_frequent_add)
+        triggered_actions: list[dict] = []
+
+        def handle_frequent_action_trigger(route):
+            triggered_actions.append({"url": route.request.url, "method": route.request.method})
+            route.fulfill(status=202, content_type="application/json", body=json.dumps({"ok": True, "status": "queued"}))
+
+        page.route("**/api/dashboard/frequent/actions/*/trigger", handle_frequent_action_trigger)
         page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
         wait_until(
             lambda: page.locator("#b2m-frequent-foods .b2m-frequent-add").count() == 9,
             "Dashboard did not apply the personal Frequently used limit.",
         )
         assert page.locator("#b2m-frequent-recipes .b2m-frequent-add").count() == 9
+        action_button = page.locator("#b2m-frequent-actions .b2m-frequent-trigger")
+        assert action_button.count() == 1
+        assert "btn-sm" not in (action_button.get_attribute("class") or "")
+        with page.expect_request(
+            lambda request: request.url.endswith("/api/dashboard/frequent/actions/ci-action/trigger")
+            and request.method == "POST",
+            timeout=5_000,
+        ):
+            action_button.click()
+        wait_until(lambda: len(triggered_actions) == 1, "Dashboard action was not triggered.")
+        assert triggered_actions[0]["method"] == "POST"
 
         page.locator("#b2m-frequent-foods .b2m-frequent-add").first.click()
         modal = page.locator("#b2m-frequent-add-modal")
         modal.wait_for(state="visible", timeout=3_000)
+        modal_name = page.locator("#b2m-frequent-add-name")
+        assert "fs-3" in (modal_name.get_attribute("class") or "")
+        assert modal_name.inner_text() == "Food 0"
         wait_until(lambda: page.locator("#b2m-frequent-add-list option").count() == 2, "Shopping lists did not load.")
         page.locator("#b2m-frequent-add-list").select_option("ci-list-other")
         page.locator("#b2m-frequent-add-quantity").fill("2.5")
@@ -269,6 +290,18 @@ def main() -> None:
             "list_id": "ci-list-default",
             "quantity": 3.0,
         }, added_targets
+        wait_until(lambda: not modal.is_visible(), "Recipe add dialog did not close.", timeout_ms=3_000)
+
+        # The quick-add dialog also closes from the backdrop and Escape key.
+        page.locator("#b2m-frequent-foods .b2m-frequent-add").first.click()
+        modal.wait_for(state="visible", timeout=3_000)
+        page.locator("#b2m-frequent-add-modal").evaluate("(el) => el.dispatchEvent(new MouseEvent('click', {bubbles:true}))")
+        wait_until(lambda: not modal.is_visible(), "Backdrop click did not close the dialog.", timeout_ms=2_000)
+
+        page.locator("#b2m-frequent-foods .b2m-frequent-add").first.click()
+        modal.wait_for(state="visible", timeout=3_000)
+        page.keyboard.press("Escape")
+        wait_until(lambda: not modal.is_visible(), "Escape did not close the dialog.", timeout_ms=2_000)
         page.unroute_all()
 
         # Build a deterministic two-label queue for editor/live-layer tests.
