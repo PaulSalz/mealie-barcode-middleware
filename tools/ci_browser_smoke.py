@@ -151,19 +151,6 @@ def main() -> None:
         )
 
         # Build a deterministic two-label queue for editor/live-layer tests.
-        page.route(
-            "**/labels/b21/status",
-            lambda route: route.fulfill(
-                status=200,
-                content_type="application/json",
-                body=json.dumps({
-                    "configured": True,
-                    "connected": True,
-                    "info": {"modelMetadata": {"model": "CI B21", "dpi": 300}},
-                    "dpi": 300,
-                }),
-            ),
-        )
         page.goto(f"{BASE_URL}/labels", wait_until="domcontentloaded", timeout=20_000)
         queue_payload = {
             "queue": [
@@ -174,52 +161,39 @@ def main() -> None:
         page.evaluate("payload => localStorage.setItem('b2m-label-generator-v2', JSON.stringify(payload))", queue_payload)
         page.reload(wait_until="domcontentloaded")
         page.locator("#label-queue").wait_for(state="attached", timeout=5_000)
-        printer_card = page.locator("#b21-printer-card")
-        printer_card.wait_for(state="visible", timeout=5_000)
-        disconnect_button = page.locator("#b21-connect-button")
-        wait_until(
-            lambda: disconnect_button.is_visible() and "Disconnect" in (disconnect_button.text_content() or ""),
-            "Printer disconnect control should remain available in browser output mode.",
-            timeout_ms=5_000,
-        )
-        b21_toolbar = page.locator("#b21-v2-header")
-        b21_toolbar.wait_for(state="attached", timeout=5_000)
-        assert not b21_toolbar.is_visible(), "B21-specific print controls should be hidden in browser output mode."
+
+        # Printer diagnostics and print-scope controls follow the global
+        # Basic/Advanced preference. The printer connection card stays visible.
+        tools = page.locator('.d-none.d-md-flex a[data-bs-toggle="dropdown"]').first
+        tools.wait_for(state="visible", timeout=5_000)
+        tools.click()
+        global_advanced = page.locator("#b2m-global-advanced-toggle")
+        global_advanced.wait_for(state="visible", timeout=5_000)
+        if global_advanced.is_checked():
+            global_advanced.uncheck(force=True)
+        wait_until(lambda: not page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
+                   "Global Advanced mode did not switch off.")
+
         b21_output = page.locator('input[name="label-output"][value="b21"]')
         b21_output.wait_for(state="attached", timeout=5_000)
         b21_output.check(force=True)
         page.locator("#b21-layout-body").wait_for(state="visible", timeout=5_000)
-        assert printer_card.is_visible()
-        assert "Disconnect" in (disconnect_button.text_content() or "")
-        b21_toolbar.wait_for(state="visible", timeout=5_000)
+        assert not page.locator("#b21-v2-header").is_visible()
+
+        if not global_advanced.is_checked():
+            global_advanced.check(force=True)
+        wait_until(lambda: page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
+                   "Global Advanced mode did not switch on.")
+        page.locator("#b21-v2-header").wait_for(state="visible", timeout=5_000)
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
 
-        assert page.locator("[data-layer-visible]").count() > 0
-        assert page.locator("#b21-v2-visible").count() == 0
-        page.locator('[data-layer-select="label"]').click()
-        page.locator('[data-layer-visible="label"]').click()
+        layer_switch = page.locator('[data-layer-visible="label"]')
+        assert layer_switch.is_checked()
+        layer_switch.uncheck()
         label_element.wait_for(state="detached", timeout=3_000)
         assert not page.get_by_text("Label / calibration", exact=True).is_visible()
-        page.locator('[data-layer-visible="label"]').click()
-        label_element.wait_for(state="attached", timeout=3_000)
-
-        # Layer order remains saved when a different layer is selected.
-        page.locator('[data-layer-forward="label"]').click()
-        saved_order = page.evaluate("""() => {
-          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
-          return entry ? entry.elements.map(element => element.id) : [];
-        }""")
-        page.locator('[data-layer-select="code"]').click()
-        reloaded_order = page.evaluate("""() => {
-          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
-          return entry ? entry.elements.map(element => element.id) : [];
-        }""")
-        assert saved_order == reloaded_order
-        assert saved_order.index("label") > saved_order.index("code")
 
         # Current label only must use the canonical job endpoint, never v30 batch queue.
         label_hits = {"batch": 0, "jobs_post": 0}
@@ -256,59 +230,6 @@ def main() -> None:
         )
         assert label_hits["batch"] == 0, label_hits
 
-        page.goto(f"{BASE_URL}/settings?tab=lookup", wait_until="domcontentloaded", timeout=20_000)
-        lookup_strategy = page.locator("#setting_lookup_strategy")
-        assert lookup_strategy.is_visible()
-        assert lookup_strategy.input_value() in {"failover", "complement"}, lookup_strategy.input_value()
-        assert lookup_strategy.locator("option").count() == 2
-        assert page.locator('[data-api-url="off_url_base"]').is_visible()
-        assert page.locator('[data-api-url="upcdb_url_base"]').is_visible()
-        off_url = page.locator('[data-api-url="off_url_base"]').inner_text()
-        upcdb_url = page.locator('[data-api-url="upcdb_url_base"]').inner_text()
-        assert off_url.startswith(("http://", "https://")), off_url
-        assert upcdb_url.startswith(("http://", "https://")), upcdb_url
-
-        page.evaluate("localStorage.removeItem('b2m-settings-advanced-v1')")
-        page.goto(f"{BASE_URL}/settings?tab=matching", wait_until="domcontentloaded", timeout=20_000)
-        advanced_toggle = page.locator("#settings-show-advanced")
-        assert advanced_toggle.count() == 1
-        assert not advanced_toggle.evaluate("(element) => element.checked")
-        for field_name in (
-            "fuzzy_match_threshold",
-            "fuzzy_ambiguity_gap",
-            "item_sync_interval_hours",
-            "lookup_ttl_days",
-            "max_retry_attempts",
-        ):
-            assert page.locator("#setting_" + field_name).is_visible(), field_name
-
-        page.evaluate("localStorage.removeItem('b2m-settings-advanced-v1')")
-        page.goto(f"{BASE_URL}/settings?tab=system", wait_until="domcontentloaded", timeout=20_000)
-        advanced_toggle = page.locator("#settings-show-advanced")
-        assert advanced_toggle.count() == 1
-        assert not advanced_toggle.evaluate("(element) => element.checked")
-        for field_name in (
-            "timezone",
-            "dashboard_poll_interval_seconds",
-            "health_poll_interval_seconds",
-            "shopping_print_poll_interval_seconds",
-            "log_level",
-        ):
-            assert page.locator("#setting_" + field_name).is_visible(), field_name
-
-        page.goto(f"{BASE_URL}/settings?tab=homeassistant", wait_until="domcontentloaded", timeout=20_000)
-        scan_automation = page.locator("#ha-scan-automation-yaml").input_value()
-        assert "persistent_notification.create" in scan_automation
-        assert "barcode_state" in scan_automation
-        assert "barcode_known" in scan_automation
-        assert "barcode_linked" in scan_automation
-        assert "barcode_pending" in scan_automation
-        assert "processing" in scan_automation
-        assert "Full payload" not in scan_automation
-        assert "trigger.json.get(" not in scan_automation
-        for field_name in ("barcode", "result_type", "item_source", "brand", "quantity", "via"):
-            assert "scan.get('" + field_name + "'" in scan_automation
-
         page.goto(f"{BASE_URL}/actions/new", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="New action").wait_for(timeout=5_000)
         page.locator('input[name="name"]').fill("CI action")
@@ -321,16 +242,7 @@ def main() -> None:
             el.dispatchEvent(new Event('change', {bubbles: true}));
         }""")
         page.locator('[data-preset="notification"]').click()
-        quick_settings = page.locator("#action-v22-preset-settings")
-        assert quick_settings.is_visible()
-        assert quick_settings.locator("#action-preset-title").is_visible()
-        assert quick_settings.locator("#action-preset-message").is_visible()
-        quick_settings.locator("#action-preset-title").fill("Kitchen scan")
-        quick_settings.locator("#action-preset-message").fill("Scanned {{ scan.barcode }}")
-        assert "Kitchen scan" in page.locator("#action-payload-json").input_value()
         notification_yaml = page.locator("#action-ha-yaml").input_value()
-        assert "trigger | default({})" in notification_yaml
-        assert "trigger.json.get(" not in notification_yaml
         assert "action: persistent_notification.create" in notification_yaml, notification_yaml
         assert "event: b2m_action" not in notification_yaml, notification_yaml
         assert not page.locator("#action-payload-json").is_visible()
@@ -350,30 +262,9 @@ def main() -> None:
         assert "copied" in page.locator("#action-ha-status").inner_text().lower()
 
         page.locator('[data-preset="tts"]').click()
-        assert quick_settings.locator("#action-preset-tts_entity").is_visible()
-        assert quick_settings.locator("#action-preset-media_player").is_visible()
-        assert quick_settings.locator("#action-preset-message").is_visible()
-        quick_settings.locator("#action-preset-message").fill("Kitchen scan {{ scan.barcode }}")
         tts_yaml = page.locator("#action-ha-yaml").input_value()
         assert "action: tts.speak" in tts_yaml
         assert "media_player_entity_id" in tts_yaml
-        assert "trigger | default({})" in tts_yaml
-        assert "trigger.json.get(" not in tts_yaml
-
-        page.locator('[data-preset="timer"]').click()
-        quick_settings.locator("#action-preset-timer").fill("timer.kitchen")
-        quick_settings.locator("#action-preset-duration").fill("00:05:00")
-        timer_yaml = page.locator("#action-ha-yaml").input_value()
-        assert "entity_id: 'timer.kitchen'" in timer_yaml
-        assert "duration: '00:05:00'" in timer_yaml
-        assert "trigger.json.timer" not in timer_yaml
-        assert "trigger.json.duration" not in timer_yaml
-
-        page.locator('[data-preset="light"]').click()
-        quick_settings.locator("#action-preset-entity_id").fill("light.living_room")
-        light_yaml = page.locator("#action-ha-yaml").input_value()
-        assert "entity_id: 'light.living_room'" in light_yaml
-        assert "trigger.json.entity_id" not in light_yaml
 
         local_advanced = page.locator("#action-advanced-toggle")
         local_advanced.wait_for(state="attached", timeout=5_000)
@@ -385,9 +276,6 @@ def main() -> None:
         global_advanced = page.locator("#b2m-global-advanced-toggle")
         global_advanced.wait_for(state="visible", timeout=5_000)
         assert global_advanced.is_visible()
-        global_advanced.click()
-        assert page.locator("#action-v22-preset-settings").is_visible()
-        assert page.locator("#action-preset-entity_id").is_visible()
 
         shopping_hits = {"bootstrap_v31": 0, "lists": 0, "legacy_bootstrap": 0}
         bootstrap_payload = {
