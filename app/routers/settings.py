@@ -274,7 +274,8 @@ def create_token(request: Request, name: str = Form(...), db: Session = Depends(
         "tabs": _TABS, "sidebar_groups": _SIDEBAR_GROUPS, "config_groups": [],
         "tokens": tokens, "current_tab": "tokens", "current_tab_label": "API Tokens",
         "tab_description": _TAB_DESCRIPTIONS.get("tokens", ""),
-        "section_descriptions": _SECTION_DESCRIPTIONS, "new_token": raw, "is_admin": request.session.get("is_admin", False),
+        "section_descriptions": _SECTION_DESCRIPTIONS, "new_token": raw,
+        "is_admin": bool(db.get(User, request.session.get("user_id")) and db.get(User, request.session.get("user_id")).is_admin),
         "new_token_name": name, "theme": {}, "theme_choices": THEME_CHOICES,
     })
 
