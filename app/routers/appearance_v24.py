@@ -11,6 +11,38 @@ from app.theme import THEME_CHOICES, THEME_DEFAULTS, build_theme_css, normalize_
 
 router = APIRouter()
 
+_FREQUENT_USED_LIMITS = (3, 6, 9, 12, 15, 20)
+
+
+def _frequent_used_limit_key(user_id: int) -> str:
+    return f"appearance.v35.user.{int(user_id)}.frequent_used_limit"
+
+
+def _frequent_used_limit(db: Session, user_id: int) -> int:
+    row = db.get(SystemState, _frequent_used_limit_key(user_id))
+    try:
+        value = int(row.value) if row and row.value else 6
+    except (TypeError, ValueError):
+        value = 6
+    return value if value in _FREQUENT_USED_LIMITS else 6
+
+
+def _save_frequent_used_limit(db: Session, user_id: int, raw_value) -> int:
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        value = 6
+    if value not in _FREQUENT_USED_LIMITS:
+        value = 6
+    key = _frequent_used_limit_key(user_id)
+    row = db.get(SystemState, key)
+    if row:
+        row.value = str(value)
+    else:
+        db.add(SystemState(key=key, value=str(value)))
+    db.commit()
+    return value
+
 
 def _current_user_id(request: Request) -> int | None:
     value = request.session.get("user_id")
@@ -58,6 +90,7 @@ def appearance_v24_get(request: Request, db: Session = Depends(get_db)):
     return {
         "theme": theme,
         "advanced_settings": _advanced_settings_preference(db, user_id),
+        "frequent_used_limit": _frequent_used_limit(db, user_id),
         # Legacy clients expect this field; rainbow buttons no longer exist in
         # v35 because button_color is explicit and never supports rainbow.
         "rainbow_buttons": theme.get("button_color", "blue"),
@@ -100,6 +133,9 @@ async def appearance_v24_save(request: Request, db: Session = Depends(get_db)):
     if not isinstance(body, dict):
         return JSONResponse({"error": "JSON object required"}, status_code=400)
 
+    if "frequent_used_limit" in body:
+        _save_frequent_used_limit(db, user_id, body.get("frequent_used_limit"))
+
     if "advanced_settings" in body:
         raw = body.get("advanced_settings")
         enabled = raw if isinstance(raw, bool) else str(raw).strip().lower() in {"1", "true", "yes", "on"}
@@ -118,7 +154,12 @@ async def appearance_v24_save(request: Request, db: Session = Depends(get_db)):
         if key in {"mode", "logo_color", "button_color", "font", "font_size", "base", "radius", "epaper", "contrast", "date_style", "color"}
     }
     theme = save_personal_theme(db, user_id, theme_fields) if theme_fields else personal_theme(db, user_id)
-    return {"ok": True, "theme": theme, "advanced_settings": _advanced_settings_preference(db, user_id)}
+    return {
+        "ok": True,
+        "theme": theme,
+        "advanced_settings": _advanced_settings_preference(db, user_id),
+        "frequent_used_limit": _frequent_used_limit(db, user_id),
+    }
 
 
 @router.post("/profile/appearance")
@@ -129,6 +170,8 @@ async def profile_appearance_save_v35(request: Request, db: Session = Depends(ge
         return RedirectResponse("/login", status_code=303)
     form = await request.form()
     save_personal_theme(db, user_id, _theme_from_form(form))
+    if "frequent_used_limit" in form:
+        _save_frequent_used_limit(db, user_id, form.get("frequent_used_limit"))
     return RedirectResponse("/profile/appearance?saved=1", status_code=303)
 
 

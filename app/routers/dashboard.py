@@ -3,22 +3,41 @@ import json
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 from starlette.responses import StreamingResponse
 
 from app.config import settings
 from app.database import get_db
 from app.events import scan_events
-from app.models import Activity, ApiToken, BarcodeCache, BarcodeTarget, Item, RetryQueue
+from app.models import Activity, ApiToken, BarcodeCache, BarcodeTarget, Item, RetryQueue, SystemState
 from app.services.mealie_health import mealie_reachable
 from app.services.scan_stats import frequent_targets as frequent_target_stats
-from app.services.shopping import get_default_shopping_list_id, get_shopping_list_counts
+from app.services.shopping import (
+    add_food_to_list, add_note_to_list, add_recipe_to_list,
+    get_default_shopping_list_id, get_shopping_list_counts, get_shopping_lists,
+)
 from app.services.targets import primary_targets_by_barcode
 from app.templating import _localtime, _relative_time, templates
 from app.utils import utcnow
 
 router = APIRouter()
+
+_FREQUENT_USED_LIMITS = (3, 6, 9, 12, 15, 20)
+_FREQUENT_USED_LIMIT_KEY = "appearance.v35.user.{}.frequent_used_limit"
+
+
+def _frequent_used_limit(db: Session, user_id) -> int:
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return 6
+    row = db.get(SystemState, _FREQUENT_USED_LIMIT_KEY.format(user_id))
+    try:
+        value = int(row.value) if row and row.value else 6
+    except (TypeError, ValueError):
+        value = 6
+    return value if value in _FREQUENT_USED_LIMITS else 6
 
 
 def _scan_status(result: str, target_type: str | None) -> str:
@@ -128,7 +147,8 @@ def _readiness_issues(*, mealie_reachable: bool, has_tokens: bool, scanner_onlin
 def dashboard(request: Request, db: Session = Depends(get_db)):
     total_barcodes, mapped_count, pending_count, queue_depth, unknown_count = _summary_counts(db)
     recent_items = _recent_scans(db, 25)
-    frequent_foods, frequent_recipes, frequent_actions = _frequent_targets(db)
+    frequent_limit = _frequent_used_limit(db, request.session.get("user_id"))
+    frequent_foods, frequent_recipes, frequent_actions = _frequent_targets(db, limit_each=frequent_limit)
     reachable = mealie_reachable()
     scanner_online, scanner_total = _scanner_summary(db)
     last_sync = db.query(Item.synced_at).filter(Item.source == "mealie").order_by(Item.synced_at.desc()).first()
@@ -144,6 +164,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         "pending_count": pending_count, "queue_depth": queue_depth, "unknown_count": unknown_count,
         "recent_items": recent_items,
         "frequent_foods": frequent_foods, "frequent_recipes": frequent_recipes, "frequent_actions": frequent_actions,
+        "frequent_used_limit": frequent_limit,
         "mealie_reachable": reachable, "last_sync_time": last_sync_time,
         "has_tokens": has_tokens,
         "mealie_url": mealie_url, "shopping_list_url": shopping_list_url,
@@ -177,6 +198,61 @@ def dashboard_api(db: Session = Depends(get_db)):
             "created_at": _relative_time(row["created_at"]), "created_at_absolute": _localtime(row["created_at"]),
         } for row in recent_items],
     }
+
+
+@router.get("/api/dashboard/frequent")
+def dashboard_frequent_api(request: Request, db: Session = Depends(get_db)):
+    limit = _frequent_used_limit(db, request.session.get("user_id"))
+    return {
+        "foods": frequent_target_stats(db, "food", limit),
+        "recipes": frequent_target_stats(db, "recipe", limit),
+        "actions": frequent_target_stats(db, "action", limit),
+        "limit": limit,
+    }
+
+
+@router.post("/api/dashboard/frequent/add")
+async def dashboard_frequent_add(request: Request, db: Session = Depends(get_db)):
+    try:
+        body = await request.json()
+    except (ValueError, TypeError):
+        return JSONResponse({"error": "Invalid request body"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
+
+    target_type = str(body.get("target_type") or "").strip().lower()
+    target_id = str(body.get("target_id") or "").strip()
+    list_id = str(body.get("list_id") or "").strip()
+    try:
+        quantity = float(body.get("quantity", 1))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Enter a valid quantity"}, status_code=400)
+    if not target_id or not list_id:
+        return JSONResponse({"error": "Choose an item and shopping list"}, status_code=400)
+    if not 0.01 <= quantity <= 1000:
+        return JSONResponse({"error": "Quantity must be between 0.01 and 1000"}, status_code=400)
+
+    lists = get_shopping_lists()
+    selected_list = next((row for row in lists if str(row.get("id")) == list_id), None)
+    if not selected_list:
+        return JSONResponse({"error": "Shopping list not found"}, status_code=404)
+
+    if target_type == "food":
+        item = db.get(Item, target_id)
+        if not item:
+            return JSONResponse({"error": "Food not found"}, status_code=404)
+        if item.source == "mealie":
+            ok = add_food_to_list(item.id, quantity, None, list_id)
+        else:
+            ok = add_note_to_list(item.name, list_id, quantity)
+    elif target_type == "recipe":
+        ok = add_recipe_to_list(target_id, quantity, list_id)
+    else:
+        return JSONResponse({"error": "Only foods and recipes can be added from this section"}, status_code=400)
+
+    if not ok:
+        return JSONResponse({"error": "Mealie could not add this item to the selected list"}, status_code=502)
+    return {"ok": True, "list_id": list_id, "list_name": selected_list.get("name") or "Shopping list", "quantity": quantity}
 
 
 @router.get("/events")

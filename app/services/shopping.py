@@ -200,8 +200,8 @@ def add_food_to_list(food_id: str, quantity: float | None, unit_id: str | None, 
     return False
 
 
-def add_note_to_list(note: str, list_id: str) -> bool:
-    payload = {"shoppingListId": list_id, "note": note, "quantity": 1}
+def add_note_to_list(note: str, list_id: str, quantity: float = 1) -> bool:
+    payload = {"shoppingListId": list_id, "note": note, "quantity": _explicit_quantity(quantity) or 1}
     try:
         response = mealie_http.post(
             "/api/households/shopping/items",
