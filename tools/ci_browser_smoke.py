@@ -244,8 +244,8 @@ def main() -> None:
         page.evaluate("localStorage.removeItem('b2m-settings-advanced-v1')")
         page.goto(f"{BASE_URL}/settings?tab=matching", wait_until="domcontentloaded", timeout=20_000)
         advanced_toggle = page.locator("#settings-show-advanced")
-        advanced_toggle.wait_for(state="visible", timeout=5_000)
-        assert not advanced_toggle.is_checked()
+        assert advanced_toggle.count() == 1
+        assert not advanced_toggle.evaluate("(element) => element.checked")
         for field_name in (
             "fuzzy_match_threshold",
             "fuzzy_ambiguity_gap",
