@@ -194,6 +194,7 @@ def main() -> None:
         )
         printer_card = page.locator("#b21-printer-card")
         printer_card.wait_for(state="visible", timeout=5_000)
+        assert printer_card.evaluate("(el) => el.closest('#b21-output-card') !== null"), "Printer controls should be integrated into the output selection card."
         disconnect_button = page.locator("#b21-connect-button")
         wait_until(
             lambda: disconnect_button.is_visible() and "Disconnect" in (disconnect_button.text_content() or ""),
