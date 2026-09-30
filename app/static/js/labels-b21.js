@@ -96,7 +96,6 @@
         var style = document.createElement('style');
         style.id = 'b21-designer-styles';
         style.textContent = `
-            html:not(.b2m-advanced-enabled) #b21-v2-header { display:none !important; }
             .b21-output-card .b2m-choice-card { min-height: 68px; }
             .b21-status-dot { width:.65rem;height:.65rem;border-radius:50%;display:inline-block;background:var(--tblr-secondary);box-shadow:0 0 0 .2rem rgba(98,105,118,.12); }
             .b21-status-dot.connected { background:var(--tblr-success);box-shadow:0 0 0 .2rem rgba(var(--tblr-success-rgb),.12); }
