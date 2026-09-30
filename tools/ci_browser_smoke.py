@@ -237,8 +237,7 @@ def main() -> None:
             const preview = document.querySelector('.b21-sticky-preview-card');
             const position = getComputedStyle(preview).position;
             const absoluteTop = preview.getBoundingClientRect().top + window.scrollY;
-            window.scrollTo(0, absoluteTop - 32);
-            window.scrollBy(0, 200);
+            window.scrollTo({top: absoluteTop + 168, behavior: 'instant'});
             return {position, top: preview.getBoundingClientRect().top};
         }""")
         assert sticky_result["position"] == "sticky", sticky_result
