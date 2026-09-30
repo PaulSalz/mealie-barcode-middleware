@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -149,6 +150,108 @@ def main() -> None:
             "Appearance form did not preview light mode immediately.",
             timeout_ms=3_000,
         )
+
+        # Frequently used can be personalized and directly added to either list type.
+        frequent_limit = page.locator("#appearance-frequent-used-limit")
+        assert frequent_limit.is_visible()
+        frequent_limit.select_option("9")
+        with page.expect_response(
+            lambda response: response.url.endswith("/api/appearance-v24")
+            and response.request.method == "POST",
+            timeout=5_000,
+        ) as appearance_save:
+            page.locator("#appearance-save-button").click()
+        assert appearance_save.value.ok
+        appearance_payload = appearance_save.value.request.post_data_json
+        assert appearance_payload["frequent_used_limit"] == 9, appearance_payload
+
+        page.route(
+            re.compile(r".*/api/dashboard(?:\?.*)?$"),
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "shopping_lists": [
+                        {"id": "ci-list-default", "name": "This week", "default": True, "count": 0},
+                        {"id": "ci-list-other", "name": "Later", "default": False, "count": 0},
+                    ],
+                    "recent_items": [],
+                    "total_barcodes": 0, "mapped_count": 0, "pending_count": 0,
+                    "queue_depth": 0, "unknown_count": 0, "scanner_online": 0, "scanner_total": 0,
+                }),
+            ),
+        )
+        page.route(
+            "**/api/dashboard/frequent",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "foods": [{"id": "ci-food-" + str(i), "name": "Food " + str(i), "uses": 12 - i} for i in range(10)],
+                    "recipes": [{"id": "ci-recipe-" + str(i), "name": "Recipe " + str(i), "uses": 10 - i} for i in range(10)],
+                    "actions": [],
+                    "limit": 9,
+                }),
+            ),
+        )
+        added_targets: list[dict] = []
+
+        def handle_frequent_add(route):
+            added_targets.append(route.request.post_data_json)
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({"ok": True, "list_name": "This week"}),
+            )
+
+        page.route("**/api/dashboard/frequent/add", handle_frequent_add)
+        page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
+        wait_until(
+            lambda: page.locator("#b2m-frequent-foods .b2m-frequent-add").count() == 9,
+            "Dashboard did not apply the personal Frequently used limit.",
+        )
+        assert page.locator("#b2m-frequent-recipes .b2m-frequent-add").count() == 9
+
+        page.locator("#b2m-frequent-foods .b2m-frequent-add").first.click()
+        modal = page.locator("#b2m-frequent-add-modal")
+        modal.wait_for(state="visible", timeout=3_000)
+        wait_until(lambda: page.locator("#b2m-frequent-add-list option").count() == 2, "Shopping lists did not load.")
+        page.locator("#b2m-frequent-add-list").select_option("ci-list-other")
+        page.locator("#b2m-frequent-add-quantity").fill("2.5")
+        with page.expect_request(
+            lambda request: request.url.endswith("/api/dashboard/frequent/add")
+            and request.method == "POST",
+            timeout=5_000,
+        ):
+            page.locator("#b2m-frequent-add-submit").click()
+        wait_until(lambda: len(added_targets) == 1, "Food was not added from the dashboard.")
+        assert added_targets[0] == {
+            "target_type": "food",
+            "target_id": "ci-food-0",
+            "list_id": "ci-list-other",
+            "quantity": 2.5,
+        }, added_targets
+        wait_until(lambda: not modal.is_visible(), "Food add dialog did not close.", timeout_ms=3_000)
+
+        page.locator("#b2m-frequent-recipes .b2m-frequent-add").first.click()
+        modal.wait_for(state="visible", timeout=3_000)
+        wait_until(lambda: page.locator("#b2m-frequent-add-list option").count() == 2, "Shopping lists did not reload.")
+        page.locator("#b2m-frequent-add-list").select_option("ci-list-default")
+        page.locator("#b2m-frequent-add-quantity").fill("3")
+        with page.expect_request(
+            lambda request: request.url.endswith("/api/dashboard/frequent/add")
+            and request.method == "POST",
+            timeout=5_000,
+        ):
+            page.locator("#b2m-frequent-add-submit").click()
+        wait_until(lambda: len(added_targets) == 2, "Recipe was not added from the dashboard.")
+        assert added_targets[1] == {
+            "target_type": "recipe",
+            "target_id": "ci-recipe-0",
+            "list_id": "ci-list-default",
+            "quantity": 3.0,
+        }, added_targets
+        page.unroute_all()
 
         # Build a deterministic two-label queue for editor/live-layer tests.
         page.route(
