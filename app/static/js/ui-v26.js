@@ -111,15 +111,17 @@
     var recentRow = recent && recent.closest('.row.row-deck');
     if (!recentRow || !recentRow.parentNode) return null;
 
-    var row = document.createElement('div');
-    row.id = 'b2m-frequent-dashboard';
-    row.className = 'row row-deck row-cards mb-3';
-    row.innerHTML =
+    var section = document.createElement('details');
+    section.className = 'b2m-dashboard-frequent b2m-mobile-collapsible mb-3';
+    section.open = true;
+    section.innerHTML =
+      '<summary class="b2m-mobile-collapse-summary d-md-none">Frequently used<span class="b2m-mobile-collapse-icon" aria-hidden="true"><i class="ti ti-chevron-down"></i></span></summary>' +
+      '<div class="row row-deck row-cards b2m-dashboard-frequent-cards" id="b2m-frequent-dashboard">' +
       '<div class="col-lg-4"><div class="card h-100"><div class="card-header"><div><h3 class="card-title">Frequently used Foods</h3><p class="card-subtitle">Based on scan target snapshots.</p></div></div><div class="list-group list-group-flush" id="b2m-frequent-foods"></div></div></div>' +
       '<div class="col-lg-4"><div class="card h-100"><div class="card-header"><div><h3 class="card-title">Frequently used Recipes</h3><p class="card-subtitle">Historical recipe targets.</p></div></div><div class="list-group list-group-flush" id="b2m-frequent-recipes"></div></div></div>' +
-      '<div class="col-lg-4"><div class="card h-100"><div class="card-header"><div><h3 class="card-title">Frequently used Actions</h3><p class="card-subtitle">Webhook / automation codes.</p></div></div><div class="list-group list-group-flush" id="b2m-frequent-actions"></div></div></div>';
-    recentRow.parentNode.insertBefore(row, recentRow);
-    return row;
+      '<div class="col-lg-4"><div class="card h-100"><div class="card-header"><div><h3 class="card-title">Frequently used Actions</h3><p class="card-subtitle">Webhook / automation codes.</p></div></div><div class="list-group list-group-flush" id="b2m-frequent-actions"></div></div></div></div>';
+    recentRow.parentNode.insertBefore(section, recentRow);
+    return section.querySelector('#b2m-frequent-dashboard');
   }
 
   function frequentHref(type, id) {

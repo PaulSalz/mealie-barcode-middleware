@@ -169,6 +169,9 @@ def test_mobile_dashboard_shows_recent_scans_and_remaining_cards():
     assert hidden_cards_rule not in css
     assert ".b2m-dashboard-recent { order: 2; }" in css
     assert ".b2m-dashboard-shopping { order: 3; }" in css
+    assert 'details class="card b2m-mobile-collapsible" open id="recent-scans-card"' in dashboard
+    assert 'class="b2m-dashboard-frequent b2m-mobile-collapsible mb-3" open' in dashboard
+    assert ".b2m-dashboard-frequent .list-group-item { padding: .35rem .55rem; }" in css
     for card in ("b2m-dashboard-overview", "b2m-dashboard-counts", "b2m-dashboard-shopping", "b2m-dashboard-frequent"):
         assert card in dashboard
     assert 'id="b2m-printer-connection-card"' in template
