@@ -188,9 +188,23 @@
     }).observe(tbody, {childList: true});
   }
 
+  function installMobileCollapses() {
+    var media = window.matchMedia('(max-width: 767.98px)');
+    function keepDesktopSectionsOpen() {
+      if (media.matches) return;
+      document.querySelectorAll('details.b2m-mobile-collapsible').forEach(function (section) {
+        section.open = true;
+      });
+    }
+    keepDesktopSectionsOpen();
+    if (media.addEventListener) media.addEventListener('change', keepDesktopSectionsOpen);
+    else if (media.addListener) media.addListener(keepDesktopSectionsOpen);
+  }
+
   function boot() {
     ensureRefreshState();
     installRecentTableGuard();
+    installMobileCollapses();
     startPolling();
     scheduleRefresh(0);
   }
