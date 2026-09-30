@@ -377,4 +377,115 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     font-size: .72rem;
     text-align: right;
   }
+
+  .navbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    background: var(--tblr-bg-surface);
+    border-bottom: 1px solid var(--tblr-border-color);
+  }
+  .navbar-brand { font-size: .88rem; }
+  .navbar-brand .ti-scan { font-size: 1.15rem; }
+
+  .b2m-dashboard-counts .b2m-stat-card .card-body > .d-flex { gap: .45rem !important; }
+  .b2m-dashboard-counts .b2m-stat-card .avatar {
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: .85rem;
+  }
+  .b2m-dashboard-counts .b2m-stat-card .card-body > .d-flex > div:last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .3rem;
+  }
+  .b2m-dashboard-counts .b2m-stat-card .subheader { min-width: 0; font-size: .65rem; line-height: 1.1; }
+  .b2m-dashboard-counts .b2m-stat-card .h1 { flex: 0 0 auto; margin: 0; font-size: 1.05rem; line-height: 1; }
+
+  .card-tabs > .nav-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .card-tabs > .nav-tabs::-webkit-scrollbar { display: none; }
+  .card-tabs > .nav-tabs .nav-link { white-space: nowrap; padding: .55rem .7rem; }
+  #barcodes-table-container .table-responsive { overflow: visible; }
+  #barcodes-table { display: block; width: 100%; }
+  #barcodes-table > thead { display: none; }
+  #barcodes-table > tbody { display: grid; gap: .45rem; padding: .45rem; }
+  #barcodes-table > tbody > tr:not(.barcodes-empty-row) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: .15rem .4rem;
+    padding: .4rem;
+    border: 1px solid var(--tblr-border-color);
+    border-radius: var(--tblr-border-radius);
+    background: var(--tblr-bg-surface);
+  }
+  #barcodes-table > tbody > tr:not(.barcodes-empty-row) > td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    padding: .25rem .3rem;
+    border: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  #barcodes-table > tbody > tr:not(.barcodes-empty-row) > td::before {
+    content: attr(data-label);
+    margin-bottom: .1rem;
+    color: var(--tblr-secondary);
+    font-size: .62rem;
+    font-weight: 700;
+    line-height: 1.1;
+    text-transform: uppercase;
+    letter-spacing: .035em;
+  }
+  #barcodes-table td[data-field="barcode"],
+  #barcodes-table td[data-field="title"],
+  #barcodes-table td[data-field="mapped"],
+  #barcodes-table td[data-field="created"] { grid-column: 1 / -1; }
+  #barcodes-table td[data-field="barcode"] code { font-size: .78rem; overflow-wrap: anywhere; }
+  #barcodes-table > tbody > tr.barcodes-empty-row { display: block; }
+  #barcodes-table > tbody > tr.barcodes-empty-row > td { display: block; }
+  #barcodes-table > tbody > tr.barcodes-empty-row > td::before { content: none; }
+  #barcodes-table-container > .card-footer { flex-wrap: wrap; gap: .5rem; }
+  #barcodes-pagination { max-width: 100%; overflow-x: auto; }
+
+  .label-generator-layout .card-header,
+  .label-layout-settings .card-header { min-height: unset; padding: .6rem .7rem; }
+  .label-generator-layout .card-body,
+  .label-layout-settings .card-body { padding: .65rem; }
+  #code-type-tabs {
+    flex-wrap: nowrap;
+    gap: .2rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-right: -.3rem;
+    padding-bottom: .2rem;
+  }
+  #code-type-tabs::-webkit-scrollbar { display: none; }
+  #code-type-tabs .nav-link { white-space: nowrap; padding: .4rem .55rem; font-size: .82rem; }
+  .label-generator-layout .card-actions .btn-group { flex-wrap: wrap; }
+  .label-generator-layout .card-actions .btn { padding: .3rem .4rem; font-size: .7rem; }
+  .label-layout-settings .label-preview-page { min-height: 180px; max-height: 48vh; }
+  .label-page-header .btn-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+  .label-page-header .btn { padding: .4rem .55rem; font-size: .8rem; }
+
+  .shopping-print-page-header .btn-list { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4rem; }
+  .shopping-print-page-header .btn { min-width: 0; padding: .45rem .55rem; font-size: .82rem; }
+  .shopping-print-layout { --tblr-gutter-y: .5rem; }
+  .shopping-print-layout > [class*="col-"] { min-width: 0; }
+  .shopping-print-layout .card { margin-bottom: .5rem !important; }
+  .shopping-print-layout .card-header { min-height: unset; padding: .6rem .7rem; }
+  .shopping-print-layout .card-title { font-size: .95rem; }
+  .shopping-print-layout .card-subtitle { font-size: .72rem; line-height: 1.25; }
+  .shopping-print-layout .card-body { padding: .65rem; }
+  .shopping-print-layout .card-footer { flex-wrap: wrap; padding: .55rem .65rem; }
+  .shopping-print-layout .card-footer > .btn { max-width: 100%; }
+  .shopping-print-layout .list-group-item { padding: .5rem .65rem; }
+  .shopping-print-layout .shopping-print-content-switches .row { --tblr-gutter-y: .6rem; }
+  .shopping-print-layout .shopping-print-preview-card { position: static !important; }
+  .shopping-print-layout .shopping-print-preview-wrap { padding: .5rem; }
 }
