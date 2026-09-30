@@ -211,6 +211,18 @@ def main() -> None:
                 root.dataset.b2mEpaper === 'true';
         }""", timeout=5_000)
 
+        # The page behind Appearance can also be a stale BFCache snapshot.
+        page.go_back(wait_until="commit", timeout=20_000)
+        page.wait_for_function("""() => {
+            const root = document.documentElement;
+            return location.pathname === '/' &&
+                root.getAttribute('data-bs-theme') === 'dark' &&
+                root.dataset.b2mBase === 'stone' &&
+                root.dataset.b2mEpaper === 'true';
+        }""", timeout=8_000)
+        page.go_forward(wait_until="commit", timeout=20_000)
+        page.locator("#appearance-v35-form").wait_for(state="visible", timeout=5_000)
+
         page.reload(wait_until="domcontentloaded")
         html = page.locator("html")
         assert page.locator('select[name="theme_base"]').input_value() == "stone"
