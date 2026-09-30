@@ -81,6 +81,20 @@ def test_lookup_settings_show_api_urls_and_never_render_an_invalid_choice_as_bla
     assert '"lookup_primary": {' in config and '"type": "choice"' in config
 
 
+def test_matching_settings_are_not_hidden_behind_advanced_mode():
+    source = read("app/static/js/settings-page.js")
+    advanced_fields = source.split("var advancedFields = [", 1)[1].split("];", 1)[0]
+
+    for field in (
+        "fuzzy_match_threshold",
+        "fuzzy_ambiguity_gap",
+        "item_sync_interval_hours",
+        "lookup_ttl_days",
+        "max_retry_attempts",
+    ):
+        assert field not in advanced_fields
+
+
 def test_recipe_target_routing_and_lists_are_set_in_current_targets():
     template = read("app/templates/barcode_detail.html")
     recipe_form = template.split('<form id="recipe-map-form"', 1)[1].split("</form>", 1)[0]
