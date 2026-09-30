@@ -12,6 +12,8 @@
   var latestErrorScanCount = null;
   var errorRefreshTimer = null;
   var frequentRefreshTimer = null;
+  var frequentAddModal = null;
+  var frequentAddTarget = null;
 
   function onScanningSettings() {
     if (window.location.pathname !== '/settings') return false;
@@ -125,6 +127,12 @@
     return '/actions/' + encodeURIComponent(id);
   }
 
+  function frequentLimit() {
+    var config = document.getElementById('dashboard-poll-config');
+    var value = Number(config && config.dataset.frequentLimit || 6);
+    return Number.isFinite(value) ? Math.max(1, Math.min(20, Math.floor(value))) : 6;
+  }
+
   function renderFrequentList(rootId, rows, type) {
     var root = document.getElementById(rootId);
     if (!root) return;
@@ -134,11 +142,131 @@
     }
     var badge = type === 'food' ? 'blue' : type === 'recipe' ? 'purple' : 'yellow';
     var icon = type === 'recipe' ? '<i class="ti ti-receipt me-1"></i>' : type === 'action' ? '<i class="ti ti-bolt me-1"></i>' : '';
-    root.innerHTML = rows.map(function (entry) {
-      return '<a href="' + frequentHref(type, entry.id) + '" class="list-group-item list-group-item-action d-flex align-items-center">' +
-        '<span class="me-auto">' + icon + esc(entry.name) + '</span>' +
-        '<span class="badge bg-' + badge + '-lt">' + Number(entry.uses || 0) + ' scans</span></a>';
+    root.innerHTML = rows.slice(0, frequentLimit()).map(function (entry) {
+      var link = '<a href="' + frequentHref(type, entry.id) + '" class="me-auto min-w-0 text-reset text-decoration-none">' + icon + esc(entry.name) + '</a>';
+      var add = '';
+      if (type === 'food' || type === 'recipe') {
+        add = '<button type="button" class="btn btn-sm btn-outline-primary b2m-frequent-add" data-target-type="' + type +
+          '" data-target-id="' + esc(entry.id) + '" data-target-name="' + esc(entry.name) +
+          '" title="Add to shopping list" aria-label="Add ' + esc(entry.name) + ' to a shopping list"><i class="ti ti-shopping-cart-plus"></i></button>';
+      }
+      return '<div class="list-group-item d-flex align-items-center gap-2">' + link +
+        '<span class="badge bg-' + badge + '-lt">' + Number(entry.uses || 0) + ' scans</span>' + add + '</div>';
     }).join('');
+  }
+
+  function ensureFrequentAddModal() {
+    var modal = document.getElementById('b2m-frequent-add-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'modal modal-blur fade';
+    modal.id = 'b2m-frequent-add-modal';
+    modal.tabIndex = -1;
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML =
+      '<div class="modal-dialog modal-dialog-centered" role="document"><div class="modal-content">' +
+      '<div class="modal-header"><h3 class="modal-title">Add to shopping list</h3><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>' +
+      '<form id="b2m-frequent-add-form"><div class="modal-body">' +
+      '<div class="fw-semibold mb-3" id="b2m-frequent-add-name"></div>' +
+      '<div class="mb-3"><label class="form-label" for="b2m-frequent-add-list">Shopping list</label><select class="form-select" id="b2m-frequent-add-list" required></select></div>' +
+      '<div><label class="form-label" for="b2m-frequent-add-quantity">Quantity</label><input class="form-control" id="b2m-frequent-add-quantity" type="number" min="0.01" max="1000" step="0.01" value="1" required></div>' +
+      '<div class="form-hint mt-2">For recipes, quantity sets the recipe scale.</div>' +
+      '<div class="text-secondary small mt-2" id="b2m-frequent-add-status" role="status" aria-live="polite"></div>' +
+      '</div><div class="modal-footer"><button type="button" class="btn me-auto" data-bs-dismiss="modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary" id="b2m-frequent-add-submit">Add to list</button></div></form></div></div>';
+    document.body.appendChild(modal);
+    modal.querySelectorAll('[data-bs-dismiss="modal"]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        if (window.bootstrap && window.bootstrap.Modal) window.bootstrap.Modal.getOrCreateInstance(modal).hide();
+      });
+    });
+    modal.querySelector('#b2m-frequent-add-form').addEventListener('submit', submitFrequentAdd);
+    if (window.bootstrap && window.bootstrap.Modal) frequentAddModal = window.bootstrap.Modal.getOrCreateInstance(modal);
+    return modal;
+  }
+
+  function openFrequentAdd(event) {
+    var button = event.target && event.target.closest && event.target.closest('.b2m-frequent-add');
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    frequentAddTarget = {
+      type: button.dataset.targetType,
+      id: button.dataset.targetId,
+      name: button.dataset.targetName || ''
+    };
+    var modal = ensureFrequentAddModal();
+    modal.querySelector('#b2m-frequent-add-name').textContent = frequentAddTarget.name;
+    var list = modal.querySelector('#b2m-frequent-add-list');
+    var status = modal.querySelector('#b2m-frequent-add-status');
+    var submit = modal.querySelector('#b2m-frequent-add-submit');
+    var quantity = modal.querySelector('#b2m-frequent-add-quantity');
+    quantity.value = '1';
+    submit.disabled = true;
+    status.textContent = 'Loading shopping lists…';
+    list.innerHTML = '<option value="">Loading…</option>';
+    if (window.bootstrap && window.bootstrap.Modal) frequentAddModal = window.bootstrap.Modal.getOrCreateInstance(modal);
+    if (frequentAddModal) frequentAddModal.show();
+    fetch('/api/dashboard', {headers: {Accept: 'application/json'}, cache: 'no-store'})
+      .then(function (response) {
+        if (!response.ok) throw new Error('Could not load shopping lists');
+        return response.json();
+      })
+      .then(function (data) {
+        var lists = Array.isArray(data.shopping_lists) ? data.shopping_lists : [];
+        list.innerHTML = lists.map(function (entry) {
+          return '<option value="' + esc(entry.id) + '"' + (entry.default ? ' selected' : '') + '>' + esc(entry.name) + '</option>';
+        }).join('');
+        submit.disabled = lists.length === 0;
+        status.textContent = lists.length ? '' : 'No shopping lists are available.';
+      })
+      .catch(function () {
+        list.innerHTML = '';
+        submit.disabled = true;
+        status.textContent = 'Shopping lists could not be loaded.';
+      });
+  }
+
+  function submitFrequentAdd(event) {
+    event.preventDefault();
+    if (!frequentAddTarget) return;
+    var modal = ensureFrequentAddModal();
+    var submit = modal.querySelector('#b2m-frequent-add-submit');
+    var status = modal.querySelector('#b2m-frequent-add-status');
+    var quantity = Number(modal.querySelector('#b2m-frequent-add-quantity').value);
+    var listId = modal.querySelector('#b2m-frequent-add-list').value;
+    if (!Number.isFinite(quantity) || quantity < 0.01 || quantity > 1000 || !listId) {
+      status.textContent = 'Choose a list and enter a quantity between 0.01 and 1000.';
+      return;
+    }
+    submit.disabled = true;
+    status.textContent = 'Adding…';
+    fetch('/api/dashboard/frequent/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+      body: JSON.stringify({
+        target_type: frequentAddTarget.type,
+        target_id: frequentAddTarget.id,
+        list_id: listId,
+        quantity: quantity
+      })
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok) throw new Error(data.error || 'Could not add to list');
+        status.textContent = 'Added to ' + (data.list_name || 'shopping list') + '.';
+        window.dispatchEvent(new CustomEvent('b2m:shopping-list-updated'));
+        window.setTimeout(function () {
+          if (frequentAddModal) frequentAddModal.hide();
+        }, 700);
+      });
+    }).catch(function (error) {
+      status.textContent = error.message || 'Could not add to list.';
+      submit.disabled = false;
+    });
+  }
+
+  function installFrequentAddButtons() {
+    document.addEventListener('click', openFrequentAdd);
   }
 
   function renderFrequent(data) {
@@ -157,6 +285,7 @@
   }
 
   function init() {
+    installFrequentAddButtons();
     installScannerErrorUi();
     if (window.location.pathname === '/') refreshFrequent();
 
