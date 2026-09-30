@@ -174,6 +174,24 @@ def main() -> None:
         page.evaluate("payload => localStorage.setItem('b2m-label-generator-v2', JSON.stringify(payload))", queue_payload)
         page.reload(wait_until="domcontentloaded")
         page.locator("#label-queue").wait_for(state="attached", timeout=5_000)
+
+        # Printer diagnostics follow the global Basic/Advanced preference.
+        tools = page.locator('.d-none.d-md-flex a[data-bs-toggle="dropdown"]').first
+        tools.wait_for(state="visible", timeout=5_000)
+        tools.click()
+        global_advanced = page.locator("#b2m-global-advanced-toggle")
+        global_advanced.wait_for(state="visible", timeout=5_000)
+        if global_advanced.is_checked():
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/appearance-v24")
+                and response.request.method == "POST",
+                timeout=5_000,
+            ):
+                global_advanced.uncheck(force=True)
+        wait_until(
+            lambda: not page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
+            "Global Advanced mode did not switch off.",
+        )
         printer_card = page.locator("#b21-printer-card")
         printer_card.wait_for(state="visible", timeout=5_000)
         disconnect_button = page.locator("#b21-connect-button")
@@ -191,6 +209,24 @@ def main() -> None:
         page.locator("#b21-layout-body").wait_for(state="visible", timeout=5_000)
         assert printer_card.is_visible()
         assert "Disconnect" in (disconnect_button.text_content() or "")
+        assert not b21_toolbar.is_visible(), "Advanced printer controls should be hidden in Basic mode."
+        if not global_advanced.is_visible():
+            tools.click()
+            global_advanced.wait_for(state="visible", timeout=5_000)
+        if not global_advanced.is_checked():
+            if not global_advanced.is_visible():
+                tools.click()
+                global_advanced.wait_for(state="visible", timeout=5_000)
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/appearance-v24")
+                and response.request.method == "POST",
+                timeout=5_000,
+            ):
+                global_advanced.check(force=True)
+        wait_until(
+            lambda: page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
+            "Global Advanced mode did not switch on.",
+        )
         b21_toolbar.wait_for(state="visible", timeout=5_000)
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
@@ -255,6 +291,33 @@ def main() -> None:
             step_ms=25,
         )
         assert label_hits["batch"] == 0, label_hits
+
+        # Restore Basic mode so later settings checks start from their default.
+        if not global_advanced.is_visible():
+            tools.click()
+            global_advanced.wait_for(state="visible", timeout=5_000)
+        if global_advanced.is_checked():
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/appearance-v24")
+                and response.request.method == "POST",
+                timeout=5_000,
+            ):
+                global_advanced.uncheck(force=True)
+        wait_until(
+            lambda: not page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
+            "Global Advanced mode did not switch off after the printer test.",
+        )
+
+        reset_advanced = page.evaluate("""async () => {
+            const response = await fetch('/api/appearance-v24', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+                body: JSON.stringify({advanced_settings: false})
+            });
+            const data = await response.json();
+            return {ok: response.ok, advanced: data.advanced_settings};
+        }""")
+        assert reset_advanced == {"ok": True, "advanced": False}, reset_advanced
 
         page.goto(f"{BASE_URL}/settings?tab=lookup", wait_until="domcontentloaded", timeout=20_000)
         lookup_strategy = page.locator("#setting_lookup_strategy")
