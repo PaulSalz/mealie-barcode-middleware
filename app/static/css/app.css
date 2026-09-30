@@ -464,7 +464,7 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     align-items: start;
     gap: .15rem .4rem;
     padding: .4rem;
-    border: 1px solid var(--tblr-border-color);
+    border: 2px solid var(--tblr-secondary);
     border-radius: var(--tblr-border-radius);
     background: var(--tblr-bg-surface);
   }
@@ -540,17 +540,17 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     border-spacing: 0 .35rem;
   }
   .table.table-vcenter > tbody > tr:not(.barcodes-empty-row):not(.items-empty-row):not(.activity-empty-row) > td {
-    border-top: 1px solid var(--tblr-border-color);
-    border-bottom: 1px solid var(--tblr-border-color);
+    border-top: 2px solid var(--tblr-secondary);
+    border-bottom: 2px solid var(--tblr-secondary);
     background: var(--tblr-bg-surface);
   }
   .table.table-vcenter > tbody > tr:not(.barcodes-empty-row):not(.items-empty-row):not(.activity-empty-row) > td:first-child {
-    border-left: 1px solid var(--tblr-border-color);
+    border-left: 2px solid var(--tblr-secondary);
     border-top-left-radius: var(--tblr-border-radius);
     border-bottom-left-radius: var(--tblr-border-radius);
   }
   .table.table-vcenter > tbody > tr:not(.barcodes-empty-row):not(.items-empty-row):not(.activity-empty-row) > td:last-child {
-    border-right: 1px solid var(--tblr-border-color);
+    border-right: 2px solid var(--tblr-secondary);
     border-top-right-radius: var(--tblr-border-radius);
     border-bottom-right-radius: var(--tblr-border-radius);
   }
