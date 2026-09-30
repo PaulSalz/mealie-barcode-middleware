@@ -51,8 +51,6 @@ def get_template_access(context) -> dict[str, bool]:
     request = context.get("request")
     if request is None:
         return {key: False for key in DEFAULT_USER_PERMISSIONS}
-    if request.session.get("is_admin", False):
-        return {key: True for key in DEFAULT_USER_PERMISSIONS}
     user_id = request.session.get("user_id")
     if not user_id:
         return {key: False for key in DEFAULT_USER_PERMISSIONS}
