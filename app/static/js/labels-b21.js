@@ -115,10 +115,6 @@
             .b21-preview-meta { display:flex;gap:.5rem;flex-wrap:wrap;align-items:center; }
             .b21-profile-actions { display:flex;gap:.4rem;flex-wrap:wrap; }
             .b21-profile-editor { background:var(--tblr-bg-surface-secondary);border:1px solid var(--tblr-border-color);border-radius:var(--tblr-border-radius);padding:.75rem; }
-            .b21-sticky-preview-card { position:sticky !important; top:1rem; z-index:3; }
-            @media (min-width: 992px) {
-                .b21-sticky-preview-column { align-self:stretch !important; }
-            }
             @media (max-width: 767.98px) { .b21-control-grid { grid-template-columns:1fr; } .b21-label-shell{min-height:230px;padding:.75rem;} }
         `;
         document.head.appendChild(style);
@@ -131,9 +127,11 @@
 
         var previewCard = previewPage.closest('.card');
         var previewColumn = previewCard.parentElement;
-        previewCard.classList.add('b21-sticky-preview-card');
         previewCard.classList.remove('h-100');
-        if (previewColumn) previewColumn.classList.add('b21-sticky-preview-column');
+        previewCard.style.setProperty('position', 'sticky', 'important');
+        previewCard.style.top = '1rem';
+        previewCard.style.zIndex = '3';
+        if (previewColumn) previewColumn.style.alignSelf = 'stretch';
         var layoutCard = layoutControl.closest('.card');
         var row = previewCard.closest('.row.row-cards');
         var browserPreviewBody = previewPage.closest('.card-body');
