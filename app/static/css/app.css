@@ -325,8 +325,14 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   }
   #recent-scans-card #recent-scans-body {
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: .3rem;
     padding: .4rem;
+  }
+  @media (max-width: 359.98px) {
+    #recent-scans-card #recent-scans-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
   #recent-scans-card #recent-scans-body tr {
     display: grid;
