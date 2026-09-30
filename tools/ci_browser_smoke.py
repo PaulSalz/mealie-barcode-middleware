@@ -386,9 +386,23 @@ def main() -> None:
             ".b2m-dashboard-counts",
             "#b2m-frequent-dashboard",
         ):
-            assert page.locator(selector).evaluate("(element) => getComputedStyle(element).display") != "none", selector
+            assert page.locator(selector).is_visible(), selector
         assert page.locator("#recent-scans-body .b2m-frequent-trigger").is_visible()
+        recent_section = page.locator("#recent-scans-card")
+        frequent_section = page.locator("details.b2m-dashboard-frequent")
+        assert recent_section.evaluate("(element) => element.open")
+        assert frequent_section.evaluate("(element) => element.open")
+        recent_section.locator("summary").click()
+        wait_until(lambda: not recent_section.evaluate("(element) => element.open"), "Recent scans did not collapse on mobile.")
+        frequent_section.locator("summary").click()
+        wait_until(lambda: not frequent_section.evaluate("(element) => element.open"), "Frequently used did not collapse on mobile.")
+        assert not page.locator("#recent-scans-body").is_visible()
+        assert not page.locator("#b2m-frequent-dashboard").is_visible()
         page.set_viewport_size({"width": 1280, "height": 900})
+        wait_until(
+            lambda: recent_section.evaluate("(element) => element.open") and frequent_section.evaluate("(element) => element.open"),
+            "Dashboard sections did not reopen on desktop.",
+        )
         page.unroute_all()
 
         # Build a deterministic two-label queue for editor/live-layer tests.
