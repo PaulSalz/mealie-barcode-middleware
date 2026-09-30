@@ -147,6 +147,7 @@ _TAB_PERMISSIONS = {
     "matching": "configuration",
     "scanning": "configuration",
     "system": "configuration",
+    "appearance": "configuration",
     "printer": "printer",
     "tokens": "tokens",
     "users": "users",
@@ -347,7 +348,7 @@ async def api_set_theme_mode(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/settings/theme")
 async def save_theme_settings(request: Request, db: Session = Depends(get_db)):
-    if redirect := _require_admin(request, db):
+    if redirect := _require_permission(request, db, "configuration"):
         return redirect
     form_data = await request.form()
     values = {
