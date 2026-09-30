@@ -51,6 +51,7 @@ PAGE_BACKGROUND_CSS = {
 }
 
 RADIUS_REM = {"0": 0.0, "0.5": 0.25, "1": 0.5, "1.5": 0.8, "2": 1.1}
+FONT_SIZE_CHOICES = [str(size) for size in range(80, 131, 5)]
 
 THEME_DEFAULTS = {
     "mode": "light",
@@ -59,6 +60,7 @@ THEME_DEFAULTS = {
     "logo_color": "blue",
     "button_color": "blue",
     "font": "sans-serif",
+    "font_size": "100",
     "base": "gray",
     "radius": "1",
     "epaper": "false",
@@ -72,6 +74,7 @@ THEME_CHOICES = {
     "logo_color": [*COLOR_CSS.keys(), "rainbow"],
     "button_color": list(COLOR_CSS.keys()),
     "font": list(FONT_CSS.keys()),
+    "font_size": FONT_SIZE_CHOICES,
     "base": list(GRAY_CSS.keys()),
     "radius": list(RADIUS_REM.keys()),
     "epaper": ["false", "true"],
@@ -79,7 +82,7 @@ THEME_CHOICES = {
 }
 
 CANONICAL_PERSONAL_KEYS = (
-    "mode", "logo_color", "button_color", "font", "base", "radius",
+    "mode", "logo_color", "button_color", "font", "font_size", "base", "radius",
     "epaper", "contrast", "date_style",
 )
 
@@ -97,6 +100,11 @@ def normalize_theme(values: dict | None) -> dict[str, str]:
         default = THEME_DEFAULTS[key]
         value = raw.get(key, logo_default if key == "logo_color" else button_default if key == "button_color" else default)
         value = str(value)
+        if key == "font_size":
+            try:
+                value = str(max(80, min(130, int(round(float(value) / 5) * 5))))
+            except (TypeError, ValueError):
+                value = default
         if key in THEME_CHOICES and value not in THEME_CHOICES[key]:
             value = default
         if key == "contrast":
@@ -248,6 +256,8 @@ def build_theme_css(theme: dict[str, str]) -> str:
     common.update(_button_vars(t["button_color"]))
     common.update(_radius_vars(t["radius"]))
     common["--tblr-body-font-family"] = FONT_CSS[t["font"]]
+    common["--b2m-saved-font-size"] = t["font_size"]
+    common["font-size"] = f"{t[\"font_size\"]}%"
     common["--b2m-saved-mode"] = t["mode"]
     common["--b2m-card-shadow"] = "var(--tblr-box-shadow-card)"
     common["--b2m-page-filter"] = "none"
@@ -359,6 +369,8 @@ def build_theme_live_catalog_css() -> str:
 
     for name, family in FONT_CSS.items():
         rules.append(f'html[data-b2m-font="{name}"]{{--tblr-body-font-family:{family}}}')
+    for size in THEME_CHOICES["font_size"]:
+        rules.append(f'html[data-b2m-font-size="{size}"]{{font-size:{size}%}}')
     for name in THEME_CHOICES["radius"]:
         rules.append(f'html[data-b2m-radius="{name}"]{{{_css_vars(_radius_vars(name))}}}')
 
