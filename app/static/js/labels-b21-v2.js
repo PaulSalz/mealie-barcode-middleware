@@ -119,7 +119,8 @@
 
     const header = document.createElement('div');
     header.id = 'b21-v2-header';
-    header.className = 'mt-3';
+    const browserOutput = $('b21-output-grid') && $('b21-output-grid').querySelector('input[value="browser"]');
+    header.className = 'mt-3' + (browserOutput && browserOutput.checked ? ' d-none' : '');
     header.innerHTML =
       '<div class="b21-v2-toolbar">' +
         '<select class="form-select w-auto" id="b21-v2-print-scope" title="Print scope"><option value="queue">Print queue</option><option value="current">Current label only</option></select>' +
@@ -134,7 +135,8 @@
       const print = oldPrint.cloneNode(true);
       oldPrint.replaceWith(print);
       print.innerHTML = '<i class="ti ti-printer icon"></i> Print';
-      print.classList.remove('d-none');
+      const browserOutput = $('b21-output-grid') && $('b21-output-grid').querySelector('input[value="browser"]');
+      print.classList.toggle('d-none', !!(browserOutput && browserOutput.checked));
       connect.insertAdjacentElement('afterend', print);
       print.addEventListener('click', submitPrintJob);
     }

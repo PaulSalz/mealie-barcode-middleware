@@ -151,6 +151,19 @@ def main() -> None:
         )
 
         # Build a deterministic two-label queue for editor/live-layer tests.
+        page.route(
+            "**/labels/b21/status",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "configured": True,
+                    "connected": True,
+                    "info": {"modelMetadata": {"model": "CI B21", "dpi": 300}},
+                    "dpi": 300,
+                }),
+            ),
+        )
         page.goto(f"{BASE_URL}/labels", wait_until="domcontentloaded", timeout=20_000)
         queue_payload = {
             "queue": [
@@ -161,10 +174,24 @@ def main() -> None:
         page.evaluate("payload => localStorage.setItem('b2m-label-generator-v2', JSON.stringify(payload))", queue_payload)
         page.reload(wait_until="domcontentloaded")
         page.locator("#label-queue").wait_for(state="attached", timeout=5_000)
+        printer_card = page.locator("#b21-printer-card")
+        printer_card.wait_for(state="visible", timeout=5_000)
+        disconnect_button = page.locator("#b21-connect-button")
+        wait_until(
+            lambda: disconnect_button.is_visible() and "Disconnect" in (disconnect_button.text_content() or ""),
+            "Printer disconnect control should remain available in browser output mode.",
+            timeout_ms=5_000,
+        )
+        b21_toolbar = page.locator("#b21-v2-header")
+        b21_toolbar.wait_for(state="attached", timeout=5_000)
+        assert not b21_toolbar.is_visible(), "B21-specific print controls should be hidden in browser output mode."
         b21_output = page.locator('input[name="label-output"][value="b21"]')
         b21_output.wait_for(state="attached", timeout=5_000)
         b21_output.check(force=True)
         page.locator("#b21-layout-body").wait_for(state="visible", timeout=5_000)
+        assert printer_card.is_visible()
+        assert "Disconnect" in (disconnect_button.text_content() or "")
+        b21_toolbar.wait_for(state="visible", timeout=5_000)
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
