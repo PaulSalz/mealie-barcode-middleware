@@ -157,7 +157,11 @@ def user_theme_css(request: Request, db: Session = Depends(get_db)):
     return Response(
         personal_theme_css(db, request.session.get("user_id")),
         media_type="text/css",
-        headers={"Cache-Control": "no-cache"},
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
     )
 
 
