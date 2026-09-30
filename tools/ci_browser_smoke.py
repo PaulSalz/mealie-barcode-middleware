@@ -233,6 +233,17 @@ def main() -> None:
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
 
+        sticky_result = page.evaluate("""() => {
+            const preview = document.querySelector('.b21-sticky-preview-card');
+            const position = getComputedStyle(preview).position;
+            const absoluteTop = preview.getBoundingClientRect().top + window.scrollY;
+            window.scrollTo({top: absoluteTop + 168, behavior: 'instant'});
+            return {position, top: preview.getBoundingClientRect().top};
+        }""")
+        assert sticky_result["position"] == "sticky", sticky_result
+        assert 12 <= sticky_result["top"] <= 20, sticky_result
+        page.evaluate("window.scrollTo(0, 0)")
+
         assert page.locator("[data-layer-visible]").count() > 0
         assert page.locator("#b21-v2-visible").count() == 0
         page.locator('[data-layer-select="label"]').click()

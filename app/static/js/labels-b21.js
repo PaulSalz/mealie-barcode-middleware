@@ -126,6 +126,13 @@
         if (!previewPage || !layoutControl || $('b21-output-card')) return;
 
         var previewCard = previewPage.closest('.card');
+        var previewColumn = previewCard.parentElement;
+        previewCard.classList.add('b21-sticky-preview-card');
+        previewCard.classList.remove('h-100');
+        previewCard.style.setProperty('position', 'sticky', 'important');
+        previewCard.style.top = '1rem';
+        previewCard.style.zIndex = '3';
+        if (previewColumn) previewColumn.style.alignSelf = 'stretch';
         var layoutCard = layoutControl.closest('.card');
         var row = previewCard.closest('.row.row-cards');
         var browserPreviewBody = previewPage.closest('.card-body');
