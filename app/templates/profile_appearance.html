@@ -88,6 +88,15 @@
       <div class="card">
         <div class="card-header"><h3 class="card-title">Display</h3></div>
         <div class="card-body">
+          <div class="mb-4">
+            <label class="form-label" for="appearance-frequent-used-limit">Frequently used entries</label>
+            <select class="form-select" name="frequent_used_limit" id="appearance-frequent-used-limit">
+              {% for opt in [3, 6, 9, 12, 15, 20] %}
+              <option value="{{ opt }}" {% if frequent_used_limit == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-hint">How many foods, recipes and actions to show in each Frequently used dashboard list.</div>
+          </div>
           <label class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" name="theme_epaper" value="1" {% if theme.epaper == 'true' %}checked{% endif %}><span class="form-check-label">E-paper / monochrome mode</span></label>
           <label class="form-label">Monochrome contrast: <strong id="profile-contrast-value">{{ theme.contrast }}</strong></label>
           <input type="range" class="form-range" name="theme_contrast" id="profile-contrast" min="0" max="100" step="1" value="{{ theme.contrast }}">
