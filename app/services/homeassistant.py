@@ -231,23 +231,32 @@ actions:
         {% elif state == 'generic' %}B2M · Code
         {% elif state == 'error' %}B2M · Fehler
         {% else %}B2M · Unbekannter Barcode{% endif %}
-      message: >-
-        {% set scan = ((trigger | default({})).json | default({})) %}
-        Barcode: {{ scan.get('barcode', '—') }}
-        Artikel: {{ scan.get('item', '—') }}
-        Status: {{ scan.get('barcode_state', 'unknown') }}
-        Bekannt: {{ scan.get('barcode_known') if scan.get('barcode_known') is not none else '—' }}
-        Verknüpft: {{ scan.get('barcode_linked') if scan.get('barcode_linked') is not none else '—' }}
-        Ausstehend: {{ scan.get('barcode_pending') if scan.get('barcode_pending') is not none else '—' }}
-        Ergebnis: {{ scan.get('result_type', '—') }}
-        Quelle: {{ scan.get('via', '—') }}
-        Aktion nötig: {{ scan.get('needs_action', '—') }}
-        Marke: {{ scan.get('brand', '—') }}
-        Menge: {{ scan.get('quantity', '—') }}
-        Quelle des Artikels: {{ scan.get('item_source', '—') }}
-        Zur Liste hinzugefügt: {{ scan.get('added_to_list', '—') }}
-        Pausiert: {{ scan.get('paused', '—') }}
-        Link: {{ scan.get('action_url', '—') }}
+      message: |-
+        {%- set scan = ((trigger | default({})).json | default({})) -%}
+        **Barcode & Artikel**
+        - Barcode: {{ scan.get('barcode', '—') }}
+        - Artikel: {{ scan.get('item', '—') }}
+        - Status: {{ scan.get('barcode_state', 'unknown') }}
+
+        **Verknüpfung**
+        - Bekannt: {{ scan.get('barcode_known') if scan.get('barcode_known') is not none else '—' }}
+        - Verknüpft: {{ scan.get('barcode_linked') if scan.get('barcode_linked') is not none else '—' }}
+        - Ausstehend: {{ scan.get('barcode_pending') if scan.get('barcode_pending') is not none else '—' }}
+
+        **Scan-Ergebnis**
+        - Ergebnis: {{ scan.get('result_type', '—') }}
+        - Quelle: {{ scan.get('via', '—') }}
+        - Aktion nötig: {{ scan.get('needs_action', '—') }}
+
+        **Artikeldetails**
+        - Marke: {{ scan.get('brand', '—') }}
+        - Menge: {{ scan.get('quantity', '—') }}
+        - Quelle des Artikels: {{ scan.get('item_source', '—') }}
+        - Zur Liste hinzugefügt: {{ scan.get('added_to_list', '—') }}
+
+        **System**
+        - Pausiert: {{ scan.get('paused', '—') }}
+        - Link: {{ scan.get('action_url', '—') }}
 mode: queued
 max: 10
 """
