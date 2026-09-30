@@ -67,10 +67,10 @@ def test_user_permission_controls_use_existing_access_api_and_server_checks():
     routes = read("app/routers/settings.py")
 
     assert 'id="user-permissions-panel"' in template
-    assert 'id="user-permissions-modal"' in template
+    assert template.count('id="user-permissions-modal"') == 1
     assert "fetch('/api/access/users'" in script
     assert "fetch('/api/access/users/'" in script
-    assert '"configuration": "configuration"' in routes
+    assert '"mealie": "configuration"' in routes
     assert '"printer": "printer"' in routes
     assert '"database": "database"' in routes
     assert 'if not _allowed(request, db, "database")' in routes
