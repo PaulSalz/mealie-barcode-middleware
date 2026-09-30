@@ -2,7 +2,7 @@
 {% block title %}Code Generator – Mealie Barcode Middleware{% endblock %}
 
 {% block content %}
-<div class="page-header d-print-none mb-3"><div class="row g-2 align-items-center">
+<div class="page-header d-print-none mb-3 label-page-header"><div class="row g-2 align-items-center">
   <div class="col"><h2 class="page-title">Code Generator</h2><div class="text-secondary mt-1">Build, edit and keep a reusable label queue. Code style is chosen per label.</div></div>
   <div class="col-auto"><div class="btn-list">
     <button class="btn btn-outline-danger" id="label-clear" disabled><i class="ti ti-trash icon"></i> Clear</button>
@@ -14,7 +14,7 @@
 <div id="generator-prefill" class="d-none" data-prefill='{{ prefill|tojson if prefill else "null" }}'></div>
 <div id="generator-config" class="d-none" data-default-action-webhook="{{ default_action_webhook|e }}" data-niim-configured="{{ '1' if niim_configured else '0' }}"></div>
 
-<div class="row row-cards d-print-none align-items-start">
+<div class="row row-cards d-print-none align-items-start label-generator-layout">
 <div class="col-lg-5">
   <div class="card mb-3"><div class="card-header"><h3 class="card-title">Add code</h3></div><div class="card-body">
     <ul class="nav nav-pills mb-3" id="code-type-tabs">
@@ -62,7 +62,7 @@
 </div>
 </div>
 
-<div class="row row-cards d-print-none mt-1 align-items-start">
+<div class="row row-cards d-print-none mt-1 align-items-start label-layout-settings">
   <div class="col-lg-8">
     <div class="card h-100"><div class="card-header"><div><h3 class="card-title">Preview</h3><p class="card-subtitle">Click a code in the queue for a large scannable preview.</p></div></div><div class="card-body p-3"><div id="preview-page" class="label-preview-page w-100"><div id="preview-grid" class="label-preview-grid"></div></div><div class="text-center text-secondary mt-2 small" id="preview-summary"></div></div></div>
   </div>
