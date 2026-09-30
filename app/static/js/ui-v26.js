@@ -147,9 +147,13 @@
       var link = '<a href="' + frequentHref(type, entry.id) + '" class="me-auto min-w-0 text-reset text-decoration-none">' + icon + esc(entry.name) + '</a>';
       var add = '';
       if (type === 'food' || type === 'recipe') {
-        add = '<button type="button" class="btn btn-sm btn-outline-primary b2m-frequent-add" data-target-type="' + type +
+        add = '<button type="button" class="btn btn-outline-primary b2m-frequent-add" data-target-type="' + type +
           '" data-target-id="' + esc(entry.id) + '" data-target-name="' + esc(entry.name) +
           '" title="Add to shopping list" aria-label="Add ' + esc(entry.name) + ' to a shopping list"><i class="ti ti-shopping-cart-plus"></i></button>';
+      } else if (type === 'action') {
+        add = '<button type="button" class="btn btn-outline-warning b2m-frequent-trigger" data-action-id="' + esc(entry.id) +
+          '" data-action-name="' + esc(entry.name) + '" title="Trigger action" aria-label="Trigger ' + esc(entry.name) +
+          '"><i class="ti ti-player-play"></i></button>';
       }
       return '<div class="list-group-item d-flex align-items-center gap-2">' + link +
         '<span class="badge bg-' + badge + '-lt">' + Number(entry.uses || 0) + ' scans</span>' + add + '</div>';
@@ -197,11 +201,13 @@
     modal.id = 'b2m-frequent-add-modal';
     modal.tabIndex = -1;
     modal.setAttribute('aria-hidden', 'true');
+    modal.setAttribute('data-bs-backdrop', 'true');
+    modal.setAttribute('data-bs-keyboard', 'true');
     modal.innerHTML =
       '<div class="modal-dialog modal-dialog-centered" role="document"><div class="modal-content">' +
       '<div class="modal-header"><h3 class="modal-title">Add to shopping list</h3><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>' +
       '<form id="b2m-frequent-add-form"><div class="modal-body">' +
-      '<div class="fw-semibold mb-3" id="b2m-frequent-add-name"></div>' +
+      '<div class="fs-3 fw-bold mb-3 text-break" id="b2m-frequent-add-name"></div>' +
       '<div class="mb-3"><label class="form-label" for="b2m-frequent-add-list">Shopping list</label><select class="form-select" id="b2m-frequent-add-list" required></select></div>' +
       '<div><label class="form-label" for="b2m-frequent-add-quantity">Quantity</label><input class="form-control" id="b2m-frequent-add-quantity" type="number" min="0.01" max="1000" step="0.01" value="1" required></div>' +
       '<div class="form-hint mt-2">For recipes, quantity sets the recipe scale.</div>' +
@@ -213,6 +219,14 @@
       button.addEventListener('click', function () {
         hideFrequentAddModal(modal);
       });
+    });
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal) hideFrequentAddModal(modal);
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && modal.classList.contains('show')) {
+        if (!(window.bootstrap && window.bootstrap.Modal)) hideFrequentAddModal(modal);
+      }
     });
     modal.querySelector('#b2m-frequent-add-form').addEventListener('submit', submitFrequentAdd);
     if (window.bootstrap && window.bootstrap.Modal) frequentAddModal = window.bootstrap.Modal.getOrCreateInstance(modal);
@@ -298,8 +312,44 @@
     });
   }
 
+  function triggerFrequentAction(event) {
+    var button = event.target && event.target.closest && event.target.closest('.b2m-frequent-trigger');
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (button.disabled) return;
+    var actionName = button.dataset.actionName || 'Action';
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
+    button.setAttribute('aria-label', 'Triggering ' + actionName);
+    fetch('/api/dashboard/frequent/actions/' + encodeURIComponent(button.dataset.actionId) + '/trigger', {
+      method: 'POST',
+      headers: {Accept: 'application/json'}
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok) throw new Error(data.error || data.detail || 'Could not trigger action');
+        button.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i>';
+        button.title = data.status === 'queued' ? 'Action queued' : 'Action triggered';
+        button.setAttribute('aria-label', button.title + ': ' + actionName);
+        window.setTimeout(refreshFrequent, 1200);
+      });
+    }).catch(function (error) {
+      button.innerHTML = '<i class="ti ti-alert-circle" aria-hidden="true"></i>';
+      button.title = error.message || 'Could not trigger action';
+      button.setAttribute('aria-label', button.title);
+    }).finally(function () {
+      window.setTimeout(function () {
+        button.disabled = false;
+        button.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i>';
+        button.title = 'Trigger action';
+        button.setAttribute('aria-label', 'Trigger ' + actionName);
+      }, 1400);
+    });
+  }
+
   function installFrequentAddButtons() {
     document.addEventListener('click', openFrequentAdd);
+    document.addEventListener('click', triggerFrequentAction);
   }
 
   function renderFrequent(data) {
