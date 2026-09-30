@@ -112,6 +112,14 @@
     old.replaceWith(select);
   }
 
+  function syncHeaderVisibility() {
+    const header = $('b21-v2-header');
+    if (!header) return;
+    const b21Output = document.querySelector('input[name="label-output"][value="b21"]');
+    const advancedEnabled = document.documentElement.classList.contains('b2m-advanced-enabled');
+    header.classList.toggle('d-none', !advancedEnabled || !b21Output || !b21Output.checked);
+  }
+
   function installHeader() {
     const bar = $('b21-connection-bar');
     const connect = $('b21-connect-button');
@@ -129,6 +137,11 @@
       '</div>' +
       '<div class="b21-v2-printer-data" id="b21-v2-printer-data"></div>';
     bar.appendChild(header);
+    window.addEventListener('b2m:advanced-change', syncHeaderVisibility);
+    document.querySelectorAll('input[name="label-output"]').forEach((input) => {
+      input.addEventListener('change', syncHeaderVisibility);
+    });
+    syncHeaderVisibility();
 
     const oldPrint = $('label-niim-print');
     if (oldPrint) {
