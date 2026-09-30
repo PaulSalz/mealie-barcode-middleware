@@ -193,6 +193,37 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   .b2m-dashboard-overview { order: 4; }
   .b2m-dashboard-counts { order: 5; }
   .b2m-dashboard-frequent { order: 6; }
+  .b2m-mobile-collapsible > summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .b2m-mobile-collapsible > summary::-webkit-details-marker { display: none; }
+  .b2m-mobile-collapse-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+  }
+  .b2m-mobile-collapse-icon { transition: transform .15s ease; }
+  details[open] > .b2m-mobile-collapse-summary .b2m-mobile-collapse-icon { transform: rotate(180deg); }
+  .b2m-dashboard-frequent-cards { margin-top: .4rem; }
+  .b2m-dashboard-frequent .card-header {
+    min-height: unset;
+    padding: .55rem .7rem;
+  }
+  .b2m-dashboard-frequent .card-title { font-size: .95rem; }
+  .b2m-dashboard-frequent .card-subtitle { font-size: .75rem; }
+  .b2m-dashboard-frequent .list-group-item { padding: .35rem .55rem; }
+  .b2m-dashboard-frequent .badge { font-size: .68rem; padding: .2rem .35rem; }
+  .b2m-dashboard-frequent .b2m-frequent-add,
+  .b2m-dashboard-frequent .b2m-frequent-trigger,
+  #recent-scans-card .btn-icon {
+    width: 2rem;
+    height: 2rem;
+  }
+  #recent-scans-card > .card-header { padding: .55rem .75rem; }
+  #recent-scans-card .card-title { font-size: 1rem; }
+  #recent-scans-card .card-subtitle { font-size: .75rem; }
   .b2m-mobile-dashboard-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -220,15 +251,16 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   }
   #recent-scans-card #recent-scans-body {
     display: grid;
-    gap: .65rem;
-    padding: .75rem;
+    gap: .4rem;
+    padding: .55rem;
   }
   #recent-scans-card #recent-scans-body tr {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
-    gap: .2rem .75rem;
-    padding: .65rem .75rem;
+    gap: .15rem .5rem;
+    padding: .45rem .55rem;
+    font-size: .875rem;
     border: 1px solid var(--tblr-border-color);
     border-radius: var(--tblr-border-radius);
     background: var(--tblr-bg-surface);
@@ -251,6 +283,8 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   #recent-scans-card #recent-scans-body td:nth-child(3) {
     grid-column: 1 / -1;
     order: 3;
+    font-size: .825rem;
+    line-height: 1.25;
   }
   #recent-scans-card #recent-scans-body td:nth-child(4),
   #recent-scans-card #recent-scans-body td:nth-child(5) {
