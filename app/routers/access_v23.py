@@ -46,8 +46,6 @@ def _current_user(request: Request, db: Session) -> User | None:
 
 
 def _allowed(request: Request, db: Session, permission: str) -> bool:
-    if request.session.get("is_admin", False):
-        return True
     return has_permission(db, request.session.get("user_id"), permission)
 
 
@@ -120,7 +118,7 @@ def access_users(request: Request, db: Session = Depends(get_db)):
     users = db.query(User).order_by(User.created_at).all()
     return {
         "catalog": PERMISSION_CATALOG,
-        "can_change_admin": bool(request.session.get("is_admin", False)),
+        "can_change_admin": bool(_current_user(request, db) and _current_user(request, db).is_admin),
         "users": [
             {
                 "id": user.id,
@@ -150,14 +148,14 @@ async def access_update_user(user_id: int, request: Request, db: Session = Depen
     if not isinstance(next_is_admin, bool):
         return JSONResponse({"error": "is_admin must be a boolean"}, status_code=400)
     if next_is_admin != user.is_admin:
-        if not request.session.get("is_admin", False):
+        actor = _current_user(request, db)
+        if not actor or not actor.is_admin:
             return JSONResponse({"error": "administrator role changes require an admin"}, status_code=403)
-        if user.id == request.session.get("user_id") and not next_is_admin:
+        if user.id == actor.id and not next_is_admin:
             return JSONResponse({"error": "you cannot remove your own administrator access"}, status_code=400)
         current_password = str(body.get("current_password") or "")
-        actor = db.get(User, request.session.get("user_id"))
         try:
-            password_matches = bool(actor and bcrypt.checkpw(current_password.encode(), actor.password_hash.encode()))
+            password_matches = bool(bcrypt.checkpw(current_password.encode(), actor.password_hash.encode()))
         except (ValueError, TypeError):
             password_matches = False
         if not password_matches:
