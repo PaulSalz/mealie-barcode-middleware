@@ -38,6 +38,10 @@ def test_action_examples_copy_ready_home_assistant_automations_without_advanced_
     assert "Spoken message" in source and "Notification text" in source
     assert "trigger.json.entity_id | default" not in source
     assert "trigger.json.timer | default" not in source
+    assert "validEntity(payload.timer, 'timer', 'timer.kitchen')" in source
+    assert "const duration = /^\\d{1,3}:\\d{2}:\\d{2}$/.test(durationRaw)" in source
+    assert "The target uses the fixed entity ID above" in source
+    assert "These settings are available in both normal and Advanced mode." in source
     assert "relative_time if stats.last_execution else 'Never'" in template
     assert 'data-preset="notification"' in smoke
     assert 'window.__b2mCopiedText' in smoke
@@ -54,11 +58,77 @@ def test_home_assistant_scan_automation_uses_configured_webhook_and_includes_pay
     automation = build_scan_notification_automation(url)
     assert "webhook_id: 'b2m_scan_test'" in automation
     assert "persistent_notification.create" in automation
-    for field in ("barcode", "item", "result_type", "action_url", "added_to_list", "paused", "route", "quantity", "item_id", "unit_id"):
-        assert "trigger.json.get('" + field + "'" in automation
-    assert "Full payload: {{ trigger.json | to_json }}" in automation
+    for field in ("barcode", "item", "result_type", "action_url", "added_to_list", "paused", "quantity", "via", "needs_action", "brand", "item_source"):
+        assert "((trigger | default({})).json | default({})).get('" + field + "'" in automation
+    assert "Full payload: {{ ((trigger | default({})).json | default({})) | to_json }}" in automation
+    assert "trigger.json.get(" not in automation
     assert "YOUR_WEBHOOK_ID" not in automation
     assert "target:" not in automation
+
+
+def test_lookup_settings_show_api_urls_and_never_render_an_invalid_choice_as_blank():
+    template = read("app/templates/settings.html")
+    router = read("app/routers/settings.py")
+    config = read("app/config.py")
+
+    assert 'data-api-url="{{ item.field }}"' in template
+    assert "valid_values = [" in router
+    assert 'val = valid_values[0] if valid_values else ""' in router
+    assert '"lookup_strategy": {' in config and '"type": "choice"' in config
+    assert '"lookup_primary": {' in config and '"type": "choice"' in config
+
+
+def test_recipe_target_routing_and_lists_are_set_in_current_targets():
+    template = read("app/templates/barcode_detail.html")
+    recipe_form = template.split('<form id="recipe-map-form"', 1)[1].split("</form>", 1)[0]
+
+    assert "set its route and shopping lists in Current targets above" in template
+    assert "route_select" not in recipe_form
+    assert "shopping_list_ids" not in recipe_form
+
+
+def test_appearance_bfcache_pages_reload_after_a_saved_theme_revision():
+    source = read("app/static/js/theme-controls-v32.js")
+    router = read("app/routers/access_v23.py")
+
+    assert "b2m-appearance-revision-v2" in source
+    assert "currentRevision === pageAppearanceRevision" in source
+    assert "if (!event.persisted) return" not in source
+    assert '"Cache-Control": "no-store, max-age=0"' in router
+
+
+def test_homeassistant_notification_receives_all_scan_response_fields(monkeypatch):
+    from types import SimpleNamespace
+    from app.services import homeassistant
+
+    captured = {}
+    class Response:
+        status_code = 200
+        text = ""
+
+    def post(url, json, timeout):
+        captured.update(url=url, json=json, timeout=timeout)
+        return Response()
+
+    monkeypatch.setattr(homeassistant, "settings", SimpleNamespace(ha_webhook_url="http://ha/api/webhook/b2m"))
+    monkeypatch.setattr(homeassistant, "_http", SimpleNamespace(post=post))
+    details = {
+        "result": "added_as_note",
+        "via": "note",
+        "needs_action": True,
+        "brand": "Sample Brand",
+        "quantity": "2",
+        "item_source": "lookup",
+    }
+    homeassistant.notify_scan("123456", "Sample item", "added_as_note", "http://b2m/barcodes/123456", True, False, details)
+
+    assert captured["json"]["barcode"] == "123456"
+    assert captured["json"]["item"] == "Sample item"
+    assert captured["json"]["via"] == "note"
+    assert captured["json"]["needs_action"] is True
+    assert captured["json"]["brand"] == "Sample Brand"
+    assert captured["json"]["quantity"] == "2"
+    assert captured["json"]["item_source"] == "lookup"
 
 
 def test_mobile_dashboard_focuses_on_printing_recent_scans_and_code_linking():
