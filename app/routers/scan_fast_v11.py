@@ -126,6 +126,8 @@ def _route_known_targets(barcode: str, target_ids: list[int], paused: bool) -> N
             raise RuntimeError("No enabled targets remain for this barcode")
 
         resp = legacy_scan._process_targets(barcode, targets, db, paused)
+        legacy_scan._set_barcode_resolution(resp, barcode, db)
+        legacy_scan._send_scan_notification(resp, barcode)
         _upsert_notification(
             db,
             barcode,
@@ -215,6 +217,7 @@ def fast_scan_barcode(
             action_url=legacy_scan._build_action_url(barcode),
             paused=paused,
         )
+        legacy_scan._set_barcode_resolution(resp, barcode, db)
 
         # Admission to the routing pool happens before the HTTP acknowledgement.
         # If capacity is exhausted, return 503 so the persistent scanner outbox
@@ -238,6 +241,7 @@ def fast_scan_barcode(
     # latency no longer delays visual acknowledgement.
     try:
         resp = legacy_scan._process_scan(barcode, db, background_tasks)
+        legacy_scan._set_barcode_resolution(resp, barcode, db)
         _upsert_notification(db, barcode, _notification_title(resp), resp.item or item, resp.result)
         legacy_scan._queue_ha_notification(resp, barcode, background_tasks)
         return resp
