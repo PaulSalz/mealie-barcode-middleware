@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Actions — Mealie Barcode Middleware{% endblock %}
 {% block content %}
-<div class="page-header d-print-none mb-3">
+<div class="page-header d-print-none mb-3 actions-page-header">
   <div class="row g-2 align-items-center">
     <div class="col"><h2 class="page-title">Actions</h2><div class="text-secondary">Stable ACTION:&lt;id&gt; codes with editable webhook behavior.</div></div>
     <div class="col-auto"><a class="btn btn-primary" href="/actions/new"><i class="ti ti-plus icon"></i> New action</a></div>
@@ -9,7 +9,7 @@
 </div>
 <div class="card">
   <div class="table-responsive">
-    <table class="table table-vcenter card-table">
+    <table class="table table-vcenter card-table actions-table">
       <thead><tr><th>Name</th><th>Code</th><th>Status</th><th>Mode</th><th>Cooldown</th><th>Executions</th><th>Last result</th></tr></thead>
       <tbody>
       {% for action in actions %}
