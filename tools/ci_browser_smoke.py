@@ -205,6 +205,9 @@ def main() -> None:
         assert printer_card.is_visible()
         assert "Disconnect" in (disconnect_button.text_content() or "")
         assert not b21_toolbar.is_visible(), "Advanced printer controls should be hidden in Basic mode."
+        if not global_advanced.is_visible():
+            tools.click()
+            global_advanced.wait_for(state="visible", timeout=5_000)
         if not global_advanced.is_checked():
             global_advanced.check(force=True)
         wait_until(
