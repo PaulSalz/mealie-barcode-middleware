@@ -196,6 +196,11 @@
         section.open = true;
       });
     }
+    document.querySelectorAll('details.b2m-mobile-collapsible').forEach(function (section) {
+      section.addEventListener('toggle', function () {
+        if (!media.matches && !section.open) section.open = true;
+      });
+    });
     keepDesktopSectionsOpen();
     if (media.addEventListener) media.addEventListener('change', keepDesktopSectionsOpen);
     else if (media.addListener) media.addListener(keepDesktopSectionsOpen);
