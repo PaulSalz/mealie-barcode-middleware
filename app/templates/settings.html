@@ -564,21 +564,42 @@
                 <p class="card-subtitle">{{ tab_description }}</p>
                 {% endif %}
 
+                {% set user_status = request.query_params.get('user_status', '') %}
+                {% if user_status == 'admin_password_required' %}
+                <div class="alert alert-warning mt-3" role="alert">Enter your current password to create an admin account.</div>
+                {% elif user_status in ['admin_password_invalid', 'current_password_invalid'] %}
+                <div class="alert alert-danger mt-3" role="alert">The current password is incorrect. No changes were made.</div>
+                {% elif user_status == 'password_mismatch' %}
+                <div class="alert alert-danger mt-3" role="alert">The new passwords do not match. No changes were made.</div>
+                {% elif user_status == 'invalid_password' %}
+                <div class="alert alert-danger mt-3" role="alert">Passwords must be between 8 and 128 characters.</div>
+                {% elif user_status == 'invalid_username' %}
+                <div class="alert alert-danger mt-3" role="alert">Usernames must contain at least 3 characters.</div>
+                {% elif user_status == 'username_taken' %}
+                <div class="alert alert-warning mt-3" role="alert">That username is already in use.</div>
+                {% elif user_status == 'user_created' %}
+                <div class="alert alert-success mt-3" role="status">User account created.</div>
+                {% elif user_status == 'password_changed' %}
+                <div class="alert alert-success mt-3" role="status">Password updated.</div>
+                {% elif user_status in ['access_denied', 'user_not_found'] %}
+                <div class="alert alert-danger mt-3" role="alert">The requested user could not be updated.</div>
+                {% endif %}
+
                 <h3 class="card-title mt-4">Add User</h3>
                 <form action="/settings/users/add" method="post">
                     <div class="row g-2 align-items-end">
                         <div class="col-12 col-sm">
-                            <label class="form-label">Username</label>
-                            <input type="text" name="username" class="form-control" placeholder="Username" required minlength="3">
+                            <label class="form-label" for="new-username">Username</label>
+                            <input type="text" id="new-username" name="username" class="form-control" placeholder="Username" required minlength="3" autocomplete="username">
                         </div>
                         <div class="col-12 col-sm">
-                            <label class="form-label">Password</label>
-                            <input type="password" name="password" class="form-control" placeholder="Min. 8 characters" required minlength="8">
+                            <label class="form-label" for="new-user-password">Password</label>
+                            <input type="password" id="new-user-password" name="password" class="form-control" placeholder="Min. 8 characters" required minlength="8" maxlength="128" autocomplete="new-password">
                         </div>
                         <div class="col-auto">
                             <label class="form-label d-none d-sm-block">&nbsp;</label>
                             <label class="form-check mb-0">
-                                <input type="checkbox" name="is_admin" value="1" class="form-check-input">
+                                <input type="checkbox" id="new-user-is-admin" name="is_admin" value="1" class="form-check-input">
                                 <span class="form-check-label">Admin</span>
                             </label>
                         </div>
@@ -587,6 +608,10 @@
                                 <i class="ti ti-plus icon"></i> Add
                             </button>
                         </div>
+                    </div>
+                    <div id="admin-password-confirmation" class="mt-2 d-none">
+                        <label class="form-label" for="admin-current-password">Confirm your current password to grant admin access</label>
+                        <input type="password" id="admin-current-password" name="admin_current_password" class="form-control" placeholder="Current password" autocomplete="current-password" disabled>
                     </div>
                 </form>
 
@@ -615,10 +640,12 @@
                                 </td>
                                 <td class="text-secondary">{{ user.created_at | localtime }}</td>
                                 <td>
-                                    <form action="/settings/users/{{ user.id }}/password" method="post" class="d-flex gap-2">
-                                        <input type="password" name="password" class="form-control form-control-sm" placeholder="New password" minlength="8" required>
-                                        <button type="submit" class="btn btn-sm btn-ghost-primary text-nowrap">
-                                            <i class="ti ti-key icon"></i> Set
+                                    <form action="/settings/users/{{ user.id }}/password" method="post" class="d-flex flex-column gap-1">
+                                        <input type="password" name="current_password" class="form-control form-control-sm" placeholder="Your current password" aria-label="Your current password" autocomplete="current-password" required>
+                                        <input type="password" name="password" class="form-control form-control-sm" placeholder="New password" aria-label="New password" minlength="8" maxlength="128" autocomplete="new-password" required>
+                                        <input type="password" name="password_confirm" class="form-control form-control-sm" placeholder="Confirm new password" aria-label="Confirm new password" minlength="8" maxlength="128" autocomplete="new-password" required>
+                                        <button type="submit" class="btn btn-sm btn-ghost-primary text-nowrap align-self-start">
+                                            <i class="ti ti-key icon"></i> Update password
                                         </button>
                                     </form>
                                 </td>
