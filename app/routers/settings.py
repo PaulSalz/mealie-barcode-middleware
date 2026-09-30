@@ -270,8 +270,9 @@ def create_token(request: Request, name: str = Form(...), db: Session = Depends(
     db.commit()
     db.refresh(token)
     tokens = db.query(ApiToken).order_by(ApiToken.created_at.desc()).all()
+    tabs, sidebar_groups = _visible_settings_tabs(request, db)
     return templates.TemplateResponse(request, "settings.html", {
-        "tabs": _TABS, "sidebar_groups": _SIDEBAR_GROUPS, "config_groups": [],
+        "tabs": tabs, "sidebar_groups": sidebar_groups, "config_groups": [],
         "tokens": tokens, "current_tab": "tokens", "current_tab_label": "API Tokens",
         "tab_description": _TAB_DESCRIPTIONS.get("tokens", ""),
         "section_descriptions": _SECTION_DESCRIPTIONS, "new_token": raw,
