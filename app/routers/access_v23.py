@@ -19,11 +19,22 @@ from app.access_v23 import (
 )
 from app.config import settings
 from app.database import get_db
-from app.models import Activity, ApiToken, BarcodeCache, BarcodeMapping, Item, RetryQueue, User
+from app.models import Activity, ApiToken, BarcodeCache, BarcodeMapping, Item, RetryQueue, SystemState, User
 from app.templating import templates
 from app.theme import THEME_CHOICES, THEME_DEFAULTS
 
 router = APIRouter()
+
+_FREQUENT_USED_LIMITS = (3, 6, 9, 12, 15, 20)
+
+
+def _frequent_used_limit(db: Session, user_id: int) -> int:
+    row = db.get(SystemState, f"appearance.v35.user.{int(user_id)}.frequent_used_limit")
+    try:
+        value = int(row.value) if row and row.value else 6
+    except (TypeError, ValueError):
+        value = 6
+    return value if value in _FREQUENT_USED_LIMITS else 6
 
 
 def _current_user(request: Request, db: Session) -> User | None:
@@ -173,6 +184,7 @@ def profile_appearance(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "profile_appearance.html", {
         "theme": personal_theme(db, user.id),
         "theme_choices": THEME_CHOICES,
+        "frequent_used_limit": _frequent_used_limit(db, user.id),
     })
 
 
@@ -205,6 +217,19 @@ async def profile_appearance_save(request: Request, db: Session = Depends(get_db
     if values["radius"] not in THEME_CHOICES["radius"]:
         values["radius"] = THEME_DEFAULTS["radius"]
     save_personal_theme(db, user.id, values)
+    try:
+        frequent_limit = int(form.get("frequent_used_limit", 6))
+    except (TypeError, ValueError):
+        frequent_limit = 6
+    if frequent_limit not in _FREQUENT_USED_LIMITS:
+        frequent_limit = 6
+    preference_key = f"appearance.v35.user.{int(user.id)}.frequent_used_limit"
+    preference = db.get(SystemState, preference_key)
+    if preference:
+        preference.value = str(frequent_limit)
+    else:
+        db.add(SystemState(key=preference_key, value=str(frequent_limit)))
+    db.commit()
     return RedirectResponse("/profile/appearance?saved=1", status_code=303)
 
 
