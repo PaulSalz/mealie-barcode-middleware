@@ -161,9 +161,15 @@ def test_homeassistant_notification_receives_all_scan_response_fields(monkeypatc
     assert captured["json"]["item_source"] == "lookup"
 
 
-def test_mobile_dashboard_focuses_on_printing_recent_scans_and_code_linking():
+def test_mobile_dashboard_shows_recent_scans_and_remaining_cards():
     css = read("app/static/css/app.css")
+    dashboard = read("app/templates/dashboard.html")
     template = read("app/templates/settings.html")
-    assert ".b2m-dashboard-overview,\n  .b2m-dashboard-counts,\n  .b2m-dashboard-shopping,\n  .b2m-dashboard-frequent {\n    display: none !important;" in css
+    hidden_cards_rule = ".b2m-dashboard-overview,\n  .b2m-dashboard-counts,\n  .b2m-dashboard-shopping,\n  .b2m-dashboard-frequent {\n    display: none !important;"
+    assert hidden_cards_rule not in css
+    assert ".b2m-dashboard-recent { order: 2; }" in css
+    assert ".b2m-dashboard-shopping { order: 3; }" in css
+    for card in ("b2m-dashboard-overview", "b2m-dashboard-counts", "b2m-dashboard-shopping", "b2m-dashboard-frequent"):
+        assert card in dashboard
     assert 'id="b2m-printer-connection-card"' in template
     assert 'class="card mb-3 d-none d-md-block" id="b2m-printer-connection-card"' not in template

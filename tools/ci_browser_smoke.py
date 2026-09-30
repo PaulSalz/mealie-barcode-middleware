@@ -193,7 +193,53 @@ def main() -> None:
                         {"id": "ci-list-default", "name": "This week", "default": True, "count": 0},
                         {"id": "ci-list-other", "name": "Later", "default": False, "count": 0},
                     ],
-                    "recent_items": [],
+                    "recent_items": [
+                        {
+                            "barcode": "ci-recent-food",
+                            "product_name": "Recent milk",
+                            "target_type": "food",
+                            "target_id": "ci-food-0",
+                            "target_name": "Food 0",
+                            "target_count": 1,
+                            "targets": [{"type": "food", "id": "ci-food-0", "name": "Food 0"}],
+                            "title": "Recent milk",
+                            "source": "CI",
+                            "status": "mapped",
+                            "result": "added",
+                            "created_at": "just now",
+                            "created_at_absolute": "now",
+                        },
+                        {
+                            "barcode": "ci-recent-recipe",
+                            "product_name": "Dinner",
+                            "target_type": "recipe",
+                            "target_id": "ci-recipe-0",
+                            "target_name": "Recipe 0",
+                            "target_count": 1,
+                            "targets": [{"type": "recipe", "id": "ci-recipe-0", "name": "Recipe 0"}],
+                            "title": "Recipe 0",
+                            "source": "CI",
+                            "status": "mapped",
+                            "result": "added",
+                            "created_at": "just now",
+                            "created_at_absolute": "now",
+                        },
+                        {
+                            "barcode": "ci-recent-action",
+                            "product_name": "Action scan",
+                            "target_type": "action",
+                            "target_id": "ci-action",
+                            "target_name": "Kitchen light",
+                            "target_count": 1,
+                            "targets": [{"type": "action", "id": "ci-action", "name": "Kitchen light"}],
+                            "title": "Kitchen light",
+                            "source": "CI",
+                            "status": "mapped",
+                            "result": "action_triggered",
+                            "created_at": "just now",
+                            "created_at_absolute": "now",
+                        },
+                    ],
                     "total_barcodes": 0, "mapped_count": 0, "pending_count": 0,
                     "queue_depth": 0, "unknown_count": 0, "scanner_online": 0, "scanner_total": 0,
                 }),
@@ -231,6 +277,21 @@ def main() -> None:
 
         page.route("**/api/dashboard/frequent/actions/*/trigger", handle_frequent_action_trigger)
         page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
+        page.locator("#recent-scans-card").evaluate("""card => {
+            if (card.querySelector("#recent-scans-body")) return;
+            const placeholder = card.querySelector(".card-body");
+            if (placeholder) placeholder.remove();
+            const table = document.createElement("div");
+            table.className = "table-responsive";
+            table.innerHTML = '<table class="table table-vcenter card-table"><tbody id="recent-scans-body"></tbody></table>';
+            card.appendChild(table);
+        }""")
+        page.evaluate("window.dispatchEvent(new Event('focus'))")
+        wait_until(
+            lambda: page.locator("#recent-scans-body .b2m-frequent-add").count() == 2,
+            "Recent food and recipe quick-add buttons were not rendered.",
+        )
+        assert page.locator("#recent-scans-body .b2m-frequent-trigger").count() == 1
         wait_until(
             lambda: page.locator("#b2m-frequent-foods .b2m-frequent-add").count() == 9,
             "Dashboard did not apply the personal Frequently used limit.",
@@ -247,6 +308,21 @@ def main() -> None:
             action_button.click()
         wait_until(lambda: len(triggered_actions) == 1, "Dashboard action was not triggered.")
         assert triggered_actions[0]["method"] == "POST"
+
+        recent_add = page.locator("#recent-scans-body .b2m-frequent-add").first
+        recent_add.click()
+        modal = page.locator("#b2m-frequent-add-modal")
+        modal.wait_for(state="visible", timeout=3_000)
+        assert page.locator("#b2m-frequent-add-name").inner_text() == "Food 0"
+        page.locator("#b2m-frequent-add-modal [data-bs-dismiss='modal']").last.click()
+        wait_until(lambda: not modal.is_visible(), "Recent scan quick-add dialog did not close.", timeout_ms=2_000)
+        with page.expect_request(
+            lambda request: request.url.endswith("/api/dashboard/frequent/actions/ci-action/trigger")
+            and request.method == "POST",
+            timeout=5_000,
+        ):
+            page.locator("#recent-scans-body .b2m-frequent-trigger").click()
+        wait_until(lambda: len(triggered_actions) == 2, "Recent scan action was not triggered.")
 
         page.locator("#b2m-frequent-foods .b2m-frequent-add").first.click()
         modal = page.locator("#b2m-frequent-add-modal")
@@ -302,6 +378,17 @@ def main() -> None:
         modal.wait_for(state="visible", timeout=3_000)
         page.keyboard.press("Escape")
         wait_until(lambda: not modal.is_visible(), "Escape did not close the dialog.", timeout_ms=2_000)
+
+        page.set_viewport_size({"width": 390, "height": 844})
+        for selector in (
+            "#shopping-lists-card",
+            ".b2m-dashboard-overview",
+            ".b2m-dashboard-counts",
+            "#b2m-frequent-dashboard",
+        ):
+            assert page.locator(selector).evaluate("(element) => getComputedStyle(element).display") != "none", selector
+        assert page.locator("#recent-scans-body .b2m-frequent-trigger").is_visible()
+        page.set_viewport_size({"width": 1280, "height": 900})
         page.unroute_all()
 
         # Build a deterministic two-label queue for editor/live-layer tests.
