@@ -167,10 +167,15 @@ def test_mobile_dashboard_shows_recent_scans_and_remaining_cards():
     template = read("app/templates/settings.html")
     hidden_cards_rule = ".b2m-dashboard-overview,\n  .b2m-dashboard-counts,\n  .b2m-dashboard-shopping,\n  .b2m-dashboard-frequent {\n    display: none !important;"
     assert hidden_cards_rule not in css
-    assert ".b2m-dashboard-recent { order: 2; }" in css
-    assert ".b2m-dashboard-shopping { order: 3; }" in css
+    assert ".b2m-dashboard-overview { order: 2; }" in css
+    assert ".b2m-dashboard-counts { order: 3; }" in css
+    assert ".b2m-dashboard-shopping { order: 4; }" in css
+    assert ".b2m-dashboard-frequent { order: 5; }" in css
+    assert ".b2m-dashboard-recent { order: 6; }" in css
     assert 'details class="card b2m-mobile-collapsible" open id="recent-scans-card"' in dashboard
     assert 'class="b2m-dashboard-frequent b2m-mobile-collapsible mb-3" open' in dashboard
+    assert '<summary class="card-header b2m-mobile-collapse-summary d-md-none"><span class="card-title">Frequently used</span>' in dashboard
+    assert ".b2m-dashboard-frequent-cards { margin: 0; padding: .55rem; }" in css
     assert ".b2m-dashboard-frequent .list-group-item { padding: .35rem .55rem; }" in css
     for card in ("b2m-dashboard-overview", "b2m-dashboard-counts", "b2m-dashboard-shopping", "b2m-dashboard-frequent"):
         assert card in dashboard
