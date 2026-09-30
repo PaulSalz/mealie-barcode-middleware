@@ -76,23 +76,27 @@ def rainbow_button_preference(db: Session, user_id: int | None) -> str:
     return value if value in RAINBOW_BUTTON_CHOICES else RAINBOW_BUTTON_DEFAULT
 
 
-def permissions_for_user(db: Session, user: User | None) -> dict[str, bool]:
+def configured_permissions_for_user(db: Session, user: User | None) -> dict[str, bool]:
     if not user:
         return {key: False for key in DEFAULT_USER_PERMISSIONS}
-    if user.is_admin:
-        return {key: True for key in DEFAULT_USER_PERMISSIONS}
     saved = _load_json(db, permission_key(user.id), {})
     if not isinstance(saved, dict):
         saved = {}
     return {key: bool(saved.get(key, default)) for key, default in DEFAULT_USER_PERMISSIONS.items()}
 
 
-def set_permissions(db: Session, user: User, values: dict) -> dict[str, bool]:
+def permissions_for_user(db: Session, user: User | None) -> dict[str, bool]:
+    if not user:
+        return {key: False for key in DEFAULT_USER_PERMISSIONS}
     if user.is_admin:
-        return permissions_for_user(db, user)
+        return {key: True for key in DEFAULT_USER_PERMISSIONS}
+    return configured_permissions_for_user(db, user)
+
+
+def set_permissions(db: Session, user: User, values: dict) -> dict[str, bool]:
     cleaned = {key: bool(values.get(key, DEFAULT_USER_PERMISSIONS[key])) for key in DEFAULT_USER_PERMISSIONS}
     _save_json(db, permission_key(user.id), cleaned)
-    return cleaned
+    return permissions_for_user(db, user)
 
 
 def has_permission(db: Session, user_id: int | None, permission: str) -> bool:
