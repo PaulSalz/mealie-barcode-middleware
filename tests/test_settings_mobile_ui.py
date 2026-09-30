@@ -74,3 +74,16 @@ def test_user_permission_controls_use_existing_access_api_and_server_checks():
     assert '"printer": "printer"' in routes
     assert '"database": "database"' in routes
     assert 'if not _allowed(request, db, "database")' in routes
+
+
+def test_admin_role_changes_are_password_confirmed_and_cannot_self_lock_out():
+    template = read("app/templates/settings.html")
+    client = read("app/static/js/settings-page.js")
+    access = read("app/routers/access_v23.py")
+
+    assert 'id="user-permissions-admin"' in template
+    assert 'id="user-permissions-current-password"' in template
+    assert 'current_password:currentPassword.value' in client
+    assert "current password confirmation failed" in access
+    assert "you cannot remove your own administrator access" in access
+    assert '"configured_permissions": configured_permissions_for_user(db, user)' in access
