@@ -582,4 +582,121 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     word-break: normal;
     overflow-wrap: break-word;
   }
+
+  /* Settings screens: keep navigation, forms, cards, and actions usable on
+     narrow iPhone-sized viewports without forcing page-wide horizontal scroll. */
+  .settings-shell, .settings-shell > .row, .settings-content { min-width: 0; }
+  .settings-shell > .row > .settings-sidebar {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--tblr-border-color);
+  }
+  .settings-sidebar .card-body { padding: .55rem .65rem; }
+  .settings-sidebar .subheader {
+    margin: .55rem 0 .25rem !important;
+    font-size: .68rem;
+    letter-spacing: .04em;
+  }
+  .settings-sidebar .list-group {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: .25rem;
+    overflow-x: auto;
+    padding-bottom: .25rem;
+    scrollbar-width: thin;
+  }
+  .settings-sidebar .list-group-item {
+    flex: 0 0 auto;
+    width: auto;
+    white-space: nowrap;
+    border: 1px solid var(--tblr-border-color);
+    border-radius: var(--tblr-border-radius);
+    padding: .4rem .55rem;
+    font-size: .8rem;
+  }
+  .settings-content > .card-body { padding: .75rem; }
+  .settings-content .card-body { min-width: 0; }
+  .settings-content h2.mb-4 { margin-bottom: .75rem !important; font-size: 1.15rem; }
+  .settings-content .card-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: .5rem;
+    padding: .65rem .75rem;
+  }
+  .settings-content .card-header > :first-child { min-width: 0; max-width: 100%; }
+  .settings-content .card-actions { width: 100%; max-width: 100%; flex-wrap: wrap; }
+  .settings-content .card-actions > * { max-width: 100%; }
+  .settings-content .card-body { padding: .7rem; }
+  .settings-content .row { --tblr-gutter-x: .65rem; --tblr-gutter-y: .65rem; }
+  .settings-content input.form-control,
+  .settings-content select.form-select,
+  .settings-content textarea.form-control { min-width: 0; max-width: 100%; }
+  .settings-content .btn-list { flex-wrap: wrap; }
+  .settings-content .btn-list > .btn { max-width: 100%; }
+  .settings-content .form-check.form-switch { align-items: flex-start; }
+  .settings-content .form-check.form-switch .form-check-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .settings-content .table-responsive { max-width: 100%; margin-inline: -.15rem; }
+  .settings-content textarea { font-size: .74rem; }
+  .settings-content .datagrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-content .datagrid-content,
+  .settings-content code { overflow-wrap: anywhere; word-break: break-word; }
+  .settings-content .justify-content-between { align-items: flex-start !important; }
+  .settings-printer-connection .card-body {
+    align-items: flex-start !important;
+    flex-direction: column;
+    gap: .55rem !important;
+    padding: .65rem .75rem;
+  }
+  .settings-printer-connection .btn { width: 100%; }
+
+  .settings-role-distribution .card-body { padding: .55rem .65rem; }
+  .settings-role-distribution .h2 { font-size: 1.35rem; }
+  .settings-users-table { display: block; width: 100%; }
+  .settings-users-table > thead { display: none; }
+  .settings-users-table > tbody { display: grid; gap: .5rem; }
+  .settings-users-table > tbody > tr:not(:has(td[colspan])) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .25rem .45rem;
+    padding: .55rem;
+    border: 2px solid var(--tblr-secondary);
+    border-radius: var(--tblr-border-radius);
+    background: var(--tblr-bg-surface);
+  }
+  .settings-users-table > tbody > tr:not(:has(td[colspan])) > td {
+    min-width: 0;
+    padding: .15rem .2rem !important;
+    border: 0 !important;
+    white-space: normal;
+  }
+  .settings-users-table > tbody > tr:not(:has(td[colspan])) > td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: .1rem;
+    color: var(--tblr-secondary);
+    font-size: .62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .settings-users-table > tbody > tr:not(:has(td[colspan])) > td:nth-child(1) {
+    grid-column: 1 / -1;
+    font-weight: 600;
+    font-size: .95rem;
+  }
+  .settings-users-table > tbody > tr:not(:has(td[colspan])) > td:nth-child(3) { text-align: right; }
+  .settings-users-table > tbody > tr:not(:has(td[colspan])) > td:nth-child(4) { grid-column: 1; }
+  .settings-users-table > tbody > tr:not(:has(td[colspan])) > td:nth-child(5) { grid-column: 2; }
+  .settings-users-table td[colspan] { display: block; }
+  #change-user-password-modal .modal-dialog { margin: .5rem; }
+  #change-user-password-modal .modal-footer { flex-wrap: wrap; }
+  #change-user-password-modal .modal-footer .btn { flex: 1 1 auto; }
+  .settings-content .border-danger .justify-content-between {
+    flex-direction: column;
+    gap: .65rem;
+  }
+  .settings-content .border-danger .justify-content-between > .btn { margin-left: 0 !important; width: 100%; }
 }
