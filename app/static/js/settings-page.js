@@ -356,3 +356,23 @@
         }
     });
 })();
+
+
+(function requireCurrentPasswordForAdminGrant() {
+    'use strict';
+    var checkbox = document.getElementById('new-user-is-admin');
+    var confirmation = document.getElementById('admin-password-confirmation');
+    var password = document.getElementById('admin-current-password');
+    if (!checkbox || !confirmation || !password) return;
+
+    function syncAdminConfirmation() {
+        var required = checkbox.checked;
+        confirmation.classList.toggle('d-none', !required);
+        password.disabled = !required;
+        password.required = required;
+        if (!required) password.value = '';
+    }
+
+    checkbox.addEventListener('change', syncAdminConfirmation);
+    syncAdminConfirmation();
+})();
