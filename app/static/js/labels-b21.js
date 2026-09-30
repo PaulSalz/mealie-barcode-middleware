@@ -127,6 +127,7 @@
 
         var previewCard = previewPage.closest('.card');
         var previewColumn = previewCard.parentElement;
+        previewCard.classList.add('b21-sticky-preview-card');
         previewCard.classList.remove('h-100');
         previewCard.style.setProperty('position', 'sticky', 'important');
         previewCard.style.top = '1rem';
