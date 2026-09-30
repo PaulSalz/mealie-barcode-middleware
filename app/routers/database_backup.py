@@ -74,10 +74,10 @@ def backup_status(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/settings/admin/backup")
-def admin_backup(request: Request):
-    """Create a WAL-safe verified backup for the admin settings page."""
-    if not request.session.get("is_admin", False):
-        return RedirectResponse("/settings?tab=mealie", status_code=303)
+def admin_backup(request: Request, db: Session = Depends(get_db)):
+    """Create a WAL-safe verified backup for database administrators."""
+    if not _allowed(request, db):
+        return RedirectResponse("/?permission_denied=database", status_code=303)
     return _backup_response()
 
 
