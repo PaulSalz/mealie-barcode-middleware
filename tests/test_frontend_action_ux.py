@@ -188,3 +188,10 @@ def test_mobile_dashboard_shows_recent_scans_and_remaining_cards():
         assert card in dashboard
     assert 'id="b2m-printer-connection-card"' in template
     assert 'class="card mb-3 d-none d-md-block" id="b2m-printer-connection-card"' not in template
+    assert ".b2m-dashboard-counts .b2m-stat-card .h1" in css and "justify-content: space-between;" in css
+    assert ".navbar {\n    position: sticky;" in css
+    assert 'href="/profile/appearance"' in read("app/templates/base.html")
+    assert 'data-field="barcode" data-label="Barcode"' in read("app/templates/barcodes.html")
+    assert '#barcodes-table > tbody > tr:not(.barcodes-empty-row)' in css
+    assert 'label-generator-layout' in read("app/templates/labels.html")
+    assert 'shopping-print-layout' in read("app/templates/shopping_print.html")
