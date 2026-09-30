@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 from starlette.responses import StreamingResponse
@@ -10,8 +10,9 @@ from starlette.responses import StreamingResponse
 from app.config import settings
 from app.database import get_db
 from app.events import scan_events
-from app.models import Activity, ApiToken, BarcodeCache, BarcodeTarget, Item, RetryQueue, SystemState
+from app.models import Action, Activity, ApiToken, BarcodeCache, BarcodeTarget, Item, RetryQueue, SystemState
 from app.services.mealie_health import mealie_reachable
+from app.services.actions import execute_action
 from app.services.scan_stats import frequent_targets as frequent_target_stats
 from app.services.shopping import (
     add_food_to_list, add_note_to_list, add_recipe_to_list,
@@ -209,6 +210,32 @@ def dashboard_frequent_api(request: Request, db: Session = Depends(get_db)):
         "actions": frequent_target_stats(db, "action", limit),
         "limit": limit,
     }
+
+
+@router.post("/api/dashboard/frequent/actions/{action_id}/trigger")
+def dashboard_frequent_action_trigger(
+    action_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    action = db.get(Action, action_id)
+    if not action:
+        return JSONResponse({"error": "Action not found"}, status_code=404)
+    if not action.enabled:
+        return JSONResponse({"error": "This action is disabled"}, status_code=409)
+
+    barcode = f"ACTION:{action.id}"
+    if action.execution_mode == "async":
+        background_tasks.add_task(execute_action, action.id, barcode)
+        return JSONResponse({"ok": True, "status": "queued", "action_id": action.id, "action_name": action.name}, status_code=202)
+
+    result = execute_action(action.id, barcode)
+    status = result.get("status")
+    if status == "success":
+        return {"ok": True, **result}
+    if status == "ignored_cooldown":
+        return JSONResponse({"error": "This action is cooling down. Try again shortly.", **result}, status_code=409)
+    return JSONResponse({"error": result.get("error") or "Action could not be triggered", **result}, status_code=502)
 
 
 @router.post("/api/dashboard/frequent/add")
