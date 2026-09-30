@@ -144,6 +144,9 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     .label-cell.landscape .label-text { flex: 1 1 0; min-width: 0; width: auto; height: auto; margin-top: 0; margin-left: var(--label-padding, 2mm); text-align: left; overflow-wrap: anywhere; -webkit-line-clamp: 3; }
 }
 
+.b2m-mobile-collapsible > summary { list-style: none; }
+.b2m-mobile-collapsible > summary::-webkit-details-marker { display: none; }
+
 /* Mobile-only navigation and dashboard layout. Desktop rules stay untouched. */
 .b2m-dashboard-mobile-flow { display: contents; }
 @media (max-width: 767.98px) {
