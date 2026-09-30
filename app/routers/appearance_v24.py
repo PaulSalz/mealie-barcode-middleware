@@ -154,7 +154,12 @@ async def appearance_v24_save(request: Request, db: Session = Depends(get_db)):
         if key in {"mode", "logo_color", "button_color", "font", "font_size", "base", "radius", "epaper", "contrast", "date_style", "color"}
     }
     theme = save_personal_theme(db, user_id, theme_fields) if theme_fields else personal_theme(db, user_id)
-    return {"ok": True, "theme": theme, "advanced_settings": _advanced_settings_preference(db, user_id)}
+    return {
+        "ok": True,
+        "theme": theme,
+        "advanced_settings": _advanced_settings_preference(db, user_id),
+        "frequent_used_limit": _frequent_used_limit(db, user_id),
+    }
 
 
 @router.post("/profile/appearance")
