@@ -74,6 +74,7 @@ def test_lookup_settings_show_api_urls_and_never_render_an_invalid_choice_as_bla
     assert 'data-api-url="{{ item.field }}"' in template
     assert "valid_values = [" in router
     assert 'val = valid_values[0] if valid_values else ""' in router
+    assert 'env_default = valid_values[0] if valid_values else ""' in router
     assert '"lookup_strategy": {' in config and '"type": "choice"' in config
     assert '"lookup_primary": {' in config and '"type": "choice"' in config
 
