@@ -400,3 +400,135 @@
         account.textContent = '';
     });
 })();
+
+(function settingsTabPicker() {
+    'use strict';
+    var form = document.querySelector('.settings-tab-picker');
+    var select = document.getElementById('settings-tab-select');
+    if (!form || !select) return;
+    select.addEventListener('change', function() {
+        if (typeof form.requestSubmit === 'function') form.requestSubmit();
+        else form.submit();
+    });
+})();
+
+(function manageUserPermissions() {
+    'use strict';
+    if (window.location.pathname !== '/settings') return;
+
+    var modal = document.getElementById('user-permissions-modal');
+    var form = document.getElementById('user-permissions-form');
+    var fields = document.getElementById('user-permissions-fields');
+    var accountLabel = document.getElementById('user-permissions-account');
+    var errorBox = document.getElementById('user-permissions-error');
+    var statusBox = document.getElementById('user-permissions-status');
+    var saveButton = document.getElementById('user-permissions-save');
+    if (!modal || !form || !fields || !saveButton) return;
+
+    var activeUserId = null;
+    var loadSequence = 0;
+
+    function showError(message) {
+        errorBox.textContent = message;
+        errorBox.classList.remove('d-none');
+    }
+    function clearMessages() {
+        errorBox.textContent = '';
+        errorBox.classList.add('d-none');
+        statusBox.textContent = '';
+        statusBox.classList.add('d-none');
+    }
+    function renderPermissions(user, catalog) {
+        fields.replaceChildren();
+        catalog.forEach(function(permission) {
+            var row = document.createElement('label');
+            row.className = 'settings-permission-option';
+            var checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'form-check-input';
+            checkbox.name = permission.id;
+            checkbox.dataset.permissionId = permission.id;
+            checkbox.checked = Boolean(user.permissions && user.permissions[permission.id]);
+            var text = document.createElement('span');
+            text.className = 'form-check-label';
+            var title = document.createElement('span');
+            title.className = 'fw-semibold d-block';
+            title.textContent = permission.label;
+            var hint = document.createElement('span');
+            hint.className = 'form-hint d-block';
+            hint.textContent = permission.description;
+            text.append(title, hint);
+            row.append(checkbox, text);
+            fields.appendChild(row);
+        });
+    }
+
+    modal.addEventListener('show.bs.modal', function(event) {
+        var trigger = event.relatedTarget;
+        if (!trigger) return;
+        activeUserId = trigger.getAttribute('data-permission-user-id');
+        accountLabel.textContent = trigger.getAttribute('data-permission-username') || '';
+        fields.textContent = 'Loading permissions…';
+        saveButton.disabled = true;
+        clearMessages();
+        var sequence = ++loadSequence;
+        fetch('/api/access/users', {headers:{'Accept':'application/json'}, credentials:'same-origin', cache:'no-store'})
+            .then(function(response) {
+                return response.json().catch(function() { return {}; }).then(function(data) {
+                    if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+                    return data;
+                });
+            })
+            .then(function(data) {
+                if (sequence !== loadSequence) return;
+                var user = (data.users || []).find(function(entry) { return String(entry.id) === String(activeUserId); });
+                if (!user || !Array.isArray(data.catalog)) throw new Error('User permission data is unavailable.');
+                if (user.is_admin) throw new Error('Administrators always have full access.');
+                renderPermissions(user, data.catalog);
+                saveButton.disabled = false;
+            })
+            .catch(function(error) {
+                if (sequence !== loadSequence) return;
+                fields.textContent = '';
+                showError('Could not load permissions: ' + error.message);
+            });
+    });
+
+    modal.addEventListener('hidden.bs.modal', function() {
+        loadSequence += 1;
+        activeUserId = null;
+        accountLabel.textContent = '';
+        fields.replaceChildren();
+        clearMessages();
+        saveButton.disabled = false;
+    });
+
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        if (!activeUserId) return;
+        var permissions = {};
+        fields.querySelectorAll('input[data-permission-id]').forEach(function(checkbox) {
+            permissions[checkbox.dataset.permissionId] = checkbox.checked;
+        });
+        saveButton.disabled = true;
+        clearMessages();
+        fetch('/api/access/users/' + encodeURIComponent(activeUserId), {
+            method:'POST',
+            headers:{'Accept':'application/json','Content-Type':'application/json'},
+            credentials:'same-origin',
+            body:JSON.stringify({permissions:permissions})
+        }).then(function(response) {
+            return response.json().catch(function() { return {}; }).then(function(data) {
+                if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+                return data;
+            });
+        }).then(function() {
+            statusBox.textContent = 'Permissions saved.';
+            statusBox.classList.remove('d-none');
+        }).catch(function(error) {
+            showError('Could not save permissions: ' + error.message);
+        }).finally(function() {
+            saveButton.disabled = false;
+        });
+    });
+})();
