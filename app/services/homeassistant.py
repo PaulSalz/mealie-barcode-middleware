@@ -204,34 +204,50 @@ def homeassistant_webhook_id(url: str | None) -> str | None:
 
 
 def build_scan_notification_automation(webhook_url: str | None) -> str:
-    """Build a copy-ready HA automation that displays the complete B2M webhook payload."""
+    """Build a concise HA automation for final B2M scan results."""
     webhook_id = homeassistant_webhook_id(webhook_url) or "YOUR_WEBHOOK_ID"
-    yaml = """alias: B2M - Show scan details
-description: Show all details sent by B2M when a code is scanned.
+    yaml = """alias: B2M - Scan notification
+description: Show the final result and barcode status for each B2M scan.
 triggers:
   - trigger: webhook
     webhook_id: '__WEBHOOK_ID__'
     allowed_methods:
       - POST
     local_only: true
-conditions: []
+conditions:
+  - condition: template
+    value_template: >-
+      {% set scan = ((trigger | default({})).json | default({})) %}
+      {{ scan.get('result_type', '') != 'processing' }}
 actions:
   - action: persistent_notification.create
     data:
-      title: "{{ ((trigger | default({})).json | default({})).get('item', 'B2M code scanned') }}"
+      title: >-
+        {% set scan = ((trigger | default({})).json | default({})) %}
+        {% set state = scan.get('barcode_state', 'unknown') %}
+        {% if state == 'linked' %}B2M · Verknüpft
+        {% elif state == 'pending' %}B2M · Noch nicht verknüpft
+        {% elif state == 'action' %}B2M · Aktion
+        {% elif state == 'generic' %}B2M · Code
+        {% elif state == 'error' %}B2M · Fehler
+        {% else %}B2M · Unbekannter Barcode{% endif %}
       message: >-
-        Barcode: {{ ((trigger | default({})).json | default({})).get('barcode', '—') }}
-        Item: {{ ((trigger | default({})).json | default({})).get('item', '—') }}
-        Result: {{ ((trigger | default({})).json | default({})).get('result_type', '—') }}
-        Via: {{ ((trigger | default({})).json | default({})).get('via', '—') }}
-        Needs action: {{ ((trigger | default({})).json | default({})).get('needs_action', '—') }}
-        Brand: {{ ((trigger | default({})).json | default({})).get('brand', '—') }}
-        Quantity: {{ ((trigger | default({})).json | default({})).get('quantity', '—') }}
-        Item source: {{ ((trigger | default({})).json | default({})).get('item_source', '—') }}
-        Action URL: {{ ((trigger | default({})).json | default({})).get('action_url', '—') }}
-        Added to list: {{ ((trigger | default({})).json | default({})).get('added_to_list', '—') }}
-        Paused: {{ ((trigger | default({})).json | default({})).get('paused', '—') }}
-        Full payload: {{ ((trigger | default({})).json | default({})) | to_json }}
+        {% set scan = ((trigger | default({})).json | default({})) %}
+        Barcode: {{ scan.get('barcode', '—') }}
+        Artikel: {{ scan.get('item', '—') }}
+        Status: {{ scan.get('barcode_state', 'unknown') }}
+        Bekannt: {{ scan.get('barcode_known') if scan.get('barcode_known') is not none else '—' }}
+        Verknüpft: {{ scan.get('barcode_linked') if scan.get('barcode_linked') is not none else '—' }}
+        Ausstehend: {{ scan.get('barcode_pending') if scan.get('barcode_pending') is not none else '—' }}
+        Ergebnis: {{ scan.get('result_type', '—') }}
+        Quelle: {{ scan.get('via', '—') }}
+        Aktion nötig: {{ scan.get('needs_action', '—') }}
+        Marke: {{ scan.get('brand', '—') }}
+        Menge: {{ scan.get('quantity', '—') }}
+        Quelle des Artikels: {{ scan.get('item_source', '—') }}
+        Zur Liste hinzugefügt: {{ scan.get('added_to_list', '—') }}
+        Pausiert: {{ scan.get('paused', '—') }}
+        Link: {{ scan.get('action_url', '—') }}
 mode: queued
 max: 10
 """
