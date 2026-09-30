@@ -284,7 +284,7 @@
                         <div class="card-header card-header-light">
                             <div>
                                 <h3 class="card-title">Scan notification automation</h3>
-                                <p class="card-subtitle">Copy this into Home Assistant to receive a persistent notification with every detail from a B2M scan.</p>
+                                <p class="card-subtitle">One copy-ready automation for the final scan result; temporary processing pings are ignored.</p>
                             </div>
                             <div class="card-actions">
                                 <button class="btn btn-primary" type="button" id="copy-ha-scan-automation"><i class="ti ti-copy icon"></i> Copy automation</button>
@@ -294,12 +294,16 @@
                             {% if not scan_webhook_configured %}
                             <div class="alert alert-warning py-2">Set the Home Assistant webhook URL above first. Replace <code>YOUR_WEBHOOK_ID</code> in the automation if you configure the webhook later.</div>
                             {% endif %}
-                            <textarea class="form-control font-monospace" id="ha-scan-automation-yaml" rows="18" readonly>{{ scan_notification_automation }}</textarea>
-                            <div class="form-hint mt-2" id="ha-scan-automation-status" role="status">The automation listens to the same webhook URL configured above.</div>
+                            <div class="d-flex flex-wrap gap-2 mb-3 small" aria-label="Barcode status legend">
+                                <span class="badge bg-success-lt">Verknüpft</span><span class="text-secondary">bekannt und einem Ziel zugeordnet</span>
+                                <span class="badge bg-warning-lt">Ausstehend</span><span class="text-secondary">bekannt, aber noch nicht verknüpft</span>
+                                <span class="badge bg-secondary-lt">Unbekannt</span><span class="text-secondary">kein Treffer und kein Ziel</span>
+                            </div>
+                            <textarea class="form-control font-monospace" id="ha-scan-automation-yaml" rows="22" readonly aria-label="Home Assistant Scan notification automation YAML">{{ scan_notification_automation }}</textarea>
+                            <div class="form-hint mt-2" id="ha-scan-automation-status" role="status">The automation listens to the same webhook URL configured above and shows the barcode state with the scan result.</div>
                         </div>
                     </div>
                     {% endif %}
-
                     {% if not config_groups and current_tab != 'scanning' %}
                     <div class="empty">
                         <p class="empty-title">No settings on this tab</p>
