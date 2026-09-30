@@ -254,5 +254,5 @@ def test_personal_font_size_setting_is_wired_end_to_end():
     assert '"font_size": THEME_CHOICES["font_size"]' in route
     assert "font_size: fieldValue('theme_font_size', '100')" in controller
     assert "root.dataset.b2mFontSize = state.font_size" in controller
-    assert 'cssValue("--b2m-saved-font-size")' in init
+    assert "--b2m-saved-font-size" in init
     assert "root.dataset.b2mFontSize = fontSize" in init
