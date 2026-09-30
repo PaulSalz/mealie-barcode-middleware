@@ -332,6 +332,22 @@ def main() -> None:
         for field_name in ("barcode", "result_type", "item_source", "brand", "quantity", "via"):
             assert "scan.get('" + field_name + "'" in scan_automation
 
+        # Restore Basic mode so later settings checks start from their default.
+        if not global_advanced.is_visible():
+            tools.click()
+            global_advanced.wait_for(state="visible", timeout=5_000)
+        if global_advanced.is_checked():
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/appearance-v24")
+                and response.request.method == "POST",
+                timeout=5_000,
+            ):
+                global_advanced.uncheck(force=True)
+        wait_until(
+            lambda: not page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
+            "Global Advanced mode did not switch off after the printer test.",
+        )
+
         page.goto(f"{BASE_URL}/actions/new", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="New action").wait_for(timeout=5_000)
         page.locator('input[name="name"]').fill("CI action")
