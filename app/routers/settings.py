@@ -155,10 +155,7 @@ _TAB_PERMISSIONS = {
 
 
 def _allowed(request: Request, db: Session, permission: str) -> bool:
-    return bool(
-        request.session.get("is_admin", False)
-        or has_permission(db, request.session.get("user_id"), permission)
-    )
+    return has_permission(db, request.session.get("user_id"), permission)
 
 
 def _require_permission(request: Request, db: Session, permission: str) -> RedirectResponse | None:
@@ -168,7 +165,7 @@ def _require_permission(request: Request, db: Session, permission: str) -> Redir
 
 
 def _visible_settings_tabs(request: Request, db: Session):
-    tabs = _TABS if request.session.get("is_admin", False) else [
+    tabs = [
         tab for tab in _TABS
         if _TAB_PERMISSIONS.get(tab[0]) and _allowed(request, db, _TAB_PERMISSIONS[tab[0]])
     ]
@@ -180,8 +177,9 @@ def _visible_settings_tabs(request: Request, db: Session):
     return tabs, {label: tab_ids for label, tab_ids in groups.items() if tab_ids}
 
 
-def _require_admin(request: Request) -> RedirectResponse | None:
-    if not request.session.get("is_admin", False):
+def _require_admin(request: Request, db: Session) -> RedirectResponse | None:
+    user = db.get(User, request.session.get("user_id"))
+    if not user or not user.is_admin:
         return RedirectResponse("/", status_code=303)
     return None
 
@@ -212,7 +210,7 @@ def settings_page(request: Request, tab: str = Query("mealie"), db: Session = De
         "section_descriptions": _SECTION_DESCRIPTIONS,
         "config_groups": tab_groups, "has_editable": has_editable,
         "tokens": tokens, "new_token": None, "users": users,
-        "is_admin": request.session.get("is_admin", False),
+        "is_admin": bool(db.get(User, request.session.get("user_id")) and db.get(User, request.session.get("user_id")).is_admin),
         "theme": theme, "theme_choices": THEME_CHOICES, "admin_info": admin_info,
         "scan_notification_automation": build_scan_notification_automation(settings.ha_webhook_url) if tab == "homeassistant" else "",
         "scan_webhook_configured": bool(homeassistant_webhook_id(settings.ha_webhook_url)) if tab == "homeassistant" else False,
@@ -316,8 +314,8 @@ async def api_pause(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/api/settings/resume")
 def api_resume(request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
-        return JSONResponse({"error": "admin required"}, status_code=403)
+    if not _allowed(request, db, "scanning"):
+        return JSONResponse({"error": "scanning permission required"}, status_code=403)
     from app.events import scan_events
     from app.pause import resume_now
     resume_now(db)
@@ -347,7 +345,7 @@ async def api_set_theme_mode(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/settings/theme")
 async def save_theme_settings(request: Request, db: Session = Depends(get_db)):
-    if redirect := _require_admin(request):
+    if redirect := _require_admin(request, db):
         return redirect
     form_data = await request.form()
     values = {
@@ -486,7 +484,8 @@ def add_user(
     if len(password) < 8 or len(password) > 128:
         return _users_redirect("invalid_password")
     grant_admin = is_admin.strip().lower() in {"1", "true", "on"}
-    if grant_admin and not request.session.get("is_admin", False):
+    actor = db.get(User, request.session.get("user_id"))
+    if grant_admin and not (actor and actor.is_admin):
         return _users_redirect("admin_required")
     if grant_admin and not admin_current_password:
         return _users_redirect("admin_password_required")
@@ -507,7 +506,8 @@ def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     if user_id == request.session.get("user_id"):
         return RedirectResponse("/settings?tab=users", status_code=303)
     user = db.get(User, user_id)
-    if user and user.is_admin and not request.session.get("is_admin", False):
+    actor = db.get(User, request.session.get("user_id"))
+    if user and user.is_admin and not (actor and actor.is_admin):
         return _users_redirect("admin_required")
     if user:
         logger.info("User deleted: %s", user.username)
@@ -526,7 +526,8 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     current_user_id = request.session.get("user_id")
-    is_admin = request.session.get("is_admin", False)
+    actor = db.get(User, current_user_id) if current_user_id is not None else None
+    is_admin = bool(actor and actor.is_admin)
     if not is_admin and user_id != current_user_id:
         return _users_redirect("access_denied")
     if len(password) < 8 or len(password) > 128:
