@@ -155,15 +155,33 @@ def main() -> None:
         frequent_limit = page.locator("#appearance-frequent-used-limit")
         assert frequent_limit.is_visible()
         frequent_limit.select_option("9")
-        with page.expect_response(
-            lambda response: response.url.endswith("/api/appearance-v24")
-            and response.request.method == "POST",
-            timeout=5_000,
-        ) as appearance_save:
-            page.locator("#appearance-save-button").click()
-        assert appearance_save.value.ok
-        appearance_payload = appearance_save.value.request.post_data_json
-        assert appearance_payload["frequent_used_limit"] == 9, appearance_payload
+        appearance_payloads: list[dict] = []
+
+        def handle_appearance_save(route):
+            if route.request.method != "POST":
+                route.continue_()
+                return
+            appearance_payloads.append(route.request.post_data_json)
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({"ok": True, "frequent_used_limit": 9}),
+            )
+
+        page.route("**/api/appearance-v24", handle_appearance_save)
+        page.locator("#appearance-save-button").click()
+        wait_until(lambda: bool(appearance_payloads), "Appearance form did not submit.")
+        assert appearance_payloads[0]["frequent_used_limit"] == 9, appearance_payloads
+        page.unroute("**/api/appearance-v24", handle_appearance_save)
+        saved_limit = page.evaluate("""async () => {
+            const response = await fetch('/api/appearance-v24', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+              body: JSON.stringify({frequent_used_limit: 9})
+            });
+            return {ok: response.ok, data: await response.json()};
+        }""")
+        assert saved_limit["ok"] and saved_limit["data"]["frequent_used_limit"] == 9, saved_limit
 
         page.route(
             re.compile(r".*/api/dashboard(?:\?.*)?$"),
