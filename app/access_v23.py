@@ -149,6 +149,7 @@ def personal_theme_css(db: Session, user_id: int | None) -> str:
         "logo-color": theme["logo_color"],
         "radius": theme["radius"],
         "font": theme["font"],
+        "font-size": theme["font_size"],
         "epaper": theme["epaper"],
         "contrast": theme["contrast"],
     }
