@@ -70,21 +70,42 @@
   }
 
   function targetHtml(item) {
-    var name = item.target_name || '';
-    var id = item.target_id || '';
-    var type = item.target_type || '';
-    var html = '<span class="text-secondary">—</span>';
-    if (name && id && type === 'food') {
-      html = '<a href="/items/' + encodeURIComponent(id) + '">' + esc(name) + '</a>';
-    } else if (name && id && type === 'recipe') {
-      html = '<span class="badge bg-purple-lt me-1">Recipe</span><a href="/recipes/' + encodeURIComponent(id) + '">' + esc(name) + '</a>';
-    } else if (name && id && type === 'action') {
-      html = '<span class="badge bg-yellow-lt me-1">Action</span><a href="/actions/' + encodeURIComponent(id) + '">' + esc(name) + '</a>';
-    } else if (name) {
-      html = esc(name);
+    var targets = Array.isArray(item.targets) ? item.targets.filter(function (target) {
+      return target && target.id && target.type;
+    }) : [];
+    if (!targets.length && item.target_type && item.target_id) {
+      targets = [{type: item.target_type, id: item.target_id, name: item.target_name}];
     }
-    if (Number(item.target_count || 0) > 1) {
-      html = '<span class="badge bg-azure-lt me-1">' + Number(item.target_count) + ' targets</span>' + html;
+    var html = targets.map(function (target) {
+      var id = String(target.id);
+      var name = target.name || item.target_name || id;
+      var type = target.type;
+      var link = '';
+      var button = '';
+      if (type === 'food') {
+        link = '<a href="/items/' + encodeURIComponent(id) + '">' + esc(name) + '</a>';
+        button = '<button type="button" class="btn btn-outline-primary btn-icon b2m-frequent-add" data-target-type="food" data-target-id="' +
+          esc(id) + '" data-target-name="' + esc(name) + '" title="Add to shopping list" aria-label="Add ' + esc(name) +
+          ' to a shopping list"><i class="ti ti-shopping-cart-plus"></i></button>';
+      } else if (type === 'recipe') {
+        link = '<span class="badge bg-purple-lt me-1">Recipe</span><a href="/recipes/' + encodeURIComponent(id) + '">' + esc(name) + '</a>';
+        button = '<button type="button" class="btn btn-outline-primary btn-icon b2m-frequent-add" data-target-type="recipe" data-target-id="' +
+          esc(id) + '" data-target-name="' + esc(name) + '" title="Add to shopping list" aria-label="Add ' + esc(name) +
+          ' to a shopping list"><i class="ti ti-shopping-cart-plus"></i></button>';
+      } else if (type === 'action') {
+        link = '<span class="badge bg-yellow-lt me-1">Action</span><a href="/actions/' + encodeURIComponent(id) + '">' + esc(name) + '</a>';
+        button = '<button type="button" class="btn btn-outline-warning btn-icon b2m-frequent-trigger" data-action-id="' +
+          esc(id) + '" data-action-name="' + esc(name) + '" title="Trigger action" aria-label="Trigger ' + esc(name) +
+          '"><i class="ti ti-player-play"></i></button>';
+      } else {
+        link = esc(name);
+      }
+      return '<span class="d-inline-flex align-items-center gap-1 me-2 mb-1">' + link + button + '</span>';
+    }).join('');
+    if (!html && item.target_name) html = esc(item.target_name);
+    if (!html) html = '<span class="text-secondary">—</span>';
+    if (Number(item.target_count || targets.length) > 1) {
+      html = '<span class="badge bg-azure-lt me-1">' + Number(item.target_count || targets.length) + ' targets</span>' + html;
     }
     return html;
   }
