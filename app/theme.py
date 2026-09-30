@@ -257,7 +257,7 @@ def build_theme_css(theme: dict[str, str]) -> str:
     common.update(_radius_vars(t["radius"]))
     common["--tblr-body-font-family"] = FONT_CSS[t["font"]]
     common["--b2m-saved-font-size"] = t["font_size"]
-    common["font-size"] = f"{t[\"font_size\"]}%"
+    common["font-size"] = str(t["font_size"]) + "%"
     common["--b2m-saved-mode"] = t["mode"]
     common["--b2m-card-shadow"] = "var(--tblr-box-shadow-card)"
     common["--b2m-page-filter"] = "none"
