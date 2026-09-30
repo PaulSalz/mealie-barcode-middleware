@@ -198,6 +198,10 @@ def test_mobile_dashboard_shows_recent_scans_and_remaining_cards():
     assert ".table.table-vcenter {\n    border-collapse: separate;\n    border-spacing: 0 .35rem;" in css
     assert ".table.table-vcenter > tbody > tr:not(.barcodes-empty-row)" in css
     assert "border-top: 2px solid var(--tblr-secondary);" in css
+    assert ".actions-page-header > .row > .col {\n    flex: 0 0 100%;" in css
+    assert ".actions-table tbody > tr > td:first-child {\n    min-width: 13rem;" in css
+    assert "actions-page-header" in read("app/templates/actions.html")
+    assert "actions-table" in read("app/templates/actions.html")
     assert "#barcodes-table > tbody > tr:not(.barcodes-empty-row)" in css and "border: 2px solid var(--tblr-secondary);" in css
     assert ".label-page-header > .row > .col {\n    flex: 0 0 100%;" in css
     assert ".navbar-brand .ti-scan {\n    display: inline-flex;" in css
