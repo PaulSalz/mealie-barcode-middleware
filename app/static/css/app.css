@@ -644,13 +644,13 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   .settings-content .datagrid-content,
   .settings-content code { overflow-wrap: anywhere; word-break: break-word; }
   .settings-content .justify-content-between { align-items: flex-start !important; }
-  .settings-printer-connection .card-body {
+  #b2m-printer-connection-card .card-body {
     align-items: flex-start !important;
     flex-direction: column;
     gap: .55rem !important;
     padding: .65rem .75rem;
   }
-  .settings-printer-connection .btn { width: 100%; }
+  #b2m-printer-connection-card .btn { width: 100%; }
 
   .settings-role-distribution .card-body { padding: .55rem .65rem; }
   .settings-role-distribution .h2 { font-size: 1.35rem; }
