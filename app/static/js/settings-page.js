@@ -376,3 +376,27 @@
     checkbox.addEventListener('change', syncAdminConfirmation);
     syncAdminConfirmation();
 })();
+
+(function changeUserPasswordModal() {
+    'use strict';
+    if (window.location.pathname !== '/settings') return;
+
+    var modal = document.getElementById('change-user-password-modal');
+    var form = document.getElementById('change-user-password-form');
+    var account = document.getElementById('change-user-password-account');
+    if (!modal || !form) return;
+
+    modal.addEventListener('show.bs.modal', function(event) {
+        var trigger = event.relatedTarget;
+        if (!trigger) return;
+        form.action = trigger.getAttribute('data-password-action') || '';
+        account.textContent = trigger.getAttribute('data-password-username') || '';
+        form.reset();
+    });
+
+    modal.addEventListener('hidden.bs.modal', function() {
+        form.reset();
+        form.removeAttribute('action');
+        account.textContent = '';
+    });
+})();
