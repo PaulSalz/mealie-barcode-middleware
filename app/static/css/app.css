@@ -184,7 +184,7 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   .b2m-dashboard-mobile-flow {
     display: flex;
     flex-direction: column;
-    gap: .75rem;
+    gap: .5rem;
   }
   .b2m-dashboard-mobile-flow > * {
     margin-bottom: 0 !important;
@@ -231,9 +231,73 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     width: 2rem;
     height: 2rem;
   }
-  #recent-scans-card > .card-header { padding: .55rem .75rem; }
-  #recent-scans-card .card-title { font-size: 1rem; }
-  #recent-scans-card .card-subtitle { font-size: .75rem; }
+  .b2m-dashboard-mobile-flow .row.row-cards {
+    --tblr-gutter-x: .5rem;
+    --tblr-gutter-y: .5rem;
+  }
+  .b2m-dashboard-readiness.alert {
+    padding: .5rem .65rem;
+    font-size: .82rem;
+  }
+  .b2m-dashboard-readiness .avatar {
+    width: 2rem;
+    height: 2rem;
+    margin-right: .5rem !important;
+  }
+  .b2m-dashboard-readiness .card-header {
+    min-height: unset;
+    padding: .55rem .7rem;
+  }
+  .b2m-dashboard-readiness .card-title { font-size: .9rem; }
+  .b2m-dashboard-readiness .card-subtitle { font-size: .7rem; }
+  .b2m-dashboard-overview .card-body { padding: .65rem; }
+  .b2m-dashboard-overview .page-title { font-size: 1.1rem; }
+  .b2m-dashboard-overview .text-secondary { font-size: .75rem; }
+  .b2m-stat-card .card-body {
+    min-height: unset;
+    padding: .6rem;
+  }
+  .b2m-stat-card .avatar {
+    width: 2rem;
+    height: 2rem;
+  }
+  .b2m-stat-card .subheader { font-size: .68rem; }
+  .b2m-stat-card .h1 { font-size: 1.4rem; line-height: 1.1; }
+  .b2m-stat-card .text-secondary.small { font-size: .68rem; }
+  #shopping-lists-card > .card-header,
+  #recent-scans-card > .card-header {
+    min-height: unset;
+    padding: .5rem .65rem;
+  }
+  #shopping-lists-card .card-title,
+  #recent-scans-card .card-title { font-size: .9rem; }
+  #shopping-lists-card .card-subtitle,
+  #recent-scans-card .card-subtitle { font-size: .68rem; line-height: 1.2; }
+  #shopping-lists-card > .card-body { padding: .55rem; }
+  #shopping-lists-card .b2m-shopping-list-link { padding: .55rem !important; }
+  #shopping-lists-card .b2m-shopping-list-link .avatar {
+    width: 2rem;
+    height: 2rem;
+    margin-right: .5rem !important;
+  }
+  #shopping-lists-card .b2m-shopping-list-link .h2 { font-size: 1.15rem; }
+  #shopping-lists-card .b2m-shopping-list-link .fs-5 { font-size: .8rem !important; }
+  .b2m-dashboard-frequent-cards { padding: .35rem; }
+  .b2m-dashboard-frequent .card-header { padding: .4rem .55rem; }
+  .b2m-dashboard-frequent .card-title { font-size: .85rem; }
+  .b2m-dashboard-frequent .card-subtitle { font-size: .68rem; line-height: 1.2; }
+  .b2m-dashboard-frequent .list-group-item { padding: .3rem .4rem; font-size: .8rem; }
+  .b2m-dashboard-frequent .badge { font-size: .64rem; padding: .18rem .3rem; }
+  .b2m-mobile-dashboard-actions { gap: .4rem; }
+  .b2m-mobile-dashboard-actions .btn {
+    min-height: 2.4rem;
+    padding: .35rem .45rem;
+    font-size: .82rem;
+    line-height: 1.15;
+  }
+  #recent-scans-card > .card-header { padding: .5rem .65rem; }
+  #recent-scans-card .card-title { font-size: .9rem; }
+  #recent-scans-card .card-subtitle { font-size: .68rem; }
   .b2m-mobile-dashboard-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -261,16 +325,16 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   }
   #recent-scans-card #recent-scans-body {
     display: grid;
-    gap: .4rem;
-    padding: .55rem;
+    gap: .3rem;
+    padding: .4rem;
   }
   #recent-scans-card #recent-scans-body tr {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
-    gap: .15rem .5rem;
-    padding: .45rem .55rem;
-    font-size: .875rem;
+    gap: .1rem .4rem;
+    padding: .35rem .45rem;
+    font-size: .8rem;
     border: 1px solid var(--tblr-border-color);
     border-radius: var(--tblr-border-radius);
     background: var(--tblr-bg-surface);
@@ -278,7 +342,7 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   #recent-scans-card #recent-scans-body td {
     display: block;
     min-width: 0;
-    padding: .15rem 0;
+    padding: .1rem 0;
     border: 0;
     overflow-wrap: anywhere;
   }
@@ -293,8 +357,8 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   #recent-scans-card #recent-scans-body td:nth-child(3) {
     grid-column: 1 / -1;
     order: 3;
-    font-size: .825rem;
-    line-height: 1.25;
+    font-size: .76rem;
+    line-height: 1.2;
   }
   #recent-scans-card #recent-scans-body td:nth-child(4),
   #recent-scans-card #recent-scans-body td:nth-child(5) {
@@ -304,7 +368,7 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     order: 4;
     align-self: center;
     color: var(--tblr-secondary);
-    font-size: .8rem;
+    font-size: .72rem;
     text-align: right;
   }
 }
