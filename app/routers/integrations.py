@@ -141,8 +141,9 @@ class BulkDeleteRequest(BaseModel):
 
 @router.post("/api/bulk-delete")
 def bulk_delete(body: BulkDeleteRequest, request: Request, db: Session = Depends(get_db)):
-    if not request.session.get("is_admin", False):
-        return JSONResponse({"error":"admin required"}, status_code=403)
+    required = "actions" if body.kind == "actions" else "items"
+    if not has_permission(db, request.session.get("user_id"), required):
+        return JSONResponse({"error":f"{required} permission required"}, status_code=403)
     ids = list(dict.fromkeys(str(value).strip() for value in body.ids if str(value).strip()))
     if not ids:
         return {"ok":True,"deleted":0,"skipped":[],"errors":[]}
