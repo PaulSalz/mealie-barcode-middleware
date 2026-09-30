@@ -97,9 +97,10 @@ def test_theme_back_navigation_and_mobile_settings_are_updated():
     theme = read("app/static/js/theme-controls-v32.js")
     css = read("app/static/css/app.css")
     settings = read("app/templates/settings.html")
-    assert "savedAppearanceMarker" in theme
+    assert "appearanceRevisionKey" in theme
     assert "window.addEventListener('pageshow'" in theme
-    assert "if (!event.persisted) return;" in theme
+    assert "currentRevision === pageAppearanceRevision" in theme
+    assert "if (!event.persisted) return;" not in theme
     assert "keepalive: true" in theme
     assert ".navbar > .container-xl > .navbar-brand" in css
     assert ".navbar > .container-xl > .navbar-toggler" in css

@@ -10,22 +10,25 @@
   window.__b2mThemeV32Loaded = true;
 
   var root = document.documentElement;
-  var savedAppearanceMarker = 'b2m-appearance-saved-v1';
+  var appearanceRevisionKey = 'b2m-appearance-revision-v2';
+
+  function getAppearanceRevision() {
+    try { return window.sessionStorage.getItem(appearanceRevisionKey) || '0'; } catch (e) { return '0'; }
+  }
+  var pageAppearanceRevision = getAppearanceRevision();
 
   function markAppearanceSave() {
-    try { window.sessionStorage.setItem(savedAppearanceMarker, '1'); } catch (e) {}
-  }
-  function clearAppearanceSave() {
-    try { window.sessionStorage.removeItem(savedAppearanceMarker); } catch (e) {}
-  }
-  window.addEventListener('pageshow', function (event) {
-    if (!event.persisted) return;
-    var saved = false;
     try {
-      saved = window.sessionStorage.getItem(savedAppearanceMarker) === '1';
-      if (saved) window.sessionStorage.removeItem(savedAppearanceMarker);
+      var next = (parseInt(window.sessionStorage.getItem(appearanceRevisionKey) || '0', 10) || 0) + 1;
+      pageAppearanceRevision = String(next);
+      window.sessionStorage.setItem(appearanceRevisionKey, pageAppearanceRevision);
     } catch (e) {}
-    if (saved) window.location.reload();
+  }
+  window.addEventListener('pageshow', function () {
+    var currentRevision = getAppearanceRevision();
+    if (currentRevision === pageAppearanceRevision) return;
+    pageAppearanceRevision = currentRevision;
+    window.location.reload();
   });
 
   var toggleModes = {
@@ -36,7 +39,6 @@
   };
 
   function postMode(mode) {
-    markAppearanceSave();
     return fetch('/api/appearance-v24/mode', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
@@ -45,10 +47,8 @@
       body: JSON.stringify({mode: mode})
     }).then(function (response) {
       if (!response.ok) throw new Error('HTTP ' + response.status);
+      markAppearanceSave();
       return response;
-    }).catch(function (error) {
-      clearAppearanceSave();
-      throw error;
     });
   }
 
@@ -204,7 +204,6 @@
     if (button) button.disabled = true;
     if (status) status.textContent = 'Saving…';
 
-    markAppearanceSave();
     fetch('/api/appearance-v24', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
@@ -215,10 +214,10 @@
       if (!response.ok) throw new Error('HTTP ' + response.status);
       return response.json();
     }).then(function () {
+      markAppearanceSave();
       if (seq !== saveSeq) return;
       if (status) status.textContent = 'Saved';
     }).catch(function () {
-      clearAppearanceSave();
       if (seq !== saveSeq) return;
       if (status) status.textContent = 'Save failed';
     }).finally(function () {

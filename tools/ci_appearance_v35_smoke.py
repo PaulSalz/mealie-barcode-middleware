@@ -145,7 +145,7 @@ def main() -> None:
             return {name: style.animationName, duration: style.animationDuration, timing: style.animationTimingFunction, state: style.animationPlayState, position: style.backgroundPosition};
         }""")
         assert normal_animation["name"] == "b2m-logo-rainbow-live", (normal_animation, theme_debug())
-        assert normal_animation["duration"] == "8s" and normal_animation["timing"] == "linear" and normal_animation["state"] == "running", (normal_animation, theme_debug())
+        assert normal_animation["duration"] == "6s" and normal_animation["timing"] == "linear" and normal_animation["state"] == "running", (normal_animation, theme_debug())
         normal_position_before = normal_animation["position"]
         page.wait_for_timeout(250)
         normal_position_after = normal_logo.evaluate("el => getComputedStyle(el).backgroundPosition")
@@ -199,6 +199,30 @@ def main() -> None:
         assert saved.value.ok
         page.get_by_text("Saved", exact=True).wait_for(timeout=5_000)
 
+        # Restoring the saved appearance page from browser history must not revive
+        # its pre-save theme snapshot.
+        page.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
+        page.go_back(wait_until="commit", timeout=20_000)
+        page.locator("#appearance-v35-form").wait_for(state="visible", timeout=5_000)
+        page.wait_for_function("""() => {
+            const root = document.documentElement;
+            return root.getAttribute('data-bs-theme') === 'dark' &&
+                root.dataset.b2mBase === 'stone' &&
+                root.dataset.b2mEpaper === 'true';
+        }""", timeout=5_000)
+
+        # The page behind Appearance can also be a stale BFCache snapshot.
+        page.go_back(wait_until="commit", timeout=20_000)
+        page.wait_for_function("""() => {
+            const root = document.documentElement;
+            return location.pathname === '/' &&
+                root.getAttribute('data-bs-theme') === 'dark' &&
+                root.dataset.b2mBase === 'stone' &&
+                root.dataset.b2mEpaper === 'true';
+        }""", timeout=8_000)
+        page.go_forward(wait_until="commit", timeout=20_000)
+        page.locator("#appearance-v35-form").wait_for(state="visible", timeout=5_000)
+
         page.reload(wait_until="domcontentloaded")
         html = page.locator("html")
         assert page.locator('select[name="theme_base"]').input_value() == "stone"
@@ -245,7 +269,7 @@ def main() -> None:
         }""")
         assert logo_animation == {
             "name": "b2m-logo-rainbow-live",
-            "duration": "8s",
+            "duration": "6s",
             "timing": "linear",
             "iterations": "infinite",
             "state": "running",

@@ -229,6 +229,26 @@ def main() -> None:
         )
         assert label_hits["batch"] == 0, label_hits
 
+        page.goto(f"{BASE_URL}/settings?tab=lookup", wait_until="domcontentloaded", timeout=20_000)
+        lookup_strategy = page.locator("#setting_lookup_strategy")
+        assert lookup_strategy.is_visible()
+        assert lookup_strategy.input_value() in {"failover", "complement"}, lookup_strategy.input_value()
+        assert lookup_strategy.locator("option").count() == 2
+        assert page.locator('[data-api-url="off_url_base"]').is_visible()
+        assert page.locator('[data-api-url="upcdb_url_base"]').is_visible()
+        off_url = page.locator('[data-api-url="off_url_base"]').inner_text()
+        upcdb_url = page.locator('[data-api-url="upcdb_url_base"]').inner_text()
+        assert off_url.startswith(("http://", "https://")), off_url
+        assert upcdb_url.startswith(("http://", "https://")), upcdb_url
+
+        page.goto(f"{BASE_URL}/settings?tab=homeassistant", wait_until="domcontentloaded", timeout=20_000)
+        scan_automation = page.locator("#ha-scan-automation-yaml").input_value()
+        assert "persistent_notification.create" in scan_automation
+        assert "Full payload: {{ ((trigger | default({})).json | default({})) | to_json }}" in scan_automation
+        assert "trigger.json.get(" not in scan_automation
+        for field_name in ("barcode", "result_type", "item_source", "brand", "quantity", "via"):
+            assert field_name in scan_automation
+
         page.goto(f"{BASE_URL}/actions/new", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="New action").wait_for(timeout=5_000)
         page.locator('input[name="name"]').fill("CI action")
@@ -241,7 +261,16 @@ def main() -> None:
             el.dispatchEvent(new Event('change', {bubbles: true}));
         }""")
         page.locator('[data-preset="notification"]').click()
+        quick_settings = page.locator("#action-v22-preset-settings")
+        assert quick_settings.is_visible()
+        assert quick_settings.locator("#action-preset-title").is_visible()
+        assert quick_settings.locator("#action-preset-message").is_visible()
+        quick_settings.locator("#action-preset-title").fill("Kitchen scan")
+        quick_settings.locator("#action-preset-message").fill("Scanned {{ scan.barcode }}")
+        assert "Kitchen scan" in page.locator("#action-payload-json").input_value()
         notification_yaml = page.locator("#action-ha-yaml").input_value()
+        assert "trigger | default({})" in notification_yaml
+        assert "trigger.json.get(" not in notification_yaml
         assert "action: persistent_notification.create" in notification_yaml, notification_yaml
         assert "event: b2m_action" not in notification_yaml, notification_yaml
         assert not page.locator("#action-payload-json").is_visible()
@@ -261,9 +290,30 @@ def main() -> None:
         assert "copied" in page.locator("#action-ha-status").inner_text().lower()
 
         page.locator('[data-preset="tts"]').click()
+        assert quick_settings.locator("#action-preset-tts_entity").is_visible()
+        assert quick_settings.locator("#action-preset-media_player").is_visible()
+        assert quick_settings.locator("#action-preset-message").is_visible()
+        quick_settings.locator("#action-preset-message").fill("Kitchen scan {{ scan.barcode }}")
         tts_yaml = page.locator("#action-ha-yaml").input_value()
         assert "action: tts.speak" in tts_yaml
         assert "media_player_entity_id" in tts_yaml
+        assert "trigger | default({})" in tts_yaml
+        assert "trigger.json.get(" not in tts_yaml
+
+        page.locator('[data-preset="timer"]').click()
+        quick_settings.locator("#action-preset-timer").fill("timer.kitchen")
+        quick_settings.locator("#action-preset-duration").fill("00:05:00")
+        timer_yaml = page.locator("#action-ha-yaml").input_value()
+        assert "entity_id: 'timer.kitchen'" in timer_yaml
+        assert "duration: '00:05:00'" in timer_yaml
+        assert "trigger.json.timer" not in timer_yaml
+        assert "trigger.json.duration" not in timer_yaml
+
+        page.locator('[data-preset="light"]').click()
+        quick_settings.locator("#action-preset-entity_id").fill("light.living_room")
+        light_yaml = page.locator("#action-ha-yaml").input_value()
+        assert "entity_id: 'light.living_room'" in light_yaml
+        assert "trigger.json.entity_id" not in light_yaml
 
         local_advanced = page.locator("#action-advanced-toggle")
         local_advanced.wait_for(state="attached", timeout=5_000)
@@ -275,6 +325,9 @@ def main() -> None:
         global_advanced = page.locator("#b2m-global-advanced-toggle")
         global_advanced.wait_for(state="visible", timeout=5_000)
         assert global_advanced.is_visible()
+        global_advanced.click()
+        assert page.locator("#action-v22-preset-settings").is_visible()
+        assert page.locator("#action-preset-entity_id").is_visible()
 
         shopping_hits = {"bootstrap_v31": 0, "lists": 0, "legacy_bootstrap": 0}
         bootstrap_payload = {

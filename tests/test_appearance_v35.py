@@ -43,7 +43,7 @@ def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
         "logo_color": "rainbow",
         "epaper": "true",
     })
-    assert "animation:b2m-logo-rainbow 8s linear infinite" in rainbow
+    assert "animation:b2m-logo-rainbow 6s linear infinite" in rainbow
     assert ".navbar-brand a .b2m-brand-text{background-image:linear-gradient(90deg," in rainbow
     assert "background-position:91.6667% 50%" in rainbow
     assert "background-size:220% 100%" in rainbow
@@ -59,7 +59,7 @@ def test_epaper_preserves_selected_logo_color_and_rainbow_animation():
 
     live = build_theme_live_catalog_css()
     assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{background-image:linear-gradient(90deg,' in live
-    assert "animation:b2m-logo-rainbow-live 8s linear infinite!important" in live
+    assert "animation:b2m-logo-rainbow-live 6s linear infinite!important" in live
     assert 'html[data-b2m-logo-color="rainbow"] .navbar-brand a .b2m-brand-text{' in live
     assert "background-position:91.6667% 50%" in live
     assert "background-size:220% 100%" in live

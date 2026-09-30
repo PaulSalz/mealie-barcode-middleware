@@ -45,6 +45,7 @@ def notify_scan(
     action_url: str,
     added_to_list: bool = True,
     paused: bool = False,
+    scan_details: dict | None = None,
 ) -> None:
     url = settings.ha_webhook_url
     if not url:
@@ -58,6 +59,8 @@ def notify_scan(
         "added_to_list": added_to_list,
         "paused": paused,
     }
+    if scan_details:
+        payload.update({key: value for key, value in scan_details.items() if key not in payload and value is not None})
 
     started = time.monotonic()
     try:
@@ -215,20 +218,20 @@ conditions: []
 actions:
   - action: persistent_notification.create
     data:
-      title: "{{ trigger.json.get('item', 'B2M code scanned') }}"
+      title: "{{ ((trigger | default({})).json | default({})).get('item', 'B2M code scanned') }}"
       message: >-
-        Barcode: {{ trigger.json.get('barcode', '—') }}
-        Item: {{ trigger.json.get('item', '—') }}
-        Result: {{ trigger.json.get('result_type', '—') }}
-        Action: {{ trigger.json.get('action', '—') }}
-        Action URL: {{ trigger.json.get('action_url', '—') }}
-        Added to list: {{ trigger.json.get('added_to_list', '—') }}
-        Paused: {{ trigger.json.get('paused', '—') }}
-        Route: {{ trigger.json.get('route', '—') }}
-        Quantity: {{ trigger.json.get('quantity', '—') }}
-        Item ID: {{ trigger.json.get('item_id', '—') }}
-        Unit ID: {{ trigger.json.get('unit_id', '—') }}
-        Full payload: {{ trigger.json | to_json }}
+        Barcode: {{ ((trigger | default({})).json | default({})).get('barcode', '—') }}
+        Item: {{ ((trigger | default({})).json | default({})).get('item', '—') }}
+        Result: {{ ((trigger | default({})).json | default({})).get('result_type', '—') }}
+        Via: {{ ((trigger | default({})).json | default({})).get('via', '—') }}
+        Needs action: {{ ((trigger | default({})).json | default({})).get('needs_action', '—') }}
+        Brand: {{ ((trigger | default({})).json | default({})).get('brand', '—') }}
+        Quantity: {{ ((trigger | default({})).json | default({})).get('quantity', '—') }}
+        Item source: {{ ((trigger | default({})).json | default({})).get('item_source', '—') }}
+        Action URL: {{ ((trigger | default({})).json | default({})).get('action_url', '—') }}
+        Added to list: {{ ((trigger | default({})).json | default({})).get('added_to_list', '—') }}
+        Paused: {{ ((trigger | default({})).json | default({})).get('paused', '—') }}
+        Full payload: {{ ((trigger | default({})).json | default({})) | to_json }}
 mode: queued
 max: 10
 """
