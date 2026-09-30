@@ -361,6 +361,17 @@ def main() -> None:
             "Global Advanced mode did not switch off after the printer test.",
         )
 
+        reset_advanced = page.evaluate("""async () => {
+            const response = await fetch('/api/appearance-v24', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+                body: JSON.stringify({advanced_settings: false})
+            });
+            const data = await response.json();
+            return {ok: response.ok, advanced: data.advanced_settings};
+        }""")
+        assert reset_advanced == {"ok": True, "advanced": False}, reset_advanced
+
         page.goto(f"{BASE_URL}/actions/new", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="New action").wait_for(timeout=5_000)
         page.locator('input[name="name"]').fill("CI action")
