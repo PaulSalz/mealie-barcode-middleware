@@ -4,12 +4,15 @@ import os
 import shutil
 from datetime import datetime
 
+import bcrypt
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.access_v23 import (
     PERMISSION_CATALOG,
+    configured_permissions_for_user,
     has_permission,
     personal_theme,
     personal_theme_css,
@@ -117,12 +120,14 @@ def access_users(request: Request, db: Session = Depends(get_db)):
     users = db.query(User).order_by(User.created_at).all()
     return {
         "catalog": PERMISSION_CATALOG,
+        "can_change_admin": bool(request.session.get("is_admin", False)),
         "users": [
             {
                 "id": user.id,
                 "username": user.username,
                 "is_admin": user.is_admin,
                 "permissions": permissions_for_user(db, user),
+                "configured_permissions": configured_permissions_for_user(db, user),
             }
             for user in users
         ],
@@ -140,7 +145,27 @@ async def access_update_user(user_id: int, request: Request, db: Session = Depen
     values = body.get("permissions") if isinstance(body, dict) else None
     if not isinstance(values, dict):
         return JSONResponse({"error": "permissions object required"}, status_code=400)
-    return {"ok": True, "permissions": set_permissions(db, user, values)}
+
+    next_is_admin = body.get("is_admin", user.is_admin)
+    if not isinstance(next_is_admin, bool):
+        return JSONResponse({"error": "is_admin must be a boolean"}, status_code=400)
+    if next_is_admin != user.is_admin:
+        if not request.session.get("is_admin", False):
+            return JSONResponse({"error": "administrator role changes require an admin"}, status_code=403)
+        if user.id == request.session.get("user_id") and not next_is_admin:
+            return JSONResponse({"error": "you cannot remove your own administrator access"}, status_code=400)
+        current_password = str(body.get("current_password") or "")
+        actor = db.get(User, request.session.get("user_id"))
+        try:
+            password_matches = bool(actor and bcrypt.checkpw(current_password.encode(), actor.password_hash.encode()))
+        except (ValueError, TypeError):
+            password_matches = False
+        if not password_matches:
+            return JSONResponse({"error": "current password confirmation failed"}, status_code=403)
+
+    user.is_admin = next_is_admin
+    effective_permissions = set_permissions(db, user, values)
+    return {"ok": True, "is_admin": user.is_admin, "permissions": effective_permissions}
 
 
 # Personal appearance overrides. These routes intentionally precede the legacy
