@@ -190,6 +190,8 @@
 
   function installMobileCollapses() {
     var media = window.matchMedia('(max-width: 767.98px)');
+    var recentScans = document.getElementById('recent-scans-card');
+    if (media.matches && recentScans) recentScans.open = false;
     function keepDesktopSectionsOpen() {
       if (media.matches) return;
       document.querySelectorAll('details.b2m-mobile-collapsible').forEach(function (section) {
