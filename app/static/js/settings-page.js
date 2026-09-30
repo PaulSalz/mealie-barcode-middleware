@@ -11,8 +11,7 @@
 
     var advancedFields = [
         'lookup_enrich_in_background',
-        'fuzzy_match_threshold', 'fuzzy_ambiguity_gap', 'item_sync_interval_hours',
-        'lookup_ttl_days', 'max_retry_attempts', 'notification_toast_seconds',
+        'notification_toast_seconds',
         'notification_group_window_seconds', 'dashboard_poll_interval_seconds',
         'health_poll_interval_seconds', 'shopping_print_poll_interval_seconds',
         'log_level', 'middleware_base_url'

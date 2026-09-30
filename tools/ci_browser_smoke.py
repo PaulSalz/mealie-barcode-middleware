@@ -241,6 +241,20 @@ def main() -> None:
         assert off_url.startswith(("http://", "https://")), off_url
         assert upcdb_url.startswith(("http://", "https://")), upcdb_url
 
+        page.evaluate("localStorage.removeItem('b2m-settings-advanced-v1')")
+        page.goto(f"{BASE_URL}/settings?tab=matching", wait_until="domcontentloaded", timeout=20_000)
+        advanced_toggle = page.locator("#settings-show-advanced")
+        assert advanced_toggle.count() == 1
+        assert not advanced_toggle.evaluate("(element) => element.checked")
+        for field_name in (
+            "fuzzy_match_threshold",
+            "fuzzy_ambiguity_gap",
+            "item_sync_interval_hours",
+            "lookup_ttl_days",
+            "max_retry_attempts",
+        ):
+            assert page.locator("#setting_" + field_name).is_visible(), field_name
+
         page.goto(f"{BASE_URL}/settings?tab=homeassistant", wait_until="domcontentloaded", timeout=20_000)
         scan_automation = page.locator("#ha-scan-automation-yaml").input_value()
         assert "persistent_notification.create" in scan_automation
