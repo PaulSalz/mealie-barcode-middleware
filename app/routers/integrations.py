@@ -27,7 +27,9 @@ def _is_current_admin(request: Request, db: Session) -> bool:
 
 
 @router.post("/api/settings/test-ha-webhook")
-def test_ha_webhook():
+def test_ha_webhook(request: Request, db: Session = Depends(get_db)):
+    if not has_permission(db, request.session.get("user_id"), "configuration"):
+        return JSONResponse({"error":"configuration permission required"}, status_code=403)
     url = settings.ha_webhook_url
     if not url:
         return JSONResponse({"ok": False, "error": "HA_WEBHOOK_URL is empty"}, status_code=400)
@@ -45,7 +47,9 @@ def test_ha_webhook():
 
 
 @router.post("/api/barcodes/{barcode:path}/test-route")
-def test_barcode_route(barcode: str, db: Session = Depends(get_db)):
+def test_barcode_route(barcode: str, request: Request, db: Session = Depends(get_db)):
+    if not has_permission(db, request.session.get("user_id"), "actions"):
+        return JSONResponse({"error":"actions permission required"}, status_code=403)
     targets = ensure_targets(barcode, db)
     if not targets:
         return JSONResponse({"ok":False,"error":"No targets configured for this barcode"}, status_code=404)
