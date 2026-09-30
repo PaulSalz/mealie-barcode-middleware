@@ -423,9 +423,14 @@
     var errorBox = document.getElementById('user-permissions-error');
     var statusBox = document.getElementById('user-permissions-status');
     var saveButton = document.getElementById('user-permissions-save');
-    if (!modal || !form || !fields || !saveButton) return;
+    var adminCheckbox = document.getElementById('user-permissions-admin');
+    var currentPasswordWrap = document.getElementById('user-permissions-current-password-wrap');
+    var currentPassword = document.getElementById('user-permissions-current-password');
+    if (!modal || !form || !fields || !saveButton || !adminCheckbox) return;
 
     var activeUserId = null;
+    var loadedIsAdmin = false;
+    var canChangeAdmin = false;
     var loadSequence = 0;
 
     function showError(message) {
@@ -438,8 +443,17 @@
         statusBox.textContent = '';
         statusBox.classList.add('d-none');
     }
-    function renderPermissions(user, catalog) {
+    function syncRoleControls() {
+        var roleChanged = adminCheckbox.checked !== loadedIsAdmin;
+        currentPasswordWrap.classList.toggle('d-none', !roleChanged);
+        currentPassword.required = roleChanged;
+        fields.querySelectorAll('input[data-permission-id]').forEach(function(checkbox) {
+            checkbox.disabled = adminCheckbox.checked;
+        });
+    }
+    function renderPermissions(user, catalog, mayChangeAdmin) {
         fields.replaceChildren();
+        var configured = user.configured_permissions || user.permissions || {};
         catalog.forEach(function(permission) {
             var row = document.createElement('label');
             row.className = 'settings-permission-option';
@@ -448,7 +462,7 @@
             checkbox.className = 'form-check-input';
             checkbox.name = permission.id;
             checkbox.dataset.permissionId = permission.id;
-            checkbox.checked = Boolean(user.permissions && user.permissions[permission.id]);
+            checkbox.checked = Boolean(configured[permission.id]);
             var text = document.createElement('span');
             text.className = 'form-check-label';
             var title = document.createElement('span');
@@ -461,6 +475,12 @@
             row.append(checkbox, text);
             fields.appendChild(row);
         });
+        loadedIsAdmin = Boolean(user.is_admin);
+        canChangeAdmin = Boolean(mayChangeAdmin);
+        adminCheckbox.checked = loadedIsAdmin;
+        adminCheckbox.disabled = !canChangeAdmin;
+        currentPassword.value = '';
+        syncRoleControls();
     }
 
     modal.addEventListener('show.bs.modal', function(event) {
@@ -483,8 +503,7 @@
                 if (sequence !== loadSequence) return;
                 var user = (data.users || []).find(function(entry) { return String(entry.id) === String(activeUserId); });
                 if (!user || !Array.isArray(data.catalog)) throw new Error('User permission data is unavailable.');
-                if (user.is_admin) throw new Error('Administrators always have full access.');
-                renderPermissions(user, data.catalog);
+                renderPermissions(user, data.catalog, data.can_change_admin);
                 saveButton.disabled = false;
             })
             .catch(function(error) {
@@ -494,11 +513,20 @@
             });
     });
 
+    adminCheckbox.addEventListener('change', syncRoleControls);
+
     modal.addEventListener('hidden.bs.modal', function() {
         loadSequence += 1;
         activeUserId = null;
+        loadedIsAdmin = false;
+        canChangeAdmin = false;
         accountLabel.textContent = '';
         fields.replaceChildren();
+        currentPassword.value = '';
+        currentPassword.required = false;
+        currentPasswordWrap.classList.add('d-none');
+        adminCheckbox.checked = false;
+        adminCheckbox.disabled = true;
         clearMessages();
         saveButton.disabled = false;
     });
@@ -516,13 +544,21 @@
             method:'POST',
             headers:{'Accept':'application/json','Content-Type':'application/json'},
             credentials:'same-origin',
-            body:JSON.stringify({permissions:permissions})
+            body:JSON.stringify({
+                permissions:permissions,
+                is_admin:adminCheckbox.checked,
+                current_password:currentPassword.value
+            })
         }).then(function(response) {
             return response.json().catch(function() { return {}; }).then(function(data) {
                 if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
                 return data;
             });
-        }).then(function() {
+        }).then(function(data) {
+            loadedIsAdmin = Boolean(data.is_admin);
+            adminCheckbox.checked = loadedIsAdmin;
+            currentPassword.value = '';
+            syncRoleControls();
             statusBox.textContent = 'Permissions saved.';
             statusBox.classList.remove('d-none');
         }).catch(function(error) {
