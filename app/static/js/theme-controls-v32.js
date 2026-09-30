@@ -213,7 +213,10 @@
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
       cache: 'no-store',
       keepalive: true,
-      body: JSON.stringify({theme: state})
+      body: JSON.stringify({
+        theme: state,
+        frequent_used_limit: Number((form.querySelector('[name="frequent_used_limit"]') || {}).value || 6)
+      })
     }).then(function (response) {
       if (!response.ok) throw new Error('HTTP ' + response.status);
       return response.json();
