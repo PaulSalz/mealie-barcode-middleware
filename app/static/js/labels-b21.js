@@ -117,7 +117,7 @@
             .b21-profile-editor { background:var(--tblr-bg-surface-secondary);border:1px solid var(--tblr-border-color);border-radius:var(--tblr-border-radius);padding:.75rem; }
             @media (min-width: 992px) {
                 .b21-sticky-preview-column { align-self:stretch !important; }
-                .b21-sticky-preview-card { position:sticky; top:1rem; z-index:3; }
+                .b21-sticky-preview-card { position:sticky !important; top:1rem; z-index:3; }
             }
             @media (max-width: 767.98px) { .b21-control-grid { grid-template-columns:1fr; } .b21-label-shell{min-height:230px;padding:.75rem;} }
         `;
