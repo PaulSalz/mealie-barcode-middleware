@@ -402,6 +402,23 @@ def _hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
+def _verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode(), password_hash.encode())
+    except (ValueError, TypeError):
+        return False
+
+
+def _current_user_password_matches(request: Request, password: str, db: Session) -> bool:
+    user_id = request.session.get("user_id")
+    user = db.get(User, user_id) if user_id is not None else None
+    return bool(user and _verify_password(password, user.password_hash))
+
+
+def _users_redirect(status: str) -> RedirectResponse:
+    return RedirectResponse(f"/settings?tab=users&user_status={status}", status_code=303)
+
+
 @router.post("/settings/users/add")
 def add_user(
     request: Request,
