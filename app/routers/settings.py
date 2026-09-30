@@ -408,19 +408,27 @@ def add_user(
     username: str = Form(...),
     password: str = Form(...),
     is_admin: str = Form(""),
+    admin_current_password: str = Form(""),
     db: Session = Depends(get_db),
 ):
     if not request.session.get("is_admin", False):
         return RedirectResponse("/settings?tab=mealie", status_code=303)
     username = username.strip()
-    if len(username) < 3 or len(password) < 8 or len(password) > 128:
-        return RedirectResponse("/settings?tab=users", status_code=303)
+    if len(username) < 3:
+        return _users_redirect("invalid_username")
+    if len(password) < 8 or len(password) > 128:
+        return _users_redirect("invalid_password")
+    grant_admin = is_admin.strip().lower() in {"1", "true", "on"}
+    if grant_admin and not admin_current_password:
+        return _users_redirect("admin_password_required")
+    if grant_admin and not _current_user_password_matches(request, admin_current_password, db):
+        return _users_redirect("admin_password_invalid")
     if db.query(User).filter(User.username == username).first():
-        return RedirectResponse("/settings?tab=users", status_code=303)
-    db.add(User(username=username, password_hash=_hash_password(password), is_admin=bool(is_admin)))
+        return _users_redirect("username_taken")
+    db.add(User(username=username, password_hash=_hash_password(password), is_admin=grant_admin))
     db.commit()
-    logger.info("User created: %s (admin=%s)", username, bool(is_admin))
-    return RedirectResponse("/settings?tab=users", status_code=303)
+    logger.info("User created: %s (admin=%s)", username, grant_admin)
+    return _users_redirect("user_created")
 
 
 @router.post("/settings/users/{user_id}/delete")
@@ -441,18 +449,25 @@ def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
 def change_password(
     user_id: int,
     request: Request,
+    current_password: str = Form(...),
     password: str = Form(...),
+    password_confirm: str = Form(...),
     db: Session = Depends(get_db),
 ):
     current_user_id = request.session.get("user_id")
     is_admin = request.session.get("is_admin", False)
     if not is_admin and user_id != current_user_id:
-        return RedirectResponse("/settings?tab=users", status_code=303)
+        return _users_redirect("access_denied")
     if len(password) < 8 or len(password) > 128:
-        return RedirectResponse("/settings?tab=users", status_code=303)
+        return _users_redirect("invalid_password")
+    if password != password_confirm:
+        return _users_redirect("password_mismatch")
+    if not _current_user_password_matches(request, current_password, db):
+        return _users_redirect("current_password_invalid")
     user = db.get(User, user_id)
-    if user:
-        user.password_hash = _hash_password(password)
-        db.commit()
-        logger.info("Password changed for user: %s", user.username)
-    return RedirectResponse("/settings?tab=users", status_code=303)
+    if not user:
+        return _users_redirect("user_not_found")
+    user.password_hash = _hash_password(password)
+    db.commit()
+    logger.info("Password changed for user: %s", user.username)
+    return _users_redirect("password_changed")
