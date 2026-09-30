@@ -31,11 +31,8 @@ class PermissionGuardV23Middleware(BaseHTTPMiddleware):
         if permission is None:
             return await call_next(request)
 
-        # LoginRequiredMiddleware already validates the session on normal UI
-        # routes. Admins retain the existing all-access behaviour.
-        if request.session.get("is_admin", False):
-            return await call_next(request)
-
+        # Resolve the role from the database on every mutation so a demoted
+        # administrator loses their previous access immediately.
         user_id = request.session.get("user_id")
         db = SessionLocal()
         try:
