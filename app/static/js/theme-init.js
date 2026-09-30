@@ -29,6 +29,7 @@
   var logoColor = cssValue('--b2m-saved-logo-color');
   var radius = cssValue('--b2m-saved-radius');
   var font = cssValue('--b2m-saved-font');
+  var fontSize = cssValue('--b2m-saved-font-size');
   var epaper = cssValue('--b2m-saved-epaper');
   var contrast = cssValue('--b2m-saved-contrast');
 
@@ -38,6 +39,7 @@
   if (logoColor) root.dataset.b2mLogoColor = logoColor;
   if (radius) root.dataset.b2mRadius = radius;
   if (font) root.dataset.b2mFont = font;
+  if (fontSize) root.dataset.b2mFontSize = fontSize;
   if (epaper === 'true' || epaper === 'false') {
     root.dataset.b2mEpaper = epaper;
     root.classList.toggle('b2m-epaper-v9', epaper === 'true');
