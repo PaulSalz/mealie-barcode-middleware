@@ -650,7 +650,7 @@
                     <div class="card-header">
                         <div>
                             <h3 class="card-title">Permission management</h3>
-                            <p class="card-subtitle">Choose which parts of B2M each regular user can change. Administrators always have full access. Database access stays separate from general system configuration.</p>
+                            <p class="card-subtitle">Choose which parts of B2M each account can change. Administrators have full access. Changing administrator status requires your current password.</p>
                         </div>
                     </div>
                     <div class="list-group list-group-flush">
@@ -664,8 +664,8 @@
                                 <div class="small text-secondary">Regular user · granular permissions</div>
                                 {% endif %}
                             </div>
-                            {% if account.is_admin %}
-                            <span class="badge bg-purple text-purple-fg flex-shrink-0">All permissions</span>
+                            {% if account.id == request.session.get('user_id') %}
+                            <span class="badge bg-purple text-purple-fg flex-shrink-0">Current account</span>
                             {% else %}
                             <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
                                 data-bs-toggle="modal" data-bs-target="#user-permissions-modal"
@@ -777,6 +777,17 @@
                             </div>
                             <div class="modal-body">
                                 <div class="alert alert-danger d-none" id="user-permissions-error" role="alert"></div>
+                                <div id="user-permissions-role" class="settings-permission-option mb-3">
+                                    <input type="checkbox" id="user-permissions-admin" class="form-check-input">
+                                    <label class="form-check-label" for="user-permissions-admin">
+                                        <span class="fw-semibold d-block">Administrator access</span>
+                                        <span class="form-hint d-block">Administrators always have every permission.</span>
+                                    </label>
+                                </div>
+                                <div id="user-permissions-current-password-wrap" class="mb-3 d-none">
+                                    <label class="form-label" for="user-permissions-current-password">Confirm your current password to change administrator status</label>
+                                    <input type="password" id="user-permissions-current-password" class="form-control" autocomplete="current-password">
+                                </div>
                                 <div id="user-permissions-fields" class="d-flex flex-column gap-2" aria-live="polite">Loading permissions…</div>
                             </div>
                             <div class="modal-footer">
