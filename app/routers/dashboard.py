@@ -86,6 +86,10 @@ def _recent_scans(db: Session, limit: int = 25) -> list[dict]:
             "target_id": first.get("id") or activity.target_id,
             "target_type": first.get("type") or activity.target_type,
             "target_count": len(targets),
+            "targets": [
+                {"type": target.get("type"), "id": target.get("id"), "name": target.get("name")}
+                for target in targets
+            ],
             "created_at": activity.created_at,
         })
     return rows
@@ -194,6 +198,7 @@ def dashboard_api(db: Session = Depends(get_db)):
             "item_id": row["target_id"] if row["target_type"] == "food" else None,
             "target_type": row["target_type"], "target_id": row["target_id"], "target_name": row["target_name"],
             "target_count": row.get("target_count", 0),
+            "targets": row.get("targets", []),
             "title": row["target_name"] if row["target_type"] in {"recipe", "action"} else (row["title"] or "—"),
             "source": row["source"] or "—", "status": row["status"], "result": row["result"],
             "created_at": _relative_time(row["created_at"]), "created_at_absolute": _localtime(row["created_at"]),
