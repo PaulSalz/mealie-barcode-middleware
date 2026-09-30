@@ -245,7 +245,11 @@
                                     <label class="form-label text-secondary mb-1">
                                         <i class="ti ti-lock icon text-muted me-1"></i>{{ item.description }}
                                     </label>
-                                    <input type="text" class="form-control" value="{{ item.value }}" disabled>
+                                    {% if item.field in ('off_url_base', 'upcdb_url_base') %}
+<div class="form-control h-auto text-break font-monospace user-select-all" data-api-url="{{ item.field }}" role="textbox" aria-readonly="true">{{ item.value }}</div>
+{% else %}
+<input type="text" class="form-control" value="{{ item.value }}" disabled>
+{% endif %}
                                 </div>
                                 {% endfor %}
                             </div>
@@ -261,7 +265,11 @@
                             <label class="form-label text-secondary mb-1">
                                 <i class="ti ti-lock icon text-muted me-1"></i>{{ item.description }}
                             </label>
-                            <input type="text" class="form-control" value="{{ item.value }}" disabled>
+                            {% if item.field in ('off_url_base', 'upcdb_url_base') %}
+<div class="form-control h-auto text-break font-monospace user-select-all" data-api-url="{{ item.field }}" role="textbox" aria-readonly="true">{{ item.value }}</div>
+{% else %}
+<input type="text" class="form-control" value="{{ item.value }}" disabled>
+{% endif %}
                         </div>
                         {% endfor %}
                     </div>
