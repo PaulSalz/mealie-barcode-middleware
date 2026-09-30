@@ -56,6 +56,7 @@ def _build_config_groups():
     for key, meta in EDITABLE_SETTINGS.items():
         group = meta["group"]
         val = settings.get_display_value(key)
+        env_default = str(settings.get_env_default(key))
         if meta["type"] == "choice":
             valid_values = [
                 choice[0] if isinstance(choice, (tuple, list)) else choice
@@ -63,8 +64,9 @@ def _build_config_groups():
             ]
             if val not in valid_values:
                 val = valid_values[0] if valid_values else ""
+            if env_default not in valid_values:
+                env_default = valid_values[0] if valid_values else ""
         overridden = settings.is_overridden(key)
-        env_default = str(settings.get_env_default(key))
         group_items.setdefault(group, []).append({
             "key": meta["label"], "field": key, "value": val,
             "description": meta["description"], "hint": meta.get("hint"),
