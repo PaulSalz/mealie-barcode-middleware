@@ -208,13 +208,6 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   .b2m-dashboard-shopping .card-actions {
     display: none;
   }
-  .b2m-dashboard-overview,
-  .b2m-dashboard-counts,
-  .b2m-dashboard-shopping,
-  .b2m-dashboard-frequent {
-    display: none !important;
-  }
-
   #recent-scans-card .table-responsive {
     overflow: visible;
   }
