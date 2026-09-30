@@ -320,6 +320,8 @@
         $('browser-layout-body').classList.toggle('d-none', !browser);
         $('b21-preview-body').classList.toggle('d-none', browser);
         $('b21-layout-body').classList.toggle('d-none', browser);
+        var b21Header = $('b21-v2-header');
+        if (b21Header) b21Header.classList.toggle('d-none', browser);
         var browserBtn = $('label-print');
         var b21Btn = $('label-niim-print');
         if (browserBtn) browserBtn.classList.toggle('d-none', !browser);
