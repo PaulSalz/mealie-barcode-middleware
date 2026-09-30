@@ -253,6 +253,41 @@ def main() -> None:
         page.locator('[data-layer-visible="label"]').click()
         label_element.wait_for(state="attached", timeout=3_000)
 
+        # Selecting a layer and dragging it immediately must persist its new position.
+        page.locator('[data-layer-select="label"]').click()
+        label_before = page.evaluate("""() => {
+          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          const element = entry && entry.elements.find(row => row.id === 'label');
+          return element && {x: element.x, y: element.y};
+        }""")
+        label_box = label_element.bounding_box()
+        assert label_before is not None and label_box is not None
+        drag_x = label_box["x"] + label_box["width"] / 2
+        drag_y = label_box["y"] + label_box["height"] / 2
+        page.mouse.move(drag_x, drag_y)
+        page.mouse.down()
+        page.mouse.move(drag_x + 48, drag_y + 30, steps=5)
+        page.mouse.up()
+        page.wait_for_timeout(150)
+        label_after_drag = page.evaluate("""() => {
+          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          const element = entry && entry.elements.find(row => row.id === 'label');
+          return element && {x: element.x, y: element.y};
+        }""")
+        assert label_after_drag is not None
+        assert label_after_drag["x"] != label_before["x"] or label_after_drag["y"] != label_before["y"], (label_before, label_after_drag)
+        page.locator('[data-layer-select="code"]').click()
+        page.locator('[data-layer-select="label"]').click()
+        label_after_reselect = page.evaluate("""() => {
+          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          const element = entry && entry.elements.find(row => row.id === 'label');
+          return element && {x: element.x, y: element.y};
+        }""")
+        assert label_after_reselect == label_after_drag, (label_after_drag, label_after_reselect)
+
         # Layer order remains saved when a different layer is selected.
         page.locator('[data-layer-forward="label"]').click()
         saved_order = page.evaluate("""() => {

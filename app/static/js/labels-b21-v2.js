@@ -355,8 +355,15 @@
 
   function startRelativeDrag(event,node,el,p){
     if(event.target.classList.contains('b21-v2-resize-handle'))return; event.preventDefault();event.stopPropagation();selectedElementId=el.id;
-    const startX=event.clientX,startY=event.clientY,origX=Number(el.x||0),origY=Number(el.y||0),rect=$('b21-label-stage').getBoundingClientRect();node.setPointerCapture(event.pointerId);
-    const move=(e)=>{el.x=Math.max(0,Math.min(100,origX+(e.clientX-startX)/rect.width*100));el.y=Math.max(0,Math.min(100,origY+(e.clientY-startY)/rect.height*100));const cal=getCalibration(p.id);applyBox(node,el.x+(cal.xMm/p.width_mm*100),el.y+(cal.yMm/p.height_mm*100),el.w,el.h,el.rotation);};
+    const startX=event.clientX,startY=event.clientY,origX=Number(el.x||0),origY=Number(el.y||0),rect=$('b21-label-stage').getBoundingClientRect(),elementId=String(el.id);node.setPointerCapture(event.pointerId);
+    const move=(e)=>{
+      /* Other editor controls can reload entryStates while a pointer is held.
+         Always update the current persisted element instead of the render-time object. */
+      const state=currentState(),target=state&&state.elements.find((row)=>String(row.id)===elementId);
+      if(!target)return;
+      target.x=Math.max(0,Math.min(100,origX+(e.clientX-startX)/rect.width*100));target.y=Math.max(0,Math.min(100,origY+(e.clientY-startY)/rect.height*100));
+      const cal=getCalibration(p.id);applyBox(node,target.x+(cal.xMm/p.width_mm*100),target.y+(cal.yMm/p.height_mm*100),target.w,target.h,target.rotation);saveEntryStates();
+    };
     const end=(e)=>{try{node.releasePointerCapture(e.pointerId);}catch(ignore){}node.removeEventListener('pointermove',move);node.removeEventListener('pointerup',end);node.removeEventListener('pointercancel',end);saveEntryStates();syncInspector();renderStage();};
     node.addEventListener('pointermove',move);node.addEventListener('pointerup',end);node.addEventListener('pointercancel',end);
   }
