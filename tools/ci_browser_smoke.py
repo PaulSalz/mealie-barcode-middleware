@@ -244,10 +244,15 @@ def main() -> None:
         page.goto(f"{BASE_URL}/settings?tab=homeassistant", wait_until="domcontentloaded", timeout=20_000)
         scan_automation = page.locator("#ha-scan-automation-yaml").input_value()
         assert "persistent_notification.create" in scan_automation
-        assert "Full payload: {{ ((trigger | default({})).json | default({})) | to_json }}" in scan_automation
+        assert "barcode_state" in scan_automation
+        assert "barcode_known" in scan_automation
+        assert "barcode_linked" in scan_automation
+        assert "barcode_pending" in scan_automation
+        assert "processing" in scan_automation
+        assert "Full payload" not in scan_automation
         assert "trigger.json.get(" not in scan_automation
         for field_name in ("barcode", "result_type", "item_source", "brand", "quantity", "via"):
-            assert field_name in scan_automation
+            assert "scan.get('" + field_name + "'" in scan_automation
 
         page.goto(f"{BASE_URL}/actions/new", wait_until="domcontentloaded", timeout=20_000)
         page.get_by_role("heading", name="New action").wait_for(timeout=5_000)
