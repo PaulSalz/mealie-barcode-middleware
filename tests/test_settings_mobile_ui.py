@@ -72,7 +72,7 @@ def test_user_permission_controls_use_existing_access_api_and_server_checks():
     assert "fetch('/api/access/users/'" in script
     assert '"mealie": "configuration"' in routes
     assert '"printer": "printer"' in routes
-    assert '"database": "database"' in routes
+    assert '"admin": "database"' in routes
     assert 'if not _allowed(request, db, "database")' in routes
 
 
