@@ -12,9 +12,7 @@
     var advancedFields = [
         'lookup_enrich_in_background',
         'notification_toast_seconds',
-        'notification_group_window_seconds', 'dashboard_poll_interval_seconds',
-        'health_poll_interval_seconds', 'shopping_print_poll_interval_seconds',
-        'log_level', 'middleware_base_url'
+        'notification_group_window_seconds', 'middleware_base_url'
     ];
     var advancedNodes = [];
 

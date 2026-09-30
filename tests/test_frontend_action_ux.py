@@ -95,6 +95,19 @@ def test_matching_settings_are_not_hidden_behind_advanced_mode():
         assert field not in advanced_fields
 
 
+def test_system_settings_are_not_hidden_behind_advanced_mode():
+    source = read("app/static/js/settings-page.js")
+    advanced_fields = source.split("var advancedFields = [", 1)[1].split("];", 1)[0]
+
+    for field in (
+        "dashboard_poll_interval_seconds",
+        "health_poll_interval_seconds",
+        "shopping_print_poll_interval_seconds",
+        "log_level",
+    ):
+        assert field not in advanced_fields
+
+
 def test_recipe_target_routing_and_lists_are_set_in_current_targets():
     template = read("app/templates/barcode_detail.html")
     recipe_form = template.split('<form id="recipe-map-form"', 1)[1].split("</form>", 1)[0]

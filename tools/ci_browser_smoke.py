@@ -255,6 +255,20 @@ def main() -> None:
         ):
             assert page.locator("#setting_" + field_name).is_visible(), field_name
 
+        page.evaluate("localStorage.removeItem('b2m-settings-advanced-v1')")
+        page.goto(f"{BASE_URL}/settings?tab=system", wait_until="domcontentloaded", timeout=20_000)
+        advanced_toggle = page.locator("#settings-show-advanced")
+        assert advanced_toggle.count() == 1
+        assert not advanced_toggle.evaluate("(element) => element.checked")
+        for field_name in (
+            "timezone",
+            "dashboard_poll_interval_seconds",
+            "health_poll_interval_seconds",
+            "shopping_print_poll_interval_seconds",
+            "log_level",
+        ):
+            assert page.locator("#setting_" + field_name).is_visible(), field_name
+
         page.goto(f"{BASE_URL}/settings?tab=homeassistant", wait_until="domcontentloaded", timeout=20_000)
         scan_automation = page.locator("#ha-scan-automation-yaml").input_value()
         assert "persistent_notification.create" in scan_automation
