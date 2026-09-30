@@ -554,4 +554,32 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     border-top-right-radius: var(--tblr-border-radius);
     border-bottom-right-radius: var(--tblr-border-radius);
   }
+
+  .actions-page-header > .row { align-items: flex-start !important; }
+  .actions-page-header > .row > .col {
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 0;
+  }
+  .actions-page-header > .row > .col-auto {
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: 100%;
+    margin-top: .35rem;
+  }
+  .actions-page-header .col > .text-secondary {
+    max-width: 100%;
+    font-size: .82rem;
+    line-height: 1.35;
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
+  }
+  .actions-table tbody > tr > td:first-child {
+    min-width: 13rem;
+    max-width: 18rem;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
 }
