@@ -46,7 +46,7 @@
 
   const PRESET_SETTINGS = {
     light: [
-      {key: 'entity_id', label: 'Light entity ID', placeholder: 'light.living_room', hint: 'Copy the entity ID from Home Assistant and paste it here.'},
+      {key: 'entity_id', label: 'Light entity ID', placeholder: 'light.kitchen', hint: 'In Home Assistant, copy the light entity ID (for example light.kitchen) and paste it here.'},
       {key: 'command', label: 'When scanned', type: 'select', options: [['toggle', 'Toggle'], ['turn_on', 'Turn on'], ['turn_off', 'Turn off']]},
       {key: 'brightness_pct', label: 'Brightness (%)', type: 'number', placeholder: '100', showWhen: (payload) => payload.command === 'turn_on'}
     ],
@@ -58,7 +58,7 @@
     ],
     timer: [
       {key: 'timer', label: 'Timer entity ID', placeholder: 'timer.kitchen', hint: 'Paste the timer entity ID from Home Assistant.'},
-      {key: 'duration', label: 'Timer duration (HH:MM:SS)', placeholder: '00:10:00'}
+      {key: 'duration', label: 'Timer duration (HH:MM:SS)', placeholder: '00:10:00', hint: 'Example: 00:10:00 for ten minutes.'}
     ],
     automation: [
       {key: 'entity_id', label: 'Automation entity ID', placeholder: 'automation.kitchen_mode', hint: 'Paste the automation entity ID from Home Assistant.'}
@@ -754,7 +754,7 @@
     if (!requestCard) return;
     const card = document.createElement('div');
     card.className = 'card mb-3';
-    card.innerHTML = '<div class="card-header"><div><h3 class="card-title"><i class="ti ti-home me-1"></i>Home Assistant automation</h3><p class="card-subtitle">Copy the finished automation and add it in Home Assistant.</p></div><div class="card-actions"><button class="btn btn-primary" type="button" id="action-ha-copy" disabled><i class="ti ti-copy icon"></i>Copy automation</button></div></div><div class="card-body"><p id="action-ha-status" class="mb-0" role="status">Choose an example to prepare an automation.</p><details id="action-ha-yaml-details" class="mt-3"><summary>Show generated YAML</summary><textarea id="action-ha-yaml" class="form-control font-monospace mt-2" rows="16" readonly></textarea></details></div>';
+    card.innerHTML = '<div class="card-header"><div><h3 class="card-title"><i class="ti ti-home me-1"></i>Home Assistant automation</h3><p class="card-subtitle">Copy the finished automation and add it in Home Assistant. The target uses the fixed entity ID above; Home Assistant cannot resolve trigger data inside a service target.</p></div><div class="card-actions"><button class="btn btn-primary" type="button" id="action-ha-copy" disabled><i class="ti ti-copy icon"></i>Copy automation</button></div></div><div class="card-body"><p id="action-ha-status" class="mb-0" role="status">Choose an example to prepare an automation.</p><details id="action-ha-yaml-details" class="mt-3"><summary>Show generated YAML</summary><textarea id="action-ha-yaml" class="form-control font-monospace mt-2" rows="16" readonly></textarea></details></div>';
     requestCard.insertAdjacentElement('afterend', card);
     updateHaYaml();
     ['input', 'change'].forEach((eventName) => {
