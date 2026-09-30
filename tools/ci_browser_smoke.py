@@ -182,12 +182,16 @@ def main() -> None:
             "Printer disconnect control should remain available in browser output mode.",
             timeout_ms=5_000,
         )
+        b21_toolbar = page.locator("#b21-v2-header")
+        b21_toolbar.wait_for(state="attached", timeout=5_000)
+        assert not b21_toolbar.is_visible(), "B21-specific print controls should be hidden in browser output mode."
         b21_output = page.locator('input[name="label-output"][value="b21"]')
         b21_output.wait_for(state="attached", timeout=5_000)
         b21_output.check(force=True)
         page.locator("#b21-layout-body").wait_for(state="visible", timeout=5_000)
         assert printer_card.is_visible()
         assert "Disconnect" in (disconnect_button.text_content() or "")
+        b21_toolbar.wait_for(state="visible", timeout=5_000)
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
