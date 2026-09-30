@@ -315,7 +315,7 @@
                     {% endif %}
 
                     {# ──────────── Pause section (scanning tab, admin-only) ──────────── #}
-                    {% if current_tab == 'scanning' and request.session.get('is_admin') %}
+                    {% if current_tab == 'scanning' and is_admin %}
                     <div class="card mt-3">
                         <div class="card-header card-header-light">
                             <div>
@@ -703,7 +703,7 @@
                                 </td>
                                 <td class="text-secondary" data-label="Created">{{ user.created_at | localtime }}</td>
                                 <td data-label="Password">
-                                    {% if request.session.get('is_admin') or user.id == request.session.get('user_id') %}
+                                    {% if is_admin or user.id == request.session.get('user_id') %}
                                     <button type="button" class="btn btn-sm btn-outline-primary text-nowrap"
                                         data-bs-toggle="modal" data-bs-target="#change-user-password-modal"
                                         data-password-action="/settings/users/{{ user.id }}/password"
@@ -713,7 +713,7 @@
                                     {% endif %}
                                 </td>
                                 <td data-label="Actions">
-                                    {% if user.id != request.session.get('user_id') and (request.session.get('is_admin') or not user.is_admin) %}
+                                    {% if user.id != request.session.get('user_id') and (is_admin or not user.is_admin) %}
                                     <form action="/settings/users/{{ user.id }}/delete" method="post"
                                         data-confirm="Delete user &quot;{{ user.username }}&quot;?"
                                         data-confirm-detail="This user will no longer be able to log in.">
@@ -777,6 +777,7 @@
                             </div>
                             <div class="modal-body">
                                 <div class="alert alert-danger d-none" id="user-permissions-error" role="alert"></div>
+                                <div class="alert alert-success d-none" id="user-permissions-status" role="status"></div>
                                 <div id="user-permissions-role" class="settings-permission-option mb-3">
                                     <input type="checkbox" id="user-permissions-admin" class="form-check-input">
                                     <label class="form-check-label" for="user-permissions-admin">
@@ -788,31 +789,6 @@
                                     <label class="form-label" for="user-permissions-current-password">Confirm your current password to change administrator status</label>
                                     <input type="password" id="user-permissions-current-password" class="form-control" autocomplete="current-password">
                                 </div>
-                                <div id="user-permissions-fields" class="d-flex flex-column gap-2" aria-live="polite">Loading permissions…</div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <button type="submit" class="btn btn-primary" id="user-permissions-save">Save permissions</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <div class="modal modal-blur fade" id="user-permissions-modal" tabindex="-1" aria-labelledby="user-permissions-title" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered modal-lg">
-                    <div class="modal-content">
-                        <form id="user-permissions-form">
-                            <div class="modal-header">
-                                <div>
-                                    <h2 class="modal-title fs-3" id="user-permissions-title">User permissions</h2>
-                                    <div class="text-secondary small" id="user-permissions-account"></div>
-                                </div>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="alert alert-danger d-none" id="user-permissions-error" role="alert"></div>
-                                <div class="alert alert-success d-none" id="user-permissions-status" role="status"></div>
                                 <div id="user-permissions-fields" class="d-flex flex-column gap-2" aria-live="polite">Loading permissions…</div>
                             </div>
                             <div class="modal-footer">
