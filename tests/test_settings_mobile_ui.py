@@ -44,5 +44,5 @@ def test_settings_layout_has_mobile_navigation_and_user_cards():
     assert '.settings-sidebar .list-group {' in css
     assert 'overflow-x: auto;' in css
     assert '.settings-users-table > tbody > tr:not(:has(td[colspan]))' in css
-    assert 'settings-printer-connection' in css
+    assert '#b2m-printer-connection-card .card-body' in css
     assert 'app.css?v={{ v }}&rev=11' in base
