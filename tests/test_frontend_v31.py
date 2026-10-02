@@ -77,4 +77,8 @@ def test_mobile_barcode_titles_use_the_full_card_width():
     assert 'class="barcode-title-value"' in template
     assert '#barcodes-table td[data-field="title"] { align-items: stretch; }' in css
     assert 'width: 100%;' in css[css.index('#barcodes-table .barcode-title-value'):]
-    assert 'overflow-wrap: break-word;' in css[css.index('#barcodes-table .barcode-title-value'):]
+    title_rules = css[css.index('#barcodes-table .barcode-title-value'):]
+    assert 'width: 100%;' in title_rules
+    assert 'white-space: nowrap;' in title_rules
+    assert 'text-overflow: ellipsis;' in title_rules
+    assert 'overflow-wrap: normal;' in title_rules
