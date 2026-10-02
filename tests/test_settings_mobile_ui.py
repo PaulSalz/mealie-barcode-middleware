@@ -47,7 +47,7 @@ def test_settings_layout_has_mobile_navigation_and_user_cards():
     assert 'overflow-x: auto;' in css
     assert '.settings-users-table > tbody > tr:not(:has(td[colspan]))' in css
     assert '#b2m-printer-connection-card .card-body' in css
-    assert 'app.css?v={{ v }}&rev=21' in base
+    assert 'app.css?v={{ v }}&rev=22' in base
 
 
 def test_settings_dropdown_and_printer_panel_are_scoped_to_printer_tab():
