@@ -275,7 +275,8 @@ def test_background_uses_mobile_friendly_palette_swatches_and_live_radio_state()
     assert "background-color: var(--b2m-base-swatch-light)" in read("app/static/css/app.css")
     assert "background-color: var(--b2m-base-swatch-dark)" in read("app/static/css/app.css")
     assert "opacity: 1 !important" in read("app/static/css/app.css")
-    assert "border: 2px solid rgb(0 0 0 / 38%) !important" in read("app/static/css/app.css")
+    assert "border: 0 !important" in read("app/static/css/app.css")
+    assert "box-shadow: none !important" in read("app/static/css/app.css")
     assert "swatch.style.setProperty('background-color', color, 'important')" in controller
     assert "base: checkedValue('theme_base', 'gray')" in controller
     assert "background: var(--b2m-v35-page-bg) !important;" in frontend
