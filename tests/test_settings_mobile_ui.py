@@ -96,10 +96,12 @@ def test_admin_role_changes_are_password_confirmed_and_cannot_self_lock_out():
 def test_password_feedback_stays_inside_modal_without_page_reload():
     template = read("app/templates/settings.html")
     script = read("app/static/js/settings-page.js")
+    routes = read("app/routers/settings.py")
 
     assert 'id="change-user-password-feedback"' in template
     assert 'id="change-user-password-standard-feedback"' in template
     assert 'id="change-user-password-match-feedback"' in template
     assert "application/json" in script
-    assert "The current password is incorrect. No changes were made." in script
-    assert "Password changed successfully." in script
+    assert "The current password is incorrect. No changes were made." in routes
+    assert "Password changed successfully." in routes
+    assert "setFeedback(error.message" in script
