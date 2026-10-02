@@ -8,9 +8,11 @@
         <div class="col"><h2 class="page-title mb-0">Settings</h2></div>
         <div class="col-12 d-md-none">
             <form action="/settings" method="get" class="settings-tab-picker">
-                <label class="visually-hidden" for="settings-tab-select">Choose settings section</label>
-                <div class="input-group">
-                    <select class="form-select" id="settings-tab-select" name="tab">
+                <label class="form-label mb-1 fw-semibold" for="settings-tab-select">
+                    <i class="ti ti-settings icon me-1"></i>Settings page
+                </label>
+                <div class="settings-tab-control">
+                    <select class="form-select" id="settings-tab-select" name="tab" aria-label="Choose settings page">
                         {% for group_label, group_tab_ids in sidebar_groups.items() %}
                         <optgroup label="{{ group_label }}">
                             {% for tab_id, tab_label, tab_icon in tabs %}
@@ -21,6 +23,7 @@
                         </optgroup>
                         {% endfor %}
                     </select>
+                    <i class="ti ti-chevron-down settings-tab-chevron" aria-hidden="true"></i>
                     <button type="submit" class="btn btn-outline-secondary visually-hidden-focusable">Open</button>
                 </div>
             </form>

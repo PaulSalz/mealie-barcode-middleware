@@ -715,3 +715,68 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   #user-permissions-modal .modal-footer .btn { flex: 1 1 auto; }
   .settings-content .list-group-item { min-width: 0; }
 }
+
+
+/* Make the responsive settings selector visibly read as a dropdown and keep
+   the settings shell clipped to the user's selected appearance radius. */
+.settings-shell {
+  border-radius: var(--tblr-border-radius) !important;
+}
+
+@media (min-width: 768px) {
+  .settings-shell > .row > .settings-sidebar {
+    border-top-left-radius: var(--tblr-border-radius);
+    border-bottom-left-radius: var(--tblr-border-radius);
+  }
+
+  .settings-shell > .row > .settings-content {
+    border-top-right-radius: var(--tblr-border-radius);
+    border-bottom-right-radius: var(--tblr-border-radius);
+  }
+}
+
+@media (max-width: 767.98px) {
+  .settings-shell > .row > .settings-content {
+    border-radius: var(--tblr-border-radius);
+  }
+}
+
+.settings-tab-control {
+  position: relative;
+}
+
+.settings-tab-control .form-select {
+  min-height: 2.75rem;
+  padding-right: 2.8rem;
+  border-radius: var(--tblr-border-radius);
+  background-image: none;
+  appearance: none;
+  -webkit-appearance: none;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.settings-tab-control .form-select:focus {
+  border-color: var(--tblr-primary);
+  outline: 2px solid var(--tblr-primary);
+  outline-offset: 2px;
+}
+
+.settings-tab-chevron {
+  position: absolute;
+  top: 50%;
+  right: .8rem;
+  z-index: 2;
+  color: var(--tblr-secondary);
+  font-size: 1.15rem;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+@media (max-width: 767.98px) {
+  .settings-tab-control .form-select {
+    min-height: 2.9rem;
+    font-size: .95rem;
+  }
+}
