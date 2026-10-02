@@ -39,6 +39,8 @@ def test_settings_layout_has_mobile_navigation_and_user_cards():
 
     assert 'settings-shell' in template
     assert 'settings-tab-select' in template
+    assert 'class="col-12 d-md-none"' in template
+    assert 'class="d-none d-md-block col-md-3 border-end settings-sidebar"' in template
     assert 'settings-content' in template
     assert 'data-label="Username"' in template and 'data-label="Role"' in template
     assert '.settings-tab-picker .form-select' in css
@@ -66,8 +68,10 @@ def test_user_permission_controls_use_existing_access_api_and_server_checks():
     script = read("app/static/js/settings-page.js")
     routes = read("app/routers/settings.py")
 
-    assert 'id="user-permissions-panel"' in template
+    assert 'id="user-permissions-panel"' not in template
     assert template.count('id="user-permissions-modal"') == 1
+    table = template[template.index('<table class="table table-vcenter settings-users-table">'):template.index('</table>', template.index('<table class="table table-vcenter settings-users-table">'))]
+    assert 'data-bs-target="#user-permissions-modal"' in table
     assert "fetch('/api/access/users'" in script
     assert "fetch('/api/access/users/'" in script
     assert '"mealie": "configuration"' in routes
@@ -87,3 +91,17 @@ def test_admin_role_changes_are_password_confirmed_and_cannot_self_lock_out():
     assert "current password confirmation failed" in access
     assert "you cannot remove your own administrator access" in access
     assert '"configured_permissions": configured_permissions_for_user(db, user)' in access
+
+
+def test_password_feedback_stays_inside_modal_without_page_reload():
+    template = read("app/templates/settings.html")
+    script = read("app/static/js/settings-page.js")
+    routes = read("app/routers/settings.py")
+
+    assert 'id="change-user-password-feedback"' in template
+    assert 'id="change-user-password-standard-feedback"' in template
+    assert 'id="change-user-password-match-feedback"' in template
+    assert "application/json" in script
+    assert "The current password is incorrect. No changes were made." in routes
+    assert "Password changed successfully." in routes
+    assert "setFeedback(error.message" in script

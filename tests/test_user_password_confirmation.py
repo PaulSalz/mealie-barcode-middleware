@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -7,12 +8,12 @@ from app.models import User
 from app.routers.settings import _hash_password, _verify_password, add_user, change_password
 
 
-def make_request(user_id=1, is_admin=True):
+def make_request(user_id=1, is_admin=True, ajax=False):
     return Request({
         "type": "http",
         "method": "POST",
         "path": "/settings/users",
-        "headers": [],
+        "headers": [(b"accept", b"application/json")] if ajax else [],
         "session": {"user_id": user_id, "is_admin": is_admin},
     })
 
@@ -105,3 +106,38 @@ def test_non_admin_creation_does_not_require_confirmation_or_grant_admin():
     created_user = db.add.call_args.args[0]
     assert created_user.is_admin is False
     db.commit.assert_called_once()
+
+
+def test_ajax_password_change_returns_inline_feedback_for_each_result():
+    user = make_user()
+    db = MagicMock()
+    db.get.return_value = user
+
+    wrong_current = change_password(
+        1, make_request(ajax=True), current_password="wrong-password",
+        password="new-password", password_confirm="new-password", db=db,
+    )
+    assert wrong_current.status_code == 400
+    assert json.loads(wrong_current.body)["status"] == "current_password_invalid"
+
+    invalid_standard = change_password(
+        1, make_request(ajax=True), current_password="current-password",
+        password="short", password_confirm="short", db=db,
+    )
+    assert json.loads(invalid_standard.body)["status"] == "invalid_password"
+
+    mismatch = change_password(
+        1, make_request(ajax=True), current_password="current-password",
+        password="new-password", password_confirm="different-password", db=db,
+    )
+    assert json.loads(mismatch.body)["status"] == "password_mismatch"
+
+    success = change_password(
+        1, make_request(ajax=True), current_password="current-password",
+        password="new-password", password_confirm="new-password", db=db,
+    )
+    payload = json.loads(success.body)
+    assert success.status_code == 200
+    assert payload["ok"] is True
+    assert payload["status"] == "password_changed"
+    assert _verify_password("new-password", user.password_hash)

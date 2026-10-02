@@ -469,6 +469,25 @@ def _current_user_password_matches(request: Request, password: str, db: Session)
 def _users_redirect(status: str) -> RedirectResponse:
     return RedirectResponse(f"/settings?tab=users&user_status={status}", status_code=303)
 
+_PASSWORD_FEEDBACK = {
+    "access_denied": "You are not allowed to change this account's password.",
+    "invalid_password": "The new password must be between 8 and 128 characters.",
+    "password_mismatch": "The two new password entries do not match.",
+    "current_password_invalid": "The current password is incorrect. No changes were made.",
+    "user_not_found": "The requested user could not be found.",
+    "password_changed": "Password changed successfully.",
+}
+
+
+def _password_change_response(request: Request, status: str):
+    if "application/json" in request.headers.get("accept", ""):
+        ok = status == "password_changed"
+        return JSONResponse(
+            {"ok": ok, "status": status, "message": _PASSWORD_FEEDBACK[status]},
+            status_code=200 if ok else (403 if status == "access_denied" else 400),
+        )
+    return _users_redirect(status)
+
 
 @router.post("/settings/users/add")
 def add_user(
@@ -532,17 +551,17 @@ def change_password(
     actor = db.get(User, current_user_id) if current_user_id is not None else None
     is_admin = bool(actor and actor.is_admin)
     if not is_admin and user_id != current_user_id:
-        return _users_redirect("access_denied")
+        return _password_change_response(request, "access_denied")
     if len(password) < 8 or len(password) > 128:
-        return _users_redirect("invalid_password")
+        return _password_change_response(request, "invalid_password")
     if password != password_confirm:
-        return _users_redirect("password_mismatch")
+        return _password_change_response(request, "password_mismatch")
     if not _current_user_password_matches(request, current_password, db):
-        return _users_redirect("current_password_invalid")
+        return _password_change_response(request, "current_password_invalid")
     user = db.get(User, user_id)
     if not user:
-        return _users_redirect("user_not_found")
+        return _password_change_response(request, "user_not_found")
     user.password_hash = _hash_password(password)
     db.commit()
     logger.info("Password changed for user: %s", user.username)
-    return _users_redirect("password_changed")
+    return _password_change_response(request, "password_changed")
