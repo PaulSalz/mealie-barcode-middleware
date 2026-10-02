@@ -758,7 +758,8 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
 
 .settings-tab-control .form-select:focus {
   border-color: var(--tblr-primary);
-  box-shadow: 0 0 0 .2rem rgb(var(--tblr-primary-rgb) / 15%);
+  outline: 2px solid var(--tblr-primary);
+  outline-offset: 2px;
 }
 
 .settings-tab-chevron {
