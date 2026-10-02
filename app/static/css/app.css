@@ -721,7 +721,24 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
    the settings shell clipped to the user's selected appearance radius. */
 .settings-shell {
   border-radius: var(--tblr-border-radius) !important;
-  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .settings-shell > .row > .settings-sidebar {
+    border-top-left-radius: var(--tblr-border-radius);
+    border-bottom-left-radius: var(--tblr-border-radius);
+  }
+
+  .settings-shell > .row > .settings-content {
+    border-top-right-radius: var(--tblr-border-radius);
+    border-bottom-right-radius: var(--tblr-border-radius);
+  }
+}
+
+@media (max-width: 767.98px) {
+  .settings-shell > .row > .settings-content {
+    border-radius: var(--tblr-border-radius);
+  }
 }
 
 .settings-tab-control {
