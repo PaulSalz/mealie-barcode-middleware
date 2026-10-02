@@ -818,3 +818,13 @@ body:has(select:open)::before {
 select:open {
   border-radius: var(--tblr-border-radius) !important;
 }
+
+
+/* Barcode rows become full-card links on mobile. Avoid the generic cell hover tint
+   that can remain visible after a touch on browsers with sticky hover states. */
+#barcodes-table tbody tr[data-mobile-href] { cursor: pointer; }
+@media (max-width: 767.98px) {
+  #barcodes-table.table.table-vcenter tbody tr[data-mobile-href]:hover > td { background: transparent; }
+  #barcodes-table.table.table-vcenter tbody tr[data-mobile-href] td:hover { box-shadow: none; }
+  #barcodes-table tbody tr[data-mobile-href]:focus-visible { outline: 2px solid var(--tblr-primary); outline-offset: 2px; }
+}
