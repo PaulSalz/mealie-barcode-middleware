@@ -384,7 +384,51 @@
     var modal = document.getElementById('change-user-password-modal');
     var form = document.getElementById('change-user-password-form');
     var account = document.getElementById('change-user-password-account');
-    if (!modal || !form) return;
+    var current = document.getElementById('change-user-current-password');
+    var password = document.getElementById('change-user-new-password');
+    var confirmation = document.getElementById('change-user-password-confirm');
+    var feedback = document.getElementById('change-user-password-feedback');
+    var standardFeedback = document.getElementById('change-user-password-standard-feedback');
+    var matchFeedback = document.getElementById('change-user-password-match-feedback');
+    var submitButton = form && form.querySelector('[type="submit"]');
+    if (!modal || !form || !current || !password || !confirmation || !feedback || !submitButton) return;
+
+    function setFeedback(message, success) {
+        feedback.textContent = message || '';
+        feedback.classList.toggle('d-none', !message);
+        feedback.classList.toggle('alert-success', Boolean(message && success));
+        feedback.classList.toggle('alert-danger', Boolean(message && !success));
+        feedback.setAttribute('role', success ? 'status' : 'alert');
+    }
+
+    function validate(showErrors) {
+        var length = password.value.length;
+        var standardOk = length >= 8 && length <= 128;
+        var confirmationEntered = confirmation.value.length > 0;
+        var passwordsMatch = confirmationEntered && password.value === confirmation.value;
+
+        standardFeedback.textContent = standardOk
+            ? 'The new password meets the 8–128 character requirement.'
+            : 'The new password must be between 8 and 128 characters.';
+        standardFeedback.classList.toggle('text-success', standardOk);
+        standardFeedback.classList.toggle('text-danger', showErrors && !standardOk);
+
+        matchFeedback.textContent = passwordsMatch
+            ? 'The new password entries match.'
+            : (confirmationEntered ? 'The two new password entries do not match.' : 'Enter the new password again.');
+        matchFeedback.classList.toggle('text-success', passwordsMatch);
+        matchFeedback.classList.toggle('text-danger', showErrors && confirmationEntered && !passwordsMatch);
+
+        submitButton.disabled = !current.value || !standardOk || !passwordsMatch;
+        return {standardOk:standardOk, passwordsMatch:passwordsMatch};
+    }
+
+    [current, password, confirmation].forEach(function(input) {
+        input.addEventListener('input', function() {
+            setFeedback('', false);
+            validate(false);
+        });
+    });
 
     modal.addEventListener('show.bs.modal', function(event) {
         var trigger = event.relatedTarget;
@@ -392,12 +436,64 @@
         form.action = trigger.getAttribute('data-password-action') || '';
         account.textContent = trigger.getAttribute('data-password-username') || '';
         form.reset();
+        setFeedback('', false);
+        validate(false);
+    });
+
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        var state = validate(true);
+        if (!current.value) {
+            setFeedback('Enter your current password.', false);
+            current.focus();
+            return;
+        }
+        if (!state.standardOk) {
+            setFeedback('The new password must be between 8 and 128 characters.', false);
+            password.focus();
+            return;
+        }
+        if (!state.passwordsMatch) {
+            setFeedback('The two new password entries do not match.', false);
+            confirmation.focus();
+            return;
+        }
+        if (!form.action) {
+            setFeedback('The password form could not be submitted. Close it and try again.', false);
+            return;
+        }
+
+        submitButton.disabled = true;
+        fetch(form.action, {
+            method:'POST',
+            body:new FormData(form),
+            headers:{'Accept':'application/json'},
+            credentials:'same-origin'
+        }).then(function(response) {
+            return response.json().catch(function() { return {}; }).then(function(data) {
+                if (!response.ok || !data.ok) throw new Error(data.message || 'Password could not be changed.');
+                return data;
+            });
+        }).then(function(data) {
+            setFeedback(data.message || 'Password changed successfully.', true);
+            form.reset();
+            validate(false);
+        }).catch(function(error) {
+            setFeedback(error.message || 'Password could not be changed.', false);
+            submitButton.disabled = false;
+        });
     });
 
     modal.addEventListener('hidden.bs.modal', function() {
         form.reset();
         form.removeAttribute('action');
         account.textContent = '';
+        setFeedback('', false);
+        standardFeedback.textContent = 'Enter 8–128 characters.';
+        standardFeedback.classList.remove('text-success', 'text-danger');
+        matchFeedback.textContent = 'Enter the new password again.';
+        matchFeedback.classList.remove('text-success', 'text-danger');
+        submitButton.disabled = false;
     });
 })();
 
