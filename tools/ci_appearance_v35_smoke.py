@@ -123,6 +123,12 @@ def main() -> None:
         assert html.get_attribute("data-b2m-base") == "stone"
         after_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
         assert before_bg != after_bg, (before_bg, after_bg, theme_debug())
+        swatch_state = page.evaluate("""() => ({
+            mode: document.documentElement.getAttribute('data-bs-theme'),
+            color: getComputedStyle(document.querySelector('.b2m-base-swatch')).backgroundColor
+        })""")
+        expected_swatch = "rgb(28, 16, 7)" if swatch_state["mode"] == "dark" else "rgb(243, 233, 220)"
+        assert swatch_state["color"] == expected_swatch, (swatch_state, theme_debug())
 
         # Radius: direct CSS state, no delayed preview or reload.
         page.locator('input[name="theme_radius"][value="2"]').check(force=True)
@@ -159,6 +165,7 @@ def main() -> None:
         light_mode.check(force=True)
         light_mode.dispatch_event("change")
         assert html.get_attribute("data-bs-theme") == "light"
+        assert page.locator(".b2m-base-swatch").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(243, 233, 220)"
         epaper = page.locator('input[name="theme_epaper"]')
         epaper.check()
         assert html.get_attribute("data-b2m-epaper") == "true"
@@ -183,6 +190,7 @@ def main() -> None:
         dark_mode.check(force=True)
         dark_mode.dispatch_event("change")
         assert html.get_attribute("data-bs-theme") == "dark"
+        assert page.locator(".b2m-base-swatch").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(28, 16, 7)"
         dark_page = page.evaluate("getComputedStyle(document.body).backgroundColor")
         assert dark_page == "rgb(0, 0, 0)", (dark_page, theme_debug())
         assert page.evaluate("getComputedStyle(document.body).color") == "rgb(255, 255, 255)"
