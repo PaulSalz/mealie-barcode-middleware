@@ -265,6 +265,12 @@ def test_background_uses_mobile_friendly_palette_swatches_and_live_radio_state()
 
     assert 'name="theme_base" type="radio"' in profile
     assert 'name="theme_base" class="form-select"' not in profile
+    assert "'dark':'#080e18'" in profile and "'dark':'#041228'" in profile
+    assert "'dark':'#150d20'" in profile and "'dark':'#0e0e0e'" in profile and "'dark':'#1c1007'" in profile
+    assert "--b2m-base-swatch-light: {{ swatch.light }}" in profile
+    assert "--b2m-base-swatch-dark: {{ swatch.dark }}" in profile
+    assert "background-color: var(--b2m-base-swatch-light)" in read("app/static/css/app.css")
+    assert "background-color: var(--b2m-base-swatch-dark)" in read("app/static/css/app.css")
     assert "base: checkedValue('theme_base', 'gray')" in controller
     assert "background: var(--b2m-v35-page-bg) !important;" in frontend
     assert "min-height: 100dvh;" in frontend
