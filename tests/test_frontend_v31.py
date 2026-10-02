@@ -56,3 +56,15 @@ def test_browser_smoke_exercises_shopping_print_and_bounds_list_requests():
     assert 'shopping_hits["legacy_bootstrap"] == 0' in source
     assert 'shopping_hits["lists"] <= 3' in source
     assert "Preview uses" in source
+
+
+def test_mobile_barcode_cards_open_from_any_non_control_area():
+    template = read("app/templates/barcodes.html")
+    script = read("app/static/js/barcodes-page.js")
+    css = read("app/static/css/app.css")
+
+    assert 'data-mobile-href="/barcodes/{{ item.barcode.barcode|urlencode }}"' in template
+    assert "event.target.closest('tr[data-mobile-href]')" in script
+    assert "isInteractiveTarget(event.target)" in script
+    assert "window.location.assign(row.dataset.mobileHref)" in script
+    assert "#barcodes-table.table.table-vcenter tbody tr[data-mobile-href] td:hover { box-shadow: none; }" in css
