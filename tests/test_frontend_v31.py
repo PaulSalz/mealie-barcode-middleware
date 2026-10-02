@@ -68,3 +68,13 @@ def test_mobile_barcode_cards_open_from_any_non_control_area():
     assert "isInteractiveTarget(event.target)" in script
     assert "window.location.assign(row.dataset.mobileHref)" in script
     assert "#barcodes-table.table.table-vcenter tbody tr[data-mobile-href] td:hover { box-shadow: none; }" in css
+
+
+def test_mobile_barcode_titles_use_the_full_card_width():
+    template = read("app/templates/barcodes.html")
+    css = read("app/static/css/app.css")
+
+    assert 'class="barcode-title-value"' in template
+    assert '#barcodes-table td[data-field="title"] { align-items: stretch; }' in css
+    assert 'width: 100%;' in css[css.index('#barcodes-table .barcode-title-value'):]
+    assert 'overflow-wrap: break-word;' in css[css.index('#barcodes-table .barcode-title-value'):]

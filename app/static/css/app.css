@@ -828,3 +828,18 @@ select:open {
   #barcodes-table.table.table-vcenter tbody tr[data-mobile-href] td:hover { box-shadow: none; }
   #barcodes-table tbody tr[data-mobile-href]:focus-visible { outline: 2px solid var(--tblr-primary); outline-offset: 2px; }
 }
+
+
+/* Keep mobile barcode titles at the full card width; a flex child around a
+   raw text node can otherwise shrink to its longest word. */
+@media (max-width: 767.98px) {
+  #barcodes-table td[data-field="title"] { align-items: stretch; }
+  #barcodes-table .barcode-title-value {
+    display: block;
+    align-self: stretch;
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+}
