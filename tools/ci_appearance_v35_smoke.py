@@ -190,7 +190,7 @@ def main() -> None:
         dark_mode.check(force=True)
         dark_mode.dispatch_event("change")
         assert html.get_attribute("data-bs-theme") == "dark"
-        assert page.locator(".b2m-base-swatch").evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(28, 16, 7)"
+        assert page.locator('input[name="theme_base"][value="stone"] + .b2m-base-swatch').evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(28, 16, 7)"
         dark_page = page.evaluate("getComputedStyle(document.body).backgroundColor")
         assert dark_page == "rgb(0, 0, 0)", (dark_page, theme_debug())
         assert page.evaluate("getComputedStyle(document.body).color") == "rgb(255, 255, 255)"
