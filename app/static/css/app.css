@@ -780,3 +780,41 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     font-size: .95rem;
   }
 }
+
+
+/* Dim the page while a Bootstrap dropdown is open. The menu stays above the
+   backdrop and follows the signed-in user's Appearance radius. */
+body:has(.dropdown-menu.show)::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgb(0 0 0 / 22%);
+  pointer-events: none;
+}
+
+.dropdown-menu.show {
+  z-index: 1040;
+  border-radius: var(--tblr-border-radius) !important;
+  box-shadow: 0 .75rem 1.5rem rgb(0 0 0 / 22%);
+}
+
+.dropdown-menu.show > .card {
+  border-radius: inherit;
+}
+
+
+/* Native select popups are painted by the browser/OS, but their open state can
+   still dim the page and keep the control itself on the Appearance radius. */
+body:has(select:open)::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgb(0 0 0 / 22%);
+  pointer-events: none;
+}
+
+select:open {
+  border-radius: var(--tblr-border-radius) !important;
+}
