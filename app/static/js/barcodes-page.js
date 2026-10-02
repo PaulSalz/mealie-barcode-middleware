@@ -1,3 +1,44 @@
+(function makeBarcodeCardsTappable() {
+    'use strict';
+    var tbody = document.getElementById('barcodes-tbody');
+    if (!tbody) return;
+
+    var isMobile = window.matchMedia('(max-width: 767.98px)');
+    function isInteractiveTarget(target) {
+        return !!target.closest('a, button, input, select, textarea, [role="button"]');
+    }
+
+    tbody.addEventListener('click', function(event) {
+        if (!isMobile.matches || isInteractiveTarget(event.target)) return;
+        var row = event.target.closest('tr[data-mobile-href]');
+        if (!row || !tbody.contains(row)) return;
+        window.location.assign(row.dataset.mobileHref);
+    });
+
+    tbody.addEventListener('keydown', function(event) {
+        if (!isMobile.matches || (event.key !== 'Enter' && event.key !== ' ')) return;
+        var row = event.target.closest('tr[data-mobile-href]');
+        if (!row || event.target !== row) return;
+        event.preventDefault();
+        window.location.assign(row.dataset.mobileHref);
+    });
+
+    function syncMobileRows() {
+        tbody.querySelectorAll('tr[data-mobile-href]').forEach(function(row) {
+            if (isMobile.matches) {
+                row.tabIndex = 0;
+                row.setAttribute('role', 'link');
+            } else {
+                row.removeAttribute('tabindex');
+                row.removeAttribute('role');
+            }
+        });
+    }
+    syncMobileRows();
+    if (isMobile.addEventListener) isMobile.addEventListener('change', syncMobileRows);
+    else if (isMobile.addListener) isMobile.addListener(syncMobileRows);
+})();
+
 window._barcodesTable = initAdvancedTable({
     tableId: 'barcodes-table',
     searchId: 'barcodes-table-search',
