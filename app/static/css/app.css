@@ -802,3 +802,19 @@ body:has(.dropdown-menu.show)::before {
 .dropdown-menu.show > .card {
   border-radius: inherit;
 }
+
+
+/* Native select popups are painted by the browser/OS, but their open state can
+   still dim the page and keep the control itself on the Appearance radius. */
+body:has(select:open)::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgb(0 0 0 / 22%);
+  pointer-events: none;
+}
+
+select:open {
+  border-radius: var(--tblr-border-radius) !important;
+}
