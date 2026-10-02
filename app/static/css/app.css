@@ -839,7 +839,10 @@ select:open {
     align-self: stretch;
     width: 100%;
     min-width: 0;
-    overflow-wrap: break-word;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    overflow-wrap: normal;
     word-break: normal;
   }
 }
