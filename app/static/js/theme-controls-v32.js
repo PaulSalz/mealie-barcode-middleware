@@ -162,6 +162,14 @@
     root.dataset.b2mFontSize = state.font_size;
     root.dataset.b2mEpaper = state.epaper;
 
+    document.querySelectorAll('.b2m-base-swatch').forEach(function (swatch) {
+      var color = state.mode === 'dark' ? swatch.dataset.b2mSwatchDark : swatch.dataset.b2mSwatchLight;
+      if (color) {
+        swatch.style.setProperty('background-color', color, 'important');
+        swatch.style.setProperty('background-image', 'none', 'important');
+      }
+    });
+
     var mono = state.epaper === 'true';
     root.classList.toggle('b2m-epaper-v9', mono);
     root.classList.toggle('b2m-epaper', mono);
