@@ -6,7 +6,7 @@
 <div class="page-header d-print-none mb-3 settings-page-header">
     <div class="row g-2 align-items-center">
         <div class="col"><h2 class="page-title mb-0">Settings</h2></div>
-        <div class="col-12 col-md-5 col-lg-4">
+        <div class="col-12 d-md-none">
             <form action="/settings" method="get" class="settings-tab-picker">
                 <label class="visually-hidden" for="settings-tab-select">Choose settings section</label>
                 <div class="input-group">
@@ -33,8 +33,26 @@
 
 <div class="card settings-shell">
     <div class="row g-0">
-        {# ── Right content area ── #}
-        <div class="col-12 d-flex flex-column settings-content">
+        {# Desktop keeps the original sidebar; mobile gets the compact selector above. #}
+        <div class="d-none d-md-block col-md-3 border-end settings-sidebar">
+            <div class="card-body">
+                {% for group_label, group_tab_ids in sidebar_groups.items() %}
+                <h4 class="subheader{% if not loop.first %} mt-4{% endif %}">{{ group_label }}</h4>
+                <div class="list-group list-group-transparent">
+                    {% for tab_id, tab_label, tab_icon in tabs %}
+                    {% if tab_id in group_tab_ids %}
+                    <a href="/settings?tab={{ tab_id }}"
+                       class="list-group-item list-group-item-action d-flex align-items-center {{ 'active' if current_tab == tab_id }}">
+                        <span class="me-2"><i class="ti {{ tab_icon }} icon"></i></span>
+                        {{ tab_label }}
+                    </a>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="col-12 col-md-9 d-flex flex-column settings-content">
 
             {% if current_tab == 'printer' %}
             <div class="card-body">
@@ -646,38 +664,6 @@
                         </div>
                     </div>
                 </section>
-                <section class="card mt-4" id="user-permissions-panel">
-                    <div class="card-header">
-                        <div>
-                            <h3 class="card-title">Permission management</h3>
-                            <p class="card-subtitle">Choose which parts of B2M each account can change. Administrators have full access. Changing administrator status requires your current password.</p>
-                        </div>
-                    </div>
-                    <div class="list-group list-group-flush">
-                        {% for account in users %}
-                        <div class="list-group-item d-flex align-items-center justify-content-between gap-3 settings-permission-user">
-                            <div class="min-w-0">
-                                <div class="fw-semibold text-break">{{ account.username }}</div>
-                                {% if account.is_admin %}
-                                <div class="small text-secondary">Administrator · full access</div>
-                                {% else %}
-                                <div class="small text-secondary">Regular user · granular permissions</div>
-                                {% endif %}
-                            </div>
-                            {% if account.id == request.session.get('user_id') %}
-                            <span class="badge bg-purple text-purple-fg flex-shrink-0">Current account</span>
-                            {% else %}
-                            <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
-                                data-bs-toggle="modal" data-bs-target="#user-permissions-modal"
-                                data-permission-user-id="{{ account.id }}"
-                                data-permission-username="{{ account.username }}">
-                                <i class="ti ti-shield-lock icon"></i> Configure
-                            </button>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                </section>
                 <h3 class="card-title mt-4">Existing Users</h3>
                 <div class="table-responsive">
                     <table class="table table-vcenter settings-users-table">
@@ -713,6 +699,15 @@
                                     {% endif %}
                                 </td>
                                 <td data-label="Actions">
+                                    <div class="d-flex flex-wrap justify-content-end gap-2">
+                                    {% if user.id != request.session.get('user_id') %}
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                        data-bs-toggle="modal" data-bs-target="#user-permissions-modal"
+                                        data-permission-user-id="{{ user.id }}"
+                                        data-permission-username="{{ user.username }}">
+                                        <i class="ti ti-shield-lock icon"></i> Permissions
+                                    </button>
+                                    {% endif %}
                                     {% if user.id != request.session.get('user_id') and (is_admin or not user.is_admin) %}
                                     <form action="/settings/users/{{ user.id }}/delete" method="post"
                                         data-confirm="Delete user &quot;{{ user.username }}&quot;?"
@@ -722,6 +717,7 @@
                                         </button>
                                     </form>
                                     {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -738,7 +734,7 @@
             <div class="modal fade" id="change-user-password-modal" tabindex="-1" aria-labelledby="change-user-password-title" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content">
-                        <form id="change-user-password-form" method="post">
+                        <form id="change-user-password-form" method="post" novalidate>
                             <div class="modal-header">
                                 <div>
                                     <h2 class="modal-title fs-3" id="change-user-password-title">Change password</h2>
@@ -747,13 +743,16 @@
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
+                                <div id="change-user-password-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
                                 <label class="form-label" for="change-user-current-password">Your current password</label>
                                 <input type="password" id="change-user-current-password" name="current_password" class="form-control mb-3" autocomplete="current-password" required>
                                 <label class="form-label" for="change-user-new-password">New password</label>
-                                <input type="password" id="change-user-new-password" name="password" class="form-control mb-3" minlength="8" maxlength="128" autocomplete="new-password" required>
+                                <input type="password" id="change-user-new-password" name="password" class="form-control mb-1" minlength="8" maxlength="128" autocomplete="new-password" required aria-describedby="change-user-password-standard-feedback">
+                                <div id="change-user-password-standard-feedback" class="form-hint mb-3" aria-live="polite">Enter 8–128 characters.</div>
                                 <label class="form-label" for="change-user-password-confirm">Confirm new password</label>
-                                <input type="password" id="change-user-password-confirm" name="password_confirm" class="form-control" minlength="8" maxlength="128" autocomplete="new-password" required>
-                                <div class="form-hint mt-2">Password must be 8–128 characters. Your current password is required to confirm the change.</div>
+                                <input type="password" id="change-user-password-confirm" name="password_confirm" class="form-control" minlength="8" maxlength="128" autocomplete="new-password" required aria-describedby="change-user-password-match-feedback">
+                                <div id="change-user-password-match-feedback" class="form-hint mt-1" aria-live="polite">Enter the new password again.</div>
+                                <div class="form-hint mt-2">Your current password is required to confirm the change.</div>
                             </div>
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
