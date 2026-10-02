@@ -886,3 +886,13 @@ select:open {
     justify-content: center;
   }
 }
+
+
+/* Card header tint should follow the parent card's personalized corner radius. */
+.card > .card-header:first-child {
+  border-top-left-radius: var(--tblr-border-radius) !important;
+  border-top-right-radius: var(--tblr-border-radius) !important;
+}
+
+.b2m-base-swatch { border: 1px solid rgb(0 0 0 / 18%); }
+html[data-bs-theme="dark"] .b2m-base-swatch { border-color: rgb(255 255 255 / 28%); }

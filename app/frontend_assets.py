@@ -167,6 +167,12 @@ def _build_v35_surface_catalog_css() -> str:
 # The visible v35 surfaces therefore consume only collision-free private values
 # that are written directly on <html> by the catalog above.
 APPEARANCE_AUTHORITY_CSS = """
+html {
+  min-height: 100%;
+  background: var(--b2m-v35-page-bg) !important;
+  color: var(--b2m-v35-text) !important;
+}
+html body { min-height: 100vh; min-height: 100dvh; }
 html body,
 html body .page,
 html body .page-wrapper,

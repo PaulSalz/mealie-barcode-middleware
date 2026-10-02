@@ -256,3 +256,22 @@ def test_personal_font_size_setting_is_wired_end_to_end():
     assert "root.dataset.b2mFontSize = state.font_size" in controller
     assert "--b2m-saved-font-size" in init
     assert "root.dataset.b2mFontSize = fontSize" in init
+
+
+def test_background_uses_mobile_friendly_palette_swatches_and_live_radio_state():
+    profile = read("app/templates/profile_appearance.html")
+    controller = read("app/static/js/theme-controls-v32.js")
+    frontend = read("app/frontend_assets.py")
+
+    assert 'name="theme_base" type="radio"' in profile
+    assert 'name="theme_base" class="form-select"' not in profile
+    assert "base: checkedValue('theme_base', 'gray')" in controller
+    assert "background: var(--b2m-v35-page-bg) !important;" in frontend
+    assert "min-height: 100dvh;" in frontend
+
+
+def test_tinted_card_headers_follow_personal_appearance_radius():
+    css = read("app/static/css/app.css")
+    assert '.card > .card-header:first-child {' in css
+    assert 'border-top-left-radius: var(--tblr-border-radius)' in css
+    assert 'border-top-right-radius: var(--tblr-border-radius)' in css

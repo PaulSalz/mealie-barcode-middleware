@@ -61,7 +61,21 @@
 
           <div class="row g-3">
             <div class="col-md-6"><label class="form-label">Font family</label><select name="theme_font" class="form-select">{% for opt in theme_choices.font %}<option value="{{ opt }}" {% if theme.font == opt %}selected{% endif %}>{{ opt|replace('-', ' ')|title }}</option>{% endfor %}</select></div>
-            <div class="col-md-6"><label class="form-label">Background</label><select name="theme_base" class="form-select">{% for opt in theme_choices.base %}<option value="{{ opt }}" {% if theme.base == opt %}selected{% endif %}>{{ opt|title }}</option>{% endfor %}</select></div>
+            <div class="col-12">
+              <label class="form-label">Background</label>
+              <div class="form-hint mb-2">Page background palette. Changes preview immediately.</div>
+              <div class="row g-2" role="radiogroup" aria-label="Page background">
+                {% set base_swatch_colors = {'gray':'#edf0f4', 'slate':'#e6eef8', 'zinc':'#eeeaf4', 'neutral':'#ededed', 'stone':'#f3e9dc'} %}
+                {% for opt in theme_choices.base %}
+                <div class="col-auto">
+                  <label class="form-colorinput" title="{{ opt|title }}">
+                    <input name="theme_base" type="radio" value="{{ opt }}" class="form-colorinput-input" {% if theme.base == opt %}checked{% endif %} aria-label="{{ opt|title }}">
+                    <span class="form-colorinput-color b2m-base-swatch" style="background-color: {{ base_swatch_colors.get(opt, '#edf0f4') }};"></span>
+                  </label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
             <div class="col-12">
               <label class="form-label" for="profile-font-size">Font size: <strong id="profile-font-size-value">{{ theme.font_size }}</strong>%</label>
               <input type="range" class="form-range" name="theme_font_size" id="profile-font-size" min="80" max="130" step="5" value="{{ theme.font_size }}">

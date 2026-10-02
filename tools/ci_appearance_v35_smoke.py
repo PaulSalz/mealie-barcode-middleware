@@ -119,7 +119,7 @@ def main() -> None:
 
         # Background: must take over synchronously on the same change event.
         before_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
-        page.locator('select[name="theme_base"]').select_option("stone")
+        page.locator('input[name="theme_base"][value="stone"]').check(force=True)
         assert html.get_attribute("data-b2m-base") == "stone"
         after_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
         assert before_bg != after_bg, (before_bg, after_bg, theme_debug())
@@ -225,7 +225,7 @@ def main() -> None:
 
         page.reload(wait_until="domcontentloaded")
         html = page.locator("html")
-        assert page.locator('select[name="theme_base"]').input_value() == "stone"
+        assert page.locator('input[name="theme_base"][value="stone"]').is_checked()
         assert page.locator('input[name="theme_radius"][value="2"]').is_checked()
         assert page.locator('input[name="theme_button_color"][value="green"]').is_checked()
         assert page.locator('input[name="theme_logo_color"][value="rainbow"]').is_checked()

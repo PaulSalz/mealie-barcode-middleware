@@ -113,7 +113,7 @@
       button_color: checkedValue('theme_button_color', 'blue'),
       font: fieldValue('theme_font', 'sans-serif'),
       font_size: fieldValue('theme_font_size', '100'),
-      base: fieldValue('theme_base', 'gray'),
+      base: checkedValue('theme_base', 'gray'),
       radius: checkedValue('theme_radius', '1'),
       date_style: fieldValue('theme_date_style', 'medium'),
       epaper: epaper && epaper.checked ? 'true' : 'false',
