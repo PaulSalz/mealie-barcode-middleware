@@ -269,8 +269,14 @@ def test_background_uses_mobile_friendly_palette_swatches_and_live_radio_state()
     assert "'dark':'#150d20'" in profile and "'dark':'#0e0e0e'" in profile and "'dark':'#1c1007'" in profile
     assert "--b2m-base-swatch-light: {{ swatch.light }}" in profile
     assert "--b2m-base-swatch-dark: {{ swatch.dark }}" in profile
+    assert 'data-b2m-swatch-light="{{ swatch.light }}"' in profile
+    assert 'data-b2m-swatch-dark="{{ swatch.dark }}"' in profile
+    assert "background-color: {{ swatch[theme.mode] }} !important" in profile
     assert "background-color: var(--b2m-base-swatch-light)" in read("app/static/css/app.css")
     assert "background-color: var(--b2m-base-swatch-dark)" in read("app/static/css/app.css")
+    assert "opacity: 1 !important" in read("app/static/css/app.css")
+    assert "border: 2px solid rgb(0 0 0 / 38%) !important" in read("app/static/css/app.css")
+    assert "swatch.style.setProperty('background-color', color, 'important')" in controller
     assert "base: checkedValue('theme_base', 'gray')" in controller
     assert "background: var(--b2m-v35-page-bg) !important;" in frontend
     assert "min-height: 100dvh;" in frontend
