@@ -897,12 +897,11 @@ select:open {
 .b2m-base-swatch {
   background-color: var(--b2m-base-swatch-light) !important;
   background-image: none !important;
-  border: 2px solid rgb(0 0 0 / 38%) !important;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 72%);
+  border: 0 !important;
+  box-shadow: none !important;
   opacity: 1 !important;
 }
 html[data-bs-theme="dark"] .b2m-base-swatch {
   background-color: var(--b2m-base-swatch-dark) !important;
-  border-color: rgb(255 255 255 / 52%) !important;
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 60%);
+  border: 0 !important;
 }
