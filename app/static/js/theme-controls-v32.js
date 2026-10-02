@@ -206,6 +206,10 @@
     if (isAppearanceField(event.target)) applyForm();
   });
 
+  // Initialize the live appearance from the saved form values on first paint
+  // after a reload, so persisted CSS cannot leave the page in a stale state.
+  applyForm();
+
   form.addEventListener('submit', function (event) {
     event.preventDefault();
     var state = readState();
