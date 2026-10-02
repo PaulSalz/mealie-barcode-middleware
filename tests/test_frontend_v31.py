@@ -82,3 +82,15 @@ def test_mobile_barcode_titles_use_the_full_card_width():
     assert 'white-space: nowrap;' in title_rules
     assert 'text-overflow: ellipsis;' in title_rules
     assert 'overflow-wrap: normal;' in title_rules
+
+
+def test_mobile_barcode_detail_header_uses_full_width_and_stacks_actions():
+    template = read("app/templates/barcode_detail.html")
+    css = read("app/static/css/app.css")
+
+    assert 'barcode-detail-page-header' in template
+    assert '.barcode-detail-page-header > .row > .col {' in css
+    assert 'flex: 0 0 100%;' in css[css.index('.barcode-detail-page-header > .row > .col {'):]
+    assert 'white-space: nowrap;' in css[css.index('.barcode-detail-page-header .page-title {'):]
+    assert 'text-overflow: ellipsis;' in css[css.index('.barcode-detail-page-header .page-title {'):]
+    assert 'flex-wrap: wrap;' in css[css.index('.barcode-detail-page-header .btn-list {'):]

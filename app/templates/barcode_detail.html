@@ -27,7 +27,7 @@
 {% endmacro %}
 
 {% block content %}
-<div class="page-header d-print-none mb-3"><div class="row g-2 align-items-center">
+<div class="page-header d-print-none mb-3 barcode-detail-page-header"><div class="row g-2 align-items-center">
   <div class="col"><div class="page-pretitle">Barcode <code>{{ cached.barcode if cached else '' }}</code></div><h2 class="page-title">{{ cached.display_title if cached and cached.display_title else ('Not Found' if not cached else 'Unknown product') }}</h2></div>
   <div class="col-auto ms-auto btn-list">{% if cached %}<a href="/labels?code={{ cached.barcode|urlencode }}" class="btn btn-outline-primary"><i class="ti ti-qrcode icon"></i> Generate code</a>{% endif %}{% if next_unmapped %}<a href="/barcodes/{{ next_unmapped.barcode|urlencode }}" class="btn btn-outline-primary">Next unmapped →</a>{% endif %}</div>
 </div></div>
