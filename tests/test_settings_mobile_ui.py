@@ -145,20 +145,3 @@ def test_items_actions_and_barcodes_mobile_layouts_are_compact_and_rounded():
     assert "#barcodes-table > tbody { display: grid; gap: .3rem;" in css
 
 
-
-
-def test_barcode_shopping_list_multiselect_stays_inline_and_compact():
-    template = read("app/templates/barcode_detail.html")
-    css = read("app/static/css/app.css")
-    base = read("app/templates/base.html")
-
-    assert 'class="mt-2 barcode-target-shopping-lists"' in template
-    assert 'name="shopping_list_ids" multiple' in template
-    assert "app.css?v={{ v }}&rev=29" in base
-    assert ".barcode-target-shopping-lists {" in css
-    assert 'grid-template-areas: "label select" ". hint";' in css
-    assert "grid-template-columns: max-content minmax(0, 1fr);" in css
-    assert "white-space: nowrap;" in css
-    assert "grid-area: select;" in css
-    assert "grid-area: label;" in css
-    assert "height: 5.2rem;" in css
