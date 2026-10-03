@@ -7,11 +7,11 @@
       <div class="page-pretitle">Shopping</div>
       <h2 class="page-title">Print shopping list</h2>
     </div>
-    <div class="col-auto btn-list">
+    <div class="col-auto btn-list shopping-print-page-actions">
       <button type="button" class="btn btn-outline-secondary" id="shopping-print-refresh">
         <i class="ti ti-refresh icon"></i> Refresh
       </button>
-      <button type="button" class="btn btn-primary btn-lg px-4" id="shopping-print-button" disabled>
+      <button type="button" class="btn btn-primary btn-lg px-4 shopping-print-print-action" id="shopping-print-button" disabled>
         <i class="ti ti-printer icon"></i> Print shopping list
       </button>
     </div>
@@ -19,8 +19,8 @@
 </div>
 
 <div class="row row-cards shopping-print-layout">
-  <div class="col-lg-5">
-    <div class="card mb-3">
+  <div class="col-lg-5 shopping-print-settings-column">
+    <div class="card mb-3 shopping-print-list-card">
       <div class="card-header">
         <div>
           <h3 class="card-title">Shopping list</h3>
@@ -43,7 +43,17 @@
       </div>
     </div>
 
-    <div class="card mb-3">
+    <div class="shopping-print-mobile-settings-selector d-lg-none">
+      <label class="form-label" for="shopping-print-mobile-section">Settings</label>
+      <select class="form-select form-select-sm" id="shopping-print-mobile-section">
+        <option value="route">Supermarket route</option>
+        <option value="overrides">Item print overrides</option>
+        <option value="local">Print-only content</option>
+        <option value="receipt">Global receipt settings</option>
+      </select>
+    </div>
+    <div class="shopping-print-config-panels">
+    <div class="card mb-3 shopping-print-config-panel is-active" data-shopping-print-panel="route">
       <div class="card-header">
         <div>
           <h3 class="card-title">Supermarket route</h3>
@@ -61,7 +71,7 @@
       </div>
     </div>
 
-    <div class="card mb-3">
+    <div class="card mb-3 shopping-print-config-panel" data-shopping-print-panel="overrides">
       <div class="card-header">
         <div>
           <h3 class="card-title">Item print overrides</h3>
@@ -100,7 +110,7 @@
       </div>
     </div>
 
-    <div class="card mb-3">
+    <div class="card mb-3 shopping-print-config-panel" data-shopping-print-panel="local">
       <div class="card-header">
         <div>
           <h3 class="card-title">Print-only content</h3>
@@ -142,7 +152,7 @@
       </div>
     </div>
 
-    <div class="card mb-3">
+    <div class="card mb-3 shopping-print-config-panel" data-shopping-print-panel="receipt">
       <div class="card-header">
         <div>
           <h3 class="card-title">Global receipt settings</h3>
@@ -262,9 +272,10 @@
         <span class="form-hint" id="shopping-print-settings-status"></span>
       </div>
     </div>
+    </div>
   </div>
 
-  <div class="col-lg-7">
+  <div class="col-lg-7 shopping-print-preview-column">
     <div class="card sticky-lg-top shopping-print-preview-card">
       <div class="card-header">
         <div>
@@ -288,6 +299,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<link rel="stylesheet" href="/static/css/shopping-print.css?v={{ v }}&rev=5">
-<script src="/static/js/shopping-print-v2.js?v={{ v }}&rev=1"></script>
+<link rel="stylesheet" href="/static/css/shopping-print.css?v={{ v }}&rev=6">
+<script src="/static/js/shopping-print-v2.js?v={{ v }}&rev=2"></script>
 {% endblock %}
