@@ -349,35 +349,6 @@ def main() -> None:
         assert mobile_items["titleSize"] <= 18 and mobile_items["selectSize"] <= 12, mobile_items
         assert mobile_items["searchIconSize"] <= 14 and mobile_items["filterRadius"] != "0px", mobile_items
         assert mobile_items["firstPairSameRow"] and mobile_items["secondPairSameRow"] and mobile_items["secondRowBelow"], mobile_items
-        # The multi-list control keeps its label beside the box at phone and desktop widths.
-        for width in (390, 1280):
-            page.set_viewport_size({"width": width, "height": 844 if width < 768 else 900})
-            multiselect_layout = page.evaluate("""() => {
-                const probe = document.createElement('div');
-                probe.className = 'barcode-target-shopping-lists';
-                probe.style.cssText = 'position:fixed;left:-10000px;top:0;width:350px;';
-                probe.innerHTML = '<label class="form-label">Mealie shopping lists</label><select class="form-select" multiple name="shopping_list_ids"><option>Groceries</option><option>Pantry</option></select><div class="form-hint">Choose lists.</div>';
-                document.body.appendChild(probe);
-                const label = probe.querySelector('.form-label').getBoundingClientRect();
-                const select = probe.querySelector('select').getBoundingClientRect();
-                const wrapper = probe.getBoundingClientRect();
-                const result = {
-                    labelTop: label.top,
-                    selectTop: select.top,
-                    labelRight: label.right,
-                    selectLeft: select.left,
-                    selectRight: select.right,
-                    wrapperRight: wrapper.right,
-                    height: select.height
-                };
-                probe.remove();
-                return result;
-            }""")
-            assert abs(multiselect_layout["labelTop"] - multiselect_layout["selectTop"]) < 2, multiselect_layout
-            assert multiselect_layout["selectLeft"] >= multiselect_layout["labelRight"], multiselect_layout
-            assert abs(multiselect_layout["selectRight"] - multiselect_layout["wrapperRight"]) < 2, multiselect_layout
-            assert multiselect_layout["height"] <= 90, multiselect_layout
-        page.set_viewport_size({"width": 390, "height": 844})
         # Actions and Barcodes use compact card rows on the same phone width.
         page.goto(f"{BASE_URL}/actions", wait_until="domcontentloaded", timeout=20_000)
         page.locator(".actions-table").wait_for(state="visible", timeout=5_000)

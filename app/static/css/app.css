@@ -1062,35 +1062,3 @@ html[data-bs-theme="dark"] .b2m-base-swatch {
   background-color: var(--b2m-base-swatch-dark) !important;
   border: 0 !important;
 }
-
-
-.barcode-target-shopping-lists {
-  display: grid !important;
-  grid-template-columns: max-content minmax(0, 1fr);
-  grid-template-areas: "label select" ". hint";
-  align-items: start;
-  gap: .3rem .5rem;
-}
-.barcode-target-shopping-lists > .form-label {
-  grid-area: label;
-  margin: .35rem 0 0;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-.barcode-target-shopping-lists select[multiple][name="shopping_list_ids"] {
-  grid-area: select;
-  justify-self: end;
-  width: 100%;
-  max-width: 28rem;
-  min-width: 0;
-  min-height: 5.2rem;
-  height: 5.2rem;
-  padding: .2rem .3rem;
-  font-size: .76rem;
-}
-.barcode-target-shopping-lists .form-hint {
-  grid-area: hint;
-  margin-top: .1rem;
-  font-size: .65rem;
-  line-height: 1.2;
-}
