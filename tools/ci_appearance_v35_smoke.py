@@ -323,6 +323,31 @@ def main() -> None:
             "statusCircle": "rgb(0, 0, 0)"
         }, (dashboard_colors, theme_debug())
 
+        # Items uses compact, labeled cards instead of a wide table on phones.
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(f"{BASE_URL}/items", wait_until="domcontentloaded", timeout=20_000)
+        page.locator("#items-card").wait_for(state="visible", timeout=5_000)
+        mobile_items = page.evaluate("""() => {
+            const selects = Array.from(document.querySelectorAll('#items-filter-form select'));
+            const tops = selects.map(el => Math.round(el.getBoundingClientRect().top));
+            const table = document.getElementById('items-table');
+            const title = document.querySelector('.items-page-header .page-title');
+            return {
+                header: getComputedStyle(table.tHead).display,
+                body: getComputedStyle(table.tBodies[0]).display,
+                titleSize: parseFloat(getComputedStyle(title).fontSize),
+                selectSize: parseFloat(getComputedStyle(selects[0]).fontSize),
+                firstPairSameRow: tops.length >= 2 && tops[0] === tops[1],
+                secondPairSameRow: tops.length >= 4 && tops[2] === tops[3],
+                secondRowBelow: tops.length >= 3 && tops[2] > tops[1]
+            };
+        }""")
+        assert mobile_items["header"] == "none", mobile_items
+        assert mobile_items["body"] == "grid", mobile_items
+        assert mobile_items["titleSize"] <= 18 and mobile_items["selectSize"] <= 12, mobile_items
+        assert mobile_items["firstPairSameRow"] and mobile_items["secondPairSameRow"] and mobile_items["secondRowBelow"], mobile_items
+        page.set_viewport_size({"width": 1280, "height": 900})
+
         # Filled action buttons remain white-on-black in light e-paper.
         for route, selector in (
             ("/", "#shopping-lists-card .btn-primary"),

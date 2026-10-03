@@ -47,7 +47,7 @@ def test_settings_layout_has_mobile_navigation_and_user_cards():
     assert 'overflow-x: auto;' in css
     assert '.settings-users-table > tbody > tr:not(:has(td[colspan]))' in css
     assert '#b2m-printer-connection-card .card-body' in css
-    assert 'app.css?v={{ v }}&rev=23' in base
+    assert 'app.css?v={{ v }}&rev=24' in base
 
 
 def test_settings_dropdown_and_printer_panel_are_scoped_to_printer_tab():
@@ -111,9 +111,22 @@ def test_mobile_shopping_print_labels_use_full_width_and_do_not_wrap_early():
     css = read("app/static/css/app.css")
     base = read("app/templates/base.html")
 
-    assert "app.css?v={{ v }}&rev=23" in base
+    assert "app.css?v={{ v }}&rev=24" in base
     assert ".shopping-print-page-header > .row > .col-auto.btn-list" in css
     print_buttons = css.split(".shopping-print-page-header .btn {", 1)[1].split("}", 1)[0]
     assert "white-space: nowrap;" in print_buttons
     dashboard_buttons = css.rsplit(".b2m-mobile-dashboard-actions .btn {", 1)[1].split("}", 1)[0]
     assert "white-space: nowrap;" in dashboard_buttons
+
+
+def test_items_table_has_mobile_labels_and_compact_rules():
+    template = read("app/templates/items.html")
+    css = read("app/static/css/app.css")
+    base = read("app/templates/base.html")
+
+    assert "app.css?v={{ v }}&rev=24" in base
+    for label in ("Item", "Category", "Source", "Barcodes", "Scans", "Last scan", "Updated"):
+        assert f'data-label="{label}"' in template
+    assert "#items-table > thead { display: none; }" in css
+    assert "#items-table > tbody.table-tbody { display: grid;" in css
+    assert "#items-filter-form > [class*=\"col-\"]" in css
