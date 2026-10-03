@@ -107,6 +107,23 @@ def test_password_feedback_stays_inside_modal_without_page_reload():
     assert "setFeedback(error.message" in script
 
 
+
+def test_mobile_shopping_print_settings_are_compact_and_selectable():
+    template = read("app/templates/shopping_print.html")
+    css = read("app/static/css/shopping-print.css")
+    script = read("app/static/js/shopping-print-v2.js")
+
+    assert "shopping-print.css?v={{ v }}&rev=6" in template
+    assert "shopping-print-v2.js?v={{ v }}&rev=2" in template
+    assert 'id="shopping-print-mobile-section"' in template
+    for section in ("route", "overrides", "local", "receipt"):
+        assert f'data-shopping-print-panel="{section}"' in template
+    assert "mobileSettingsSelect.addEventListener('change'" in script
+    assert ".shopping-print-config-panel:not(.is-active) { display: none !important; }" in css
+    assert ".shopping-print-preview-card { order: 1;" in css
+    assert "min-height: 13rem;" in css
+    assert "font-size: .75rem;" in css
+
 def test_mobile_shopping_print_labels_use_full_width_and_do_not_wrap_early():
     css = read("app/static/css/app.css")
     base = read("app/templates/base.html")
