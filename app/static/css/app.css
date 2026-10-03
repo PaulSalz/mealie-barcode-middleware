@@ -603,6 +603,7 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     border: 2px solid var(--tblr-secondary);
     border-radius: var(--tblr-border-radius);
     background: var(--tblr-bg-surface);
+    overflow: hidden;
   }
   #barcodes-table > tbody > tr:not(.barcodes-empty-row) > td.b2m-bulk-col {
     position: absolute;
