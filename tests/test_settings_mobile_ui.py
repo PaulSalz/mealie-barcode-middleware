@@ -154,9 +154,11 @@ def test_barcode_shopping_list_multiselect_stays_inline_and_compact():
 
     assert 'class="mt-2 barcode-target-shopping-lists"' in template
     assert 'name="shopping_list_ids" multiple' in template
-    assert "app.css?v={{ v }}&rev=28" in base
+    assert "app.css?v={{ v }}&rev=29" in base
     assert ".barcode-target-shopping-lists {" in css
     assert 'grid-template-areas: "label select" ". hint";' in css
+    assert "grid-template-columns: max-content minmax(0, 1fr);" in css
+    assert "white-space: nowrap;" in css
     assert "grid-area: select;" in css
     assert "grid-area: label;" in css
     assert "height: 5.2rem;" in css
