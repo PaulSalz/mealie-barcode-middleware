@@ -156,3 +156,17 @@ def test_mobile_item_bulk_checkbox_is_pinned_to_item_title_row():
     assert "top: .48rem;" in css and "right: .4rem;" in css
     assert "#items-table > tbody > tr:not(.items-empty-row) > td.sort-name {" in css
     assert "#items-table .b2m-bulk-row {" in css
+
+
+def test_mobile_barcode_bulk_checkbox_is_right_aligned_and_page_is_compact():
+    css = read("app/static/css/app.css")
+    base = read("app/templates/base.html")
+    template = read("app/templates/barcodes.html")
+
+    assert "app.css?v={{ v }}&rev=29" in base
+    assert "barcodes-page-header" in template
+    assert "barcodes-list-card" in template
+    assert '#barcodes-table > tbody > tr:not(.barcodes-empty-row) > td.b2m-bulk-col {' in css
+    assert "top: .28rem;" in css and "right: .32rem;" in css
+    assert "#barcodes-table > tbody { display: grid; gap: .22rem;" in css
+    assert "font-size: .67rem;" in css
