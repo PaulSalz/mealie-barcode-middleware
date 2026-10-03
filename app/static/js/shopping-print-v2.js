@@ -59,6 +59,16 @@
 
   if (!els.list || !els.canvas) return;
 
+  var mobileSettingsSelect = $('shopping-print-mobile-section');
+  if (mobileSettingsSelect) {
+    var settingPanels = Array.prototype.slice.call(document.querySelectorAll('[data-shopping-print-panel]'));
+    mobileSettingsSelect.addEventListener('change', function () {
+      settingPanels.forEach(function (panel) {
+        panel.classList.toggle('is-active', panel.dataset.shoppingPrintPanel === mobileSettingsSelect.value);
+      });
+    });
+  }
+
   function esc(value) {
     return String(value == null ? '' : value)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
