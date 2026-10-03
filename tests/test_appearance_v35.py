@@ -279,8 +279,7 @@ def test_background_uses_mobile_friendly_palette_swatches_and_live_radio_state()
     assert "box-shadow: none !important" in read("app/static/css/app.css")
     assert "swatch.style.setProperty('background-color', color, 'important')" in controller
     assert "  applyForm();" in controller
-    assert "window.addEventListener('pageshow'" in controller
-    assert "if (event.persisted) applyForm();" in controller
+    assert "window.addEventListener('pageshow', applyForm)" in controller
     assert "base: checkedValue('theme_base', 'gray')" in controller
     assert "background: var(--b2m-v35-page-bg) !important;" in frontend
     assert "min-height: 100dvh;" in frontend
