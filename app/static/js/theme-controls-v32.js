@@ -209,9 +209,7 @@
   // Initialize the live appearance from saved form values on first paint,
   // and reapply after a BFCache restore so history navigation stays in sync.
   applyForm();
-  window.addEventListener('pageshow', function (event) {
-    if (event.persisted) applyForm();
-  });
+  window.addEventListener('pageshow', applyForm);
 
   form.addEventListener('submit', function (event) {
     event.preventDefault();
