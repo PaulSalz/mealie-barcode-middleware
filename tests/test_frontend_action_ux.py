@@ -199,7 +199,7 @@ def test_mobile_dashboard_shows_recent_scans_and_remaining_cards():
     assert ".table.table-vcenter > tbody > tr:not(.barcodes-empty-row)" in css
     assert "border-top: 2px solid var(--tblr-secondary);" in css
     assert ".actions-page-header > .row > .col {\n    flex: 0 0 100%;" in css
-    assert ".actions-table tbody > tr > td:first-child {\n    min-width: 13rem;" in css
+    assert ".actions-table > tbody > tr:not(:has(td[colspan])) > td:first-child {\n    grid-column: 1 / -1;\n    min-width: 0;" in css
     assert "actions-page-header" in read("app/templates/actions.html")
     assert "actions-table" in read("app/templates/actions.html")
     assert "#barcodes-table > tbody > tr:not(.barcodes-empty-row)" in css and "border: 2px solid var(--tblr-secondary);" in css
