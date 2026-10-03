@@ -1066,7 +1066,7 @@ html[data-bs-theme="dark"] .b2m-base-swatch {
 
 .barcode-target-shopping-lists {
   display: grid !important;
-  grid-template-columns: minmax(7rem, 1fr) minmax(0, 2fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   grid-template-areas: "label select" ". hint";
   align-items: start;
   gap: .3rem .5rem;
@@ -1075,6 +1075,7 @@ html[data-bs-theme="dark"] .b2m-base-swatch {
   grid-area: label;
   margin: .35rem 0 0;
   line-height: 1.2;
+  white-space: nowrap;
 }
 .barcode-target-shopping-lists select[multiple][name="shopping_list_ids"] {
   grid-area: select;
