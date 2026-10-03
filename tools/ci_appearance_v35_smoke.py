@@ -349,6 +349,24 @@ def main() -> None:
         assert mobile_items["titleSize"] <= 18 and mobile_items["selectSize"] <= 12, mobile_items
         assert mobile_items["searchIconSize"] <= 14 and mobile_items["filterRadius"] != "0px", mobile_items
         assert mobile_items["firstPairSameRow"] and mobile_items["secondPairSameRow"] and mobile_items["secondRowBelow"], mobile_items
+        # Bulk-selection checkboxes are injected after load; keep each one at the item-title row's top-right.
+        bulk_checkbox = page.locator("#items-table .b2m-bulk-row").first
+        if bulk_checkbox.count():
+            bulk_checkbox.wait_for(state="visible", timeout=5_000)
+            bulk_layout = bulk_checkbox.evaluate("""el => {
+                const row = el.closest('tr');
+                const box = el.getBoundingClientRect();
+                const title = row.querySelector('td.sort-name').getBoundingClientRect();
+                const rowBox = row.getBoundingClientRect();
+                return {
+                    topDelta: Math.abs(box.top - title.top),
+                    rightInset: rowBox.right - box.right,
+                    size: box.width
+                };
+            }""")
+            assert bulk_layout["topDelta"] <= 4, bulk_layout
+            assert 4 <= bulk_layout["rightInset"] <= 24, bulk_layout
+            assert bulk_layout["size"] <= 18, bulk_layout
         # Actions and Barcodes use compact card rows on the same phone width.
         page.goto(f"{BASE_URL}/actions", wait_until="domcontentloaded", timeout=20_000)
         page.locator(".actions-table").wait_for(state="visible", timeout=5_000)
