@@ -47,7 +47,7 @@ def test_settings_layout_has_mobile_navigation_and_user_cards():
     assert 'overflow-x: auto;' in css
     assert '.settings-users-table > tbody > tr:not(:has(td[colspan]))' in css
     assert '#b2m-printer-connection-card .card-body' in css
-    assert 'app.css?v={{ v }}&rev=22' in base
+    assert 'app.css?v={{ v }}&rev=23' in base
 
 
 def test_settings_dropdown_and_printer_panel_are_scoped_to_printer_tab():
@@ -105,3 +105,15 @@ def test_password_feedback_stays_inside_modal_without_page_reload():
     assert "The current password is incorrect. No changes were made." in routes
     assert "Password changed successfully." in routes
     assert "setFeedback(error.message" in script
+
+
+def test_mobile_shopping_print_labels_use_full_width_and_do_not_wrap_early():
+    css = read("app/static/css/app.css")
+    base = read("app/templates/base.html")
+
+    assert "app.css?v={{ v }}&rev=23" in base
+    assert ".shopping-print-page-header > .row > .col-auto.btn-list" in css
+    print_buttons = css.split(".shopping-print-page-header .btn {", 1)[1].split("}", 1)[0]
+    assert "white-space: nowrap;" in print_buttons
+    dashboard_buttons = css.rsplit(".b2m-mobile-dashboard-actions .btn {", 1)[1].split("}", 1)[0]
+    assert "white-space: nowrap;" in dashboard_buttons
