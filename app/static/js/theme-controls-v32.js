@@ -206,9 +206,12 @@
     if (isAppearanceField(event.target)) applyForm();
   });
 
-  // Initialize the live appearance from the saved form values on first paint
-  // after a reload, so persisted CSS cannot leave the page in a stale state.
+  // Initialize the live appearance from saved form values on first paint,
+  // and reapply after a BFCache restore so history navigation stays in sync.
   applyForm();
+  window.addEventListener('pageshow', function (event) {
+    if (event.persisted) applyForm();
+  });
 
   form.addEventListener('submit', function (event) {
     event.preventDefault();
