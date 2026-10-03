@@ -339,13 +339,52 @@ def main() -> None:
                 selectSize: parseFloat(getComputedStyle(selects[0]).fontSize),
                 firstPairSameRow: tops.length >= 2 && tops[0] === tops[1],
                 secondPairSameRow: tops.length >= 4 && tops[2] === tops[3],
-                secondRowBelow: tops.length >= 3 && tops[2] > tops[1]
+                secondRowBelow: tops.length >= 3 && tops[2] > tops[1],
+                searchIconSize: parseFloat(getComputedStyle(document.querySelector('#items-card .input-group-text .ti-search')).fontSize),
+                filterRadius: getComputedStyle(document.querySelector('#items-card > .card-header')).borderBottomLeftRadius
             };
         }""")
         assert mobile_items["header"] == "none", mobile_items
         assert mobile_items["body"] == "grid", mobile_items
         assert mobile_items["titleSize"] <= 18 and mobile_items["selectSize"] <= 12, mobile_items
+        assert mobile_items["searchIconSize"] <= 14 and mobile_items["filterRadius"] != "0px", mobile_items
         assert mobile_items["firstPairSameRow"] and mobile_items["secondPairSameRow"] and mobile_items["secondRowBelow"], mobile_items
+        # Actions and Barcodes use compact card rows on the same phone width.
+        page.goto(f"{BASE_URL}/actions", wait_until="domcontentloaded", timeout=20_000)
+        page.locator(".actions-table").wait_for(state="visible", timeout=5_000)
+        mobile_actions = page.evaluate("""() => {
+            const table = document.querySelector('.actions-table');
+            const row = table.querySelector('tbody tr:not(:has(td[colspan]))');
+            return {
+                header: getComputedStyle(table.tHead).display,
+                body: getComputedStyle(table.tBodies[0]).display,
+                row: row ? getComputedStyle(row).display : 'none',
+                scrollWidth: document.documentElement.scrollWidth,
+                viewport: document.documentElement.clientWidth
+            };
+        }""")
+        assert mobile_actions["header"] == "none" and mobile_actions["body"] == "grid", mobile_actions
+        assert mobile_actions["row"] in ("grid", "none"), mobile_actions
+        assert mobile_actions["scrollWidth"] <= mobile_actions["viewport"] + 1, mobile_actions
+
+        page.goto(f"{BASE_URL}/barcodes", wait_until="domcontentloaded", timeout=20_000)
+        page.locator("#barcodes-table").wait_for(state="visible", timeout=5_000)
+        mobile_barcodes = page.evaluate("""() => {
+            const table = document.getElementById('barcodes-table');
+            const rows = table.querySelector('tbody');
+            const row = table.querySelector('tbody tr:not(.barcodes-empty-row)');
+            return {
+                header: getComputedStyle(table.tHead).display,
+                body: getComputedStyle(rows).display,
+                rowRadius: row ? getComputedStyle(row).borderRadius : '',
+                scrollWidth: document.documentElement.scrollWidth,
+                viewport: document.documentElement.clientWidth
+            };
+        }""")
+        assert mobile_barcodes["header"] == "none" and mobile_barcodes["body"] == "grid", mobile_barcodes
+        assert mobile_barcodes["rowRadius"] != "0px", mobile_barcodes
+        assert mobile_barcodes["scrollWidth"] <= mobile_barcodes["viewport"] + 1, mobile_barcodes
+
         page.set_viewport_size({"width": 1280, "height": 900})
 
         # Filled action buttons remain white-on-black in light e-paper.

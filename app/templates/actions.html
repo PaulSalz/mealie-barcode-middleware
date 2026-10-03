@@ -15,13 +15,13 @@
       {% for action in actions %}
         {% set last = latest_rows.get(action.id) %}
         <tr>
-          <td><a href="/actions/{{ action.id|urlencode }}">{{ action.name }}</a><div class="text-secondary small">{{ action.description or '' }}</div></td>
-          <td><code>ACTION:{{ action.id }}</code></td>
-          <td>{% if action.enabled %}<span class="badge bg-green text-green-fg">Enabled</span>{% else %}<span class="badge bg-secondary">Disabled</span>{% endif %}</td>
-          <td>{{ action.execution_mode }}</td>
-          <td>{{ action.cooldown_seconds }} s</td>
-          <td>{{ counts.get(action.id, 0) }}</td>
-          <td>{% if last %}<span class="badge {{ 'bg-green text-green-fg' if last.status == 'success' else 'bg-yellow text-yellow-fg' if last.status == 'ignored_cooldown' else 'bg-red text-red-fg' }}">{{ last.status }}</span><div class="text-secondary small">{{ last.created_at|localtime }}</div>{% else %}<span class="text-secondary">Never</span>{% endif %}</td>
+          <td data-label="Action"><a href="/actions/{{ action.id|urlencode }}">{{ action.name }}</a><div class="text-secondary small">{{ action.description or '' }}</div></td>
+          <td data-label="Code"><code>ACTION:{{ action.id }}</code></td>
+          <td data-label="Status">{% if action.enabled %}<span class="badge bg-green text-green-fg">Enabled</span>{% else %}<span class="badge bg-secondary">Disabled</span>{% endif %}</td>
+          <td data-label="Mode">{{ action.execution_mode }}</td>
+          <td data-label="Cooldown">{{ action.cooldown_seconds }} s</td>
+          <td data-label="Executions">{{ counts.get(action.id, 0) }}</td>
+          <td data-label="Last result">{% if last %}<span class="badge {{ 'bg-green text-green-fg' if last.status == 'success' else 'bg-yellow text-yellow-fg' if last.status == 'ignored_cooldown' else 'bg-red text-red-fg' }}">{{ last.status }}</span><div class="text-secondary small">{{ last.created_at|localtime }}</div>{% else %}<span class="text-secondary">Never</span>{% endif %}</td>
         </tr>
       {% endfor %}
       {% if not actions %}
