@@ -340,6 +340,11 @@ def main() -> None:
                 firstPairSameRow: tops.length >= 2 && tops[0] === tops[1],
                 secondPairSameRow: tops.length >= 4 && tops[2] === tops[3],
                 secondRowBelow: tops.length >= 3 && tops[2] > tops[1],
+                filterRowsInline: Array.from(document.querySelectorAll('#items-filter-form > [class*=col-]')).every(field => {
+                    const label = field.querySelector('.form-label').getBoundingClientRect();
+                    const select = field.querySelector('.form-select').getBoundingClientRect();
+                    return Math.abs(label.top - select.top) < 2 && select.width < field.getBoundingClientRect().width && select.right <= field.getBoundingClientRect().right;
+                }),
                 searchIconSize: parseFloat(getComputedStyle(document.querySelector('#items-card .input-group-text .ti-search')).fontSize),
                 filterRadius: getComputedStyle(document.querySelector('#items-card > .card-header')).borderBottomLeftRadius
             };
@@ -349,6 +354,7 @@ def main() -> None:
         assert mobile_items["titleSize"] <= 18 and mobile_items["selectSize"] <= 12, mobile_items
         assert mobile_items["searchIconSize"] <= 14 and mobile_items["filterRadius"] != "0px", mobile_items
         assert mobile_items["firstPairSameRow"] and mobile_items["secondPairSameRow"] and mobile_items["secondRowBelow"], mobile_items
+        assert mobile_items["filterRowsInline"], mobile_items
         # Actions and Barcodes use compact card rows on the same phone width.
         page.goto(f"{BASE_URL}/actions", wait_until="domcontentloaded", timeout=20_000)
         page.locator(".actions-table").wait_for(state="visible", timeout=5_000)
