@@ -395,12 +395,24 @@ def main() -> None:
                 header: getComputedStyle(table.tHead).display,
                 body: getComputedStyle(rows).display,
                 rowRadius: row ? getComputedStyle(row).borderRadius : '',
+                bulkLayout: row && row.querySelector('.b2m-bulk-row') ? (() => {
+                    const box = row.querySelector('.b2m-bulk-row').getBoundingClientRect();
+                    const barcode = row.querySelector('[data-field="barcode"]').getBoundingClientRect();
+                    const rowBox = row.getBoundingClientRect();
+                    return {topDelta: Math.abs(box.top - barcode.top), rightInset: rowBox.right - box.right, size: box.width};
+                })() : null,
+                compactGap: parseFloat(getComputedStyle(rows).rowGap),
                 scrollWidth: document.documentElement.scrollWidth,
                 viewport: document.documentElement.clientWidth
             };
         }""")
         assert mobile_barcodes["header"] == "none" and mobile_barcodes["body"] == "grid", mobile_barcodes
         assert mobile_barcodes["rowRadius"] != "0px", mobile_barcodes
+        assert mobile_barcodes["compactGap"] <= 4, mobile_barcodes
+        if mobile_barcodes["bulkLayout"]:
+            assert mobile_barcodes["bulkLayout"]["topDelta"] <= 5, mobile_barcodes
+            assert 4 <= mobile_barcodes["bulkLayout"]["rightInset"] <= 24, mobile_barcodes
+            assert mobile_barcodes["bulkLayout"]["size"] <= 16, mobile_barcodes
         assert mobile_barcodes["scrollWidth"] <= mobile_barcodes["viewport"] + 1, mobile_barcodes
 
         page.set_viewport_size({"width": 1280, "height": 900})
