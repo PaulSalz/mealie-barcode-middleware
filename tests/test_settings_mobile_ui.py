@@ -145,12 +145,16 @@ def test_items_actions_and_barcodes_mobile_layouts_are_compact_and_rounded():
     assert "#barcodes-table > tbody { display: grid; gap: .3rem;" in css
 
 
-def test_items_mobile_filter_labels_and_selects_share_compact_rows():
+
+
+def test_barcode_shopping_list_multiselect_is_compact_on_mobile():
+    template = read("app/templates/barcode_detail.html")
     css = read("app/static/css/app.css")
     base = read("app/templates/base.html")
 
-    assert "app.css?v={{ v }}&rev=26" in base
-    assert '#items-filter-form > [class*="col-"] {' in css
-    assert "#items-filter-form .form-label {" in css
-    assert "flex: 0 1 69%;" in css
-    assert "height: 1.8rem;" in css
+    assert 'class="mt-2 barcode-target-shopping-lists"' in template
+    assert 'name="shopping_list_ids" multiple' in template
+    assert "app.css?v={{ v }}&rev=27" in base
+    assert ".barcode-target-shopping-lists {" in css
+    assert "grid-template-columns: minmax(7rem, .9fr) minmax(0, 1.6fr);" in css
+    assert "height: 5.2rem;" in css
