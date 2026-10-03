@@ -47,7 +47,7 @@ def test_settings_layout_has_mobile_navigation_and_user_cards():
     assert 'overflow-x: auto;' in css
     assert '.settings-users-table > tbody > tr:not(:has(td[colspan]))' in css
     assert '#b2m-printer-connection-card .card-body' in css
-    assert 'app.css?v={{ v }}&rev=25' in base
+    assert 'app.css?v={{ v }}&rev=26' in base
 
 
 def test_settings_dropdown_and_printer_panel_are_scoped_to_printer_tab():
@@ -143,3 +143,14 @@ def test_items_actions_and_barcodes_mobile_layouts_are_compact_and_rounded():
     assert "#items-table-container {" in css and "border-radius: var(--tblr-border-radius);" in css
     assert ".actions-table > tbody > tr:not(:has(td[colspan])) {" in css
     assert "#barcodes-table > tbody { display: grid; gap: .3rem;" in css
+
+
+def test_items_mobile_filter_labels_and_selects_share_compact_rows():
+    css = read("app/static/css/app.css")
+    base = read("app/templates/base.html")
+
+    assert "app.css?v={{ v }}&rev=26" in base
+    assert '#items-filter-form > [class*="col-"] {' in css
+    assert "#items-filter-form .form-label {" in css
+    assert "flex: 0 1 69%;" in css
+    assert "height: 1.8rem;" in css
