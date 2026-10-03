@@ -145,3 +145,14 @@ def test_items_actions_and_barcodes_mobile_layouts_are_compact_and_rounded():
     assert "#barcodes-table > tbody { display: grid; gap: .3rem;" in css
 
 
+
+
+def test_mobile_item_bulk_checkbox_is_pinned_to_item_title_row():
+    css = read("app/static/css/app.css")
+    base = read("app/templates/base.html")
+
+    assert "app.css?v={{ v }}&rev=28" in base
+    assert "#items-table > tbody > tr:not(.items-empty-row) > td.b2m-bulk-col {" in css
+    assert "top: .48rem;" in css and "right: .4rem;" in css
+    assert "#items-table > tbody > tr:not(.items-empty-row) > td.sort-name {" in css
+    assert "#items-table .b2m-bulk-row {" in css
