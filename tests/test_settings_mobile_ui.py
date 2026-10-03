@@ -111,7 +111,7 @@ def test_mobile_shopping_print_labels_use_full_width_and_do_not_wrap_early():
     css = read("app/static/css/app.css")
     base = read("app/templates/base.html")
 
-    assert "app.css?v={{ v }}&rev=23" in base
+    assert "app.css?v={{ v }}&rev=24" in base
     assert ".shopping-print-page-header > .row > .col-auto.btn-list" in css
     print_buttons = css.split(".shopping-print-page-header .btn {", 1)[1].split("}", 1)[0]
     assert "white-space: nowrap;" in print_buttons
