@@ -308,7 +308,7 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    white-space: normal;
+    white-space: nowrap;
   }
   .b2m-dashboard-shopping .card-actions {
     display: none;
@@ -519,8 +519,24 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   .label-page-header .btn-list { display: flex; flex-wrap: wrap; gap: .35rem; }
   .label-page-header .btn { padding: .4rem .55rem; font-size: .8rem; }
 
-  .shopping-print-page-header .btn-list { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .4rem; }
-  .shopping-print-page-header .btn { min-width: 0; padding: .45rem .55rem; font-size: .82rem; }
+  .shopping-print-page-header > .row > .col {
+    flex: 0 0 100%;
+    width: 100%;
+  }
+  .shopping-print-page-header > .row > .col-auto.btn-list {
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: 100%;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .4rem;
+  }
+  .shopping-print-page-header .btn {
+    min-width: 0;
+    padding: .45rem .55rem;
+    font-size: .82rem;
+    white-space: nowrap;
+  }
   .shopping-print-layout { --tblr-gutter-y: .5rem; }
   .shopping-print-layout > [class*="col-"] { min-width: 0; }
   .shopping-print-layout .card { margin-bottom: .5rem !important; }
