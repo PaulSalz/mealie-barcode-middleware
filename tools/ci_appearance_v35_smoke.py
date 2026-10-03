@@ -117,6 +117,34 @@ def main() -> None:
 
         html = page.locator("html")
 
+        def assert_saved_background_after_load() -> None:
+            state = page.evaluate("""() => {
+                const root = document.documentElement;
+                const input = document.querySelector('input[name="theme_base"]:checked');
+                const swatch = input && input.nextElementSibling;
+                const expectedHex = root.getAttribute('data-bs-theme') === 'dark'
+                    ? swatch.dataset.b2mSwatchDark
+                    : swatch.dataset.b2mSwatchLight;
+                const n = parseInt(expectedHex.slice(1), 16);
+                const expected = 'rgb(' + ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ')';
+                return {
+                    base: input.value,
+                    rootBase: root.getAttribute('data-b2m-base'),
+                    expected,
+                    swatch: getComputedStyle(swatch).backgroundColor,
+                    page: getComputedStyle(document.body).backgroundColor
+                };
+            }""")
+            assert state["rootBase"] == state["base"], state
+            assert state["swatch"] == state["expected"], state
+            assert state["page"] == state["expected"], state
+
+        # Saved colors must be restored at first paint and remain after F5.
+        assert_saved_background_after_load()
+        page.reload(wait_until="domcontentloaded")
+        page.locator("#appearance-v35-form").wait_for(state="visible", timeout=5_000)
+        assert_saved_background_after_load()
+
         # Background: must take over synchronously on the same change event.
         before_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
         page.locator('input[name="theme_base"][value="stone"]').check(force=True)

@@ -151,6 +151,16 @@
     if (persistedTheme) persistedTheme.disabled = true;
   }
 
+  function syncBaseSwatches(mode) {
+    document.querySelectorAll('.b2m-base-swatch').forEach(function (swatch) {
+      var color = mode === 'dark' ? swatch.dataset.b2mSwatchDark : swatch.dataset.b2mSwatchLight;
+      if (color) {
+        swatch.style.setProperty('background-color', color, 'important');
+        swatch.style.setProperty('background-image', 'none', 'important');
+      }
+    });
+  }
+
   function applyState(state) {
     startLivePreview();
     root.setAttribute('data-bs-theme', state.mode);
@@ -162,13 +172,7 @@
     root.dataset.b2mFontSize = state.font_size;
     root.dataset.b2mEpaper = state.epaper;
 
-    document.querySelectorAll('.b2m-base-swatch').forEach(function (swatch) {
-      var color = state.mode === 'dark' ? swatch.dataset.b2mSwatchDark : swatch.dataset.b2mSwatchLight;
-      if (color) {
-        swatch.style.setProperty('background-color', color, 'important');
-        swatch.style.setProperty('background-image', 'none', 'important');
-      }
-    });
+    syncBaseSwatches(state.mode);
 
     var mono = state.epaper === 'true';
     root.classList.toggle('b2m-epaper-v9', mono);
@@ -204,6 +208,13 @@
   });
   form.addEventListener('change', function (event) {
     if (isAppearanceField(event.target)) applyForm();
+  });
+
+  // Keep the swatches filled on first paint and after history restoration.
+  // Applying the whole form here would overwrite unrelated page state.
+  syncBaseSwatches(readState().mode);
+  window.addEventListener('pageshow', function () {
+    syncBaseSwatches(readState().mode);
   });
 
   form.addEventListener('submit', function (event) {
