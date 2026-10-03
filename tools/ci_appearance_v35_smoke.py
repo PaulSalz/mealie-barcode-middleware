@@ -396,6 +396,9 @@ def main() -> None:
                 body: getComputedStyle(rows).display,
                 rowRadius: row ? getComputedStyle(row).borderRadius : '',
                 rowOverflow: row ? getComputedStyle(row).overflow : '',
+                searchHeaderRadius: getComputedStyle(document.querySelector('.barcodes-list-card > .card-header')).borderTopLeftRadius,
+                listContainerRadius: getComputedStyle(document.getElementById('barcodes-table-container')).borderTopLeftRadius,
+                listContainerOverflow: getComputedStyle(document.getElementById('barcodes-table-container')).overflow,
                 bulkLayout: row && row.querySelector('.b2m-bulk-row') ? (() => {
                     const box = row.querySelector('.b2m-bulk-row').getBoundingClientRect();
                     const barcode = row.querySelector('[data-field="barcode"]').getBoundingClientRect();
@@ -410,6 +413,9 @@ def main() -> None:
         assert mobile_barcodes["header"] == "none" and mobile_barcodes["body"] == "grid", mobile_barcodes
         assert mobile_barcodes["rowRadius"] != "0px", mobile_barcodes
         assert mobile_barcodes["rowOverflow"] == "hidden", mobile_barcodes
+        assert mobile_barcodes["searchHeaderRadius"] != "0px", mobile_barcodes
+        assert mobile_barcodes["listContainerRadius"] != "0px", mobile_barcodes
+        assert mobile_barcodes["listContainerOverflow"] == "hidden", mobile_barcodes
         assert mobile_barcodes["compactGap"] <= 4, mobile_barcodes
         if mobile_barcodes["bulkLayout"]:
             assert mobile_barcodes["bulkLayout"]["topDelta"] <= 5, mobile_barcodes
