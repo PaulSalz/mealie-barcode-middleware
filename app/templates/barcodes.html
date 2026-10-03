@@ -2,7 +2,7 @@
 {% block title %}Barcodes — Mealie Barcode Middleware{% endblock %}
 
 {% block content %}
-<div class="page-header d-print-none mb-3">
+<div class="page-header d-print-none mb-3 barcodes-page-header">
   <div class="row g-2 align-items-center">
     <div class="col"><h2 class="page-title">Barcodes</h2></div>
     <div class="col-auto btn-list">
@@ -24,14 +24,14 @@
   </form></div></div>
 </div>
 
-<div class="card-tabs">
+<div class="card-tabs barcodes-tabs">
     <ul class="nav nav-tabs" role="tablist">
         <li class="nav-item"><a class="nav-link {{ 'active' if current_status == 'all' }}" href="/barcodes?status=all">All</a></li>
         <li class="nav-item"><a class="nav-link {{ 'active' if current_status == 'mapped' }}" href="/barcodes?status=mapped">Linked</a></li>
         <li class="nav-item"><a class="nav-link {{ 'active' if current_status == 'pending' }}" href="/barcodes?status=pending">Pending</a></li>
         <li class="nav-item"><a class="nav-link {{ 'active' if current_status == 'unknown' }}" href="/barcodes?status=unknown">Unknown</a></li>
     </ul>
-    <div class="tab-content"><div class="card active show" role="tabpanel">
+    <div class="tab-content"><div class="card active show barcodes-list-card" role="tabpanel">
         <div class="card-header"><div class="row w-100"><div class="col"><h3 class="card-title mb-0" id="barcodes-count">{{ items|length }} barcode{{ 's' if items|length != 1 }}</h3></div><div class="col-md-auto col-sm-12"><div class="input-group input-group-flat w-auto"><span class="input-group-text"><i class="ti ti-search icon"></i></span><input id="barcodes-table-search" type="text" class="form-control" placeholder="Filter…" autocomplete="off"></div></div></div></div>
         <div id="barcodes-table-container"><div class="table-responsive"><table class="table table-vcenter card-table table-hover" id="barcodes-table">
             <thead><tr><th><button class="table-sort d-flex justify-content-between" data-sort="sort-barcode">Barcode</button></th><th><button class="table-sort d-flex justify-content-between" data-sort="sort-status">Status</button></th><th><button class="table-sort d-flex justify-content-between" data-sort="sort-title">Title</button></th><th><button class="table-sort d-flex justify-content-between" data-sort="sort-brand">Brand</button></th>{% if current_status not in ('pending', 'unknown') %}<th><button class="table-sort d-flex justify-content-between" data-sort="sort-mapped">Linked To</button></th>{% endif %}<th><button class="table-sort d-flex justify-content-between" data-sort="sort-source">Source</button></th><th><button class="table-sort d-flex justify-content-between active desc" data-sort="sort-scanned">Created</button></th></tr></thead>

@@ -47,7 +47,7 @@ def test_settings_layout_has_mobile_navigation_and_user_cards():
     assert 'overflow-x: auto;' in css
     assert '.settings-users-table > tbody > tr:not(:has(td[colspan]))' in css
     assert '#b2m-printer-connection-card .card-body' in css
-    assert 'app.css?v={{ v }}&rev=26' in base
+    assert 'app.css?v={{ v }}&rev=29' in base
 
 
 def test_settings_dropdown_and_printer_panel_are_scoped_to_printer_tab():
@@ -111,7 +111,7 @@ def test_mobile_shopping_print_labels_use_full_width_and_do_not_wrap_early():
     css = read("app/static/css/app.css")
     base = read("app/templates/base.html")
 
-    assert "app.css?v={{ v }}&rev=25" in base
+    assert "app.css?v={{ v }}&rev=29" in base
     assert ".shopping-print-page-header > .row > .col-auto.btn-list" in css
     print_buttons = css.split(".shopping-print-page-header .btn {", 1)[1].split("}", 1)[0]
     assert "white-space: nowrap;" in print_buttons
@@ -124,7 +124,7 @@ def test_items_table_has_mobile_labels_and_compact_rules():
     css = read("app/static/css/app.css")
     base = read("app/templates/base.html")
 
-    assert "app.css?v={{ v }}&rev=25" in base
+    assert "app.css?v={{ v }}&rev=29" in base
     for label in ("Item", "Category", "Source", "Barcodes", "Scans", "Last scan", "Updated"):
         assert f'data-label="{label}"' in template
     assert "#items-table > thead { display: none; }" in css
@@ -142,7 +142,7 @@ def test_items_actions_and_barcodes_mobile_layouts_are_compact_and_rounded():
     assert "#items-card > .card-header {" in css and "border-radius: var(--tblr-border-radius);" in css
     assert "#items-table-container {" in css and "border-radius: var(--tblr-border-radius);" in css
     assert ".actions-table > tbody > tr:not(:has(td[colspan])) {" in css
-    assert "#barcodes-table > tbody { display: grid; gap: .3rem;" in css
+    assert "#barcodes-table > tbody { display: grid; gap: .22rem; padding: .22rem;" in css
 
 
 
@@ -151,8 +151,22 @@ def test_mobile_item_bulk_checkbox_is_pinned_to_item_title_row():
     css = read("app/static/css/app.css")
     base = read("app/templates/base.html")
 
-    assert "app.css?v={{ v }}&rev=28" in base
+    assert "app.css?v={{ v }}&rev=29" in base
     assert "#items-table > tbody > tr:not(.items-empty-row) > td.b2m-bulk-col {" in css
     assert "top: .48rem;" in css and "right: .4rem;" in css
     assert "#items-table > tbody > tr:not(.items-empty-row) > td.sort-name {" in css
     assert "#items-table .b2m-bulk-row {" in css
+
+
+def test_mobile_barcode_bulk_checkbox_is_right_aligned_and_page_is_compact():
+    css = read("app/static/css/app.css")
+    base = read("app/templates/base.html")
+    template = read("app/templates/barcodes.html")
+
+    assert "app.css?v={{ v }}&rev=29" in base
+    assert "barcodes-page-header" in template
+    assert "barcodes-list-card" in template
+    assert '#barcodes-table > tbody > tr:not(.barcodes-empty-row) > td.b2m-bulk-col {' in css
+    assert "top: .28rem;" in css and "right: .32rem;" in css
+    assert "#barcodes-table > tbody { display: grid; gap: .22rem;" in css
+    assert "font-size: .67rem;" in css

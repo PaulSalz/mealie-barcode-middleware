@@ -458,6 +458,32 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   .items-page-header .page-title { font-size: 1.1rem; }
   .items-page-header > .row > .col-auto { margin-left: auto; }
   .items-page-header .btn { padding: .35rem .55rem; font-size: .78rem; }
+  .barcodes-page-header > .row { align-items: center !important; }
+  .barcodes-page-header .page-title { font-size: 1.1rem; }
+  .barcodes-page-header > .row > .col-auto.btn-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: .3rem;
+  }
+  .barcodes-page-header .btn {
+    min-width: 0;
+    padding: .32rem .4rem;
+    font-size: .72rem;
+    white-space: nowrap;
+  }
+  .barcodes-page-header .b2m-bulk-toolbar {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    gap: .3rem;
+    margin-left: 0 !important;
+  }
+  .barcodes-page-header .b2m-bulk-toolbar .btn { padding: .3rem .42rem; font-size: .7rem; }
+  .barcodes-tabs > .nav-tabs .nav-link { padding: .4rem .5rem; font-size: .76rem; }
+  .barcodes-list-card > .card-header { padding: .45rem .55rem; }
+  .barcodes-list-card > .card-header .input-group { width: 100% !important; }
+  .barcodes-list-card > .card-header .form-control { min-width: 0; height: 1.9rem; padding: .25rem .4rem; font-size: .74rem; }
+  .barcodes-list-card > .card-header .input-group-text { padding: .25rem .35rem; }
 
   #items-card > .card-header {
     margin: .35rem .35rem 0;
@@ -566,25 +592,41 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   #barcodes-table-container .table-responsive { overflow: visible; }
   #barcodes-table { display: block; width: 100%; }
   #barcodes-table > thead { display: none; }
-  #barcodes-table > tbody { display: grid; gap: .3rem; padding: .3rem; }
+  #barcodes-table > tbody { display: grid; gap: .22rem; padding: .22rem; }
   #barcodes-table > tbody > tr:not(.barcodes-empty-row) {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
-    gap: .1rem .3rem;
-    padding: .28rem;
+    gap: .08rem .22rem;
+    padding: .22rem;
     border: 2px solid var(--tblr-secondary);
     border-radius: var(--tblr-border-radius);
     background: var(--tblr-bg-surface);
   }
+  #barcodes-table > tbody > tr:not(.barcodes-empty-row) > td.b2m-bulk-col {
+    position: absolute;
+    top: .28rem;
+    right: .32rem;
+    z-index: 2;
+    display: block;
+    width: .95rem;
+    min-width: .95rem;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+  #barcodes-table > tbody > tr:not(.barcodes-empty-row) > td.b2m-bulk-col::before { content: none; }
+  #barcodes-table .b2m-bulk-row { display: block; width: .95rem; height: .95rem; margin: 0; }
+  #barcodes-table td[data-field="barcode"] { padding-right: 1.35rem; }
   #barcodes-table > tbody > tr:not(.barcodes-empty-row) > td {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     min-width: 0;
-    padding: .16rem .2rem;
+    padding: .12rem .16rem;
     border: 0;
-    font-size: .7rem;
+    font-size: .67rem;
     line-height: 1.2;
     white-space: normal;
     overflow-wrap: anywhere;
@@ -593,7 +635,7 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     content: attr(data-label);
     margin-bottom: .05rem;
     color: var(--tblr-secondary);
-    font-size: .58rem;
+    font-size: .55rem;
     font-weight: 700;
     line-height: 1.1;
     text-transform: uppercase;
@@ -603,7 +645,7 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
   #barcodes-table td[data-field="title"],
   #barcodes-table td[data-field="mapped"],
   #barcodes-table td[data-field="created"] { grid-column: 1 / -1; }
-  #barcodes-table td[data-field="barcode"] code { font-size: .78rem; overflow-wrap: anywhere; }
+  #barcodes-table td[data-field="barcode"] code { font-size: .72rem; overflow-wrap: anywhere; }
   #barcodes-table > tbody > tr.barcodes-empty-row { display: block; }
   #barcodes-table > tbody > tr.barcodes-empty-row > td { display: block; }
   #barcodes-table > tbody > tr.barcodes-empty-row > td::before { content: none; }
