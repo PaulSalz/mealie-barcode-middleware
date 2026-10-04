@@ -113,7 +113,7 @@ def test_mobile_shopping_print_settings_are_compact_and_selectable():
     css = read("app/static/css/shopping-print.css")
     script = read("app/static/js/shopping-print-v2.js")
 
-    assert "shopping-print.css?v={{ v }}&rev=6" in template
+    assert "shopping-print.css?v={{ v }}&rev=7" in template
     assert "shopping-print-v2.js?v={{ v }}&rev=2" in template
     assert 'id="shopping-print-mobile-section"' in template
     for section in ("route", "overrides", "local", "receipt"):
