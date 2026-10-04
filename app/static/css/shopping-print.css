@@ -188,18 +188,50 @@ html.b2m-epaper-v9 #shopping-print-canvas {
   .shopping-print-list-card { order: 0; margin: 0 !important; }
   .shopping-print-preview-card { order: 1; margin: 0 !important; }
   .shopping-print-mobile-settings-selector {
+    position: relative;
     order: 2;
-    padding: .5rem .6rem;
-    border: 1px solid var(--tblr-border-color);
+    overflow: hidden;
+    padding: .6rem .7rem .6rem .85rem;
+    border: 1px solid rgba(var(--tblr-primary-rgb), .5);
     border-radius: var(--tblr-border-radius);
-    background: var(--tblr-card-bg);
+    background: rgba(var(--tblr-primary-rgb), .065);
+    box-shadow: 0 .15rem .5rem rgba(var(--tblr-primary-rgb), .09);
   }
-  .shopping-print-mobile-settings-selector .form-label { margin-bottom: .2rem; font-size: .68rem; }
+  .shopping-print-mobile-settings-selector::before {
+    position: absolute;
+    top: .35rem;
+    bottom: .35rem;
+    left: 0;
+    width: 3px;
+    border-radius: 0 var(--tblr-border-radius) var(--tblr-border-radius) 0;
+    background: var(--tblr-primary);
+    content: "";
+  }
+  .shopping-print-settings-label {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    margin-bottom: .3rem;
+    color: var(--tblr-primary);
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .035em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+  .shopping-print-settings-label .icon { width: .95rem; height: .95rem; }
   .shopping-print-mobile-settings-selector .form-select {
-    min-height: 2rem;
-    height: 2rem;
-    padding: .25rem 1.6rem .25rem .45rem;
+    min-height: 2.05rem;
+    height: 2.05rem;
+    padding: .25rem 1.6rem .25rem .5rem;
+    border-color: rgba(var(--tblr-primary-rgb), .38);
+    background-color: var(--tblr-bg-surface);
     font-size: .78rem;
+    font-weight: 600;
+  }
+  .shopping-print-mobile-settings-selector .form-select:focus {
+    border-color: var(--tblr-primary);
+    box-shadow: 0 0 0 .15rem rgba(var(--tblr-primary-rgb), .15);
   }
   .shopping-print-config-panels { display: contents; }
   .shopping-print-config-panel { order: 3; min-width: 0; margin: 0 !important; }
