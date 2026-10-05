@@ -178,7 +178,9 @@
         if(!barcode||!targetForms.length)return;var list=document.querySelector('.page-header .btn-list');if(!list||document.getElementById('barcode-test-send'))return;
         var result=document.createElement('span');result.id='barcode-test-result';result.className='small text-secondary align-self-center';
         var button=document.createElement('button');button.type='button';button.id='barcode-test-send';button.className='btn btn-outline-primary';button.innerHTML='<i class="ti ti-send icon"></i> Test send';
-        list.insertBefore(result,list.firstChild);list.insertBefore(button,result);
+        var deleteForm=document.getElementById('barcode-delete-form');
+        if(deleteForm&&deleteForm.parentNode===list){list.insertBefore(button,deleteForm);list.insertBefore(result,deleteForm.nextSibling);}
+        else{list.insertBefore(result,list.firstChild);list.insertBefore(button,result);}
         button.addEventListener('click',async function(){
             var old=button.innerHTML;button.disabled=true;result.className='small text-secondary align-self-center';result.textContent='Sending…';
             try{var response=await fetch('/api/barcodes/'+encodeURIComponent(barcode)+'/test-route',{method:'POST',headers:{'Accept':'application/json'}});var data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||data.result||'Test send failed');button.className='btn btn-success';button.innerHTML='<i class="ti ti-check icon"></i> Sent';result.className='small text-success align-self-center';result.textContent='OK · '+data.duration_ms+' ms · '+data.success_count+'/'+data.target_count;setTimeout(function(){button.className='btn btn-outline-primary';button.innerHTML=old;button.disabled=false;},2200);}
