@@ -1139,3 +1139,30 @@ html[data-bs-theme="dark"] .b2m-base-swatch {
 .shopping-print-config-panel {
   overflow: hidden;
 }
+
+
+/* Match the lower inner surfaces to the active radius, including nested forms
+   and table footers that cannot inherit clipping from the outer card alone. */
+.barcode-detail-page-header ~ .row .card,
+.barcodes-list-card,
+#barcodes-table-container,
+.shopping-print-list-card,
+.shopping-print-config-panel {
+  overflow: hidden !important;
+}
+#barcodes-table-container {
+  border-radius: var(--tblr-border-radius) !important;
+}
+.barcode-detail-page-header ~ .row .card > .card-footer:last-child,
+.barcode-detail-page-header ~ .row .card > .card-body:last-child,
+.barcode-detail-page-header ~ .row .card > form > .card-body:last-child,
+.barcode-detail-page-header ~ .row .card > form > .card-footer:last-child,
+.barcodes-list-card > .card-footer:last-child,
+.shopping-print-config-panel > .card-footer:last-child,
+.shopping-print-list-card > .card-footer:last-child {
+  border-bottom-left-radius: var(--tblr-border-radius) !important;
+  border-bottom-right-radius: var(--tblr-border-radius) !important;
+}
+.shopping-print-config-panel .list-group-flush > .list-group-item {
+  border-radius: 0 !important;
+}
