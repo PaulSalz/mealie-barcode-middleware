@@ -1200,7 +1200,7 @@ html body .barcodes-list-card > .card-header:first-child {
   border-radius: 0 !important;
   margin: 0 !important;
 }
-html body .barcodes-list-card > .card-footer {
+html body #barcodes-table-container > .card-footer {
   background-color: var(--b2m-v35-surface-secondary, var(--tblr-bg-surface-secondary)) !important;
   border-radius: 0 0 var(--tblr-border-radius) var(--tblr-border-radius) !important;
   margin: 0 !important;
