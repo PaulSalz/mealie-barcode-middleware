@@ -1218,3 +1218,13 @@ html body #barcodes-table {
   background: transparent !important;
   border-radius: 0 !important;
 }
+
+/* Keep the Appearance Display card's footer gray surface aligned with the
+   card's selected lower radius. */
+html body #appearance-display-card {
+  overflow: hidden !important;
+}
+html body #appearance-display-card > .card-footer:last-child {
+  border-bottom-left-radius: var(--tblr-border-radius) !important;
+  border-bottom-right-radius: var(--tblr-border-radius) !important;
+}
