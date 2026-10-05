@@ -1191,7 +1191,7 @@ html body #barcodes-table-container {
 /* Keep the barcode list's search/header and table as one continuous gray
    surface. The outer card keeps its radius; inner bands and table cells do not. */
 html body .barcodes-list-card,
-html body .barcodes-list-card > .card-header,
+html body .barcodes-list-card > .card-header:first-child,
 html body .barcodes-list-card > .card-footer,
 html body #barcodes-table-container,
 html body #barcodes-table-container .table-responsive,
