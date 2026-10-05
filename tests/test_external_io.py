@@ -159,3 +159,41 @@ def test_barcode_food_search_combines_and_ranks_live_and_local_results(monkeypat
     assert results[0]["name"] == "Mozzarella"
     assert results[0]["score"] == 91
     assert results[0]["default_unit_id"] == "unit-current"
+
+
+def test_barcode_food_search_prefers_full_name_starting_with_partial_query(monkeypatch):
+    from app.routers import barcodes
+
+    monkeypatch.setattr(
+        barcodes,
+        "fuzzy_match",
+        lambda _query, _brand, _db: [
+            {
+                "item_id": "food-orange",
+                "item_name": "Orange",
+                "source": "mealie",
+                "score": 100,
+                "exact": False,
+            },
+            {
+                "item_id": "food-orange-juice",
+                "item_name": "Orangensaft",
+                "source": "mealie",
+                "score": 96,
+                "exact": False,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        barcodes,
+        "search_foods",
+        lambda _query, limit: [
+            {"id": "food-orange", "name": "Orange", "score": 100, "exact": False},
+            {"id": "food-orange-juice", "name": "Orangensaft", "score": 96, "exact": False},
+        ],
+    )
+
+    results = barcodes.barcodes_search(q="orangensaf", db=None)
+
+    assert results[0]["id"] == "food-orange-juice"
+    assert results[1]["id"] == "food-orange"

@@ -476,10 +476,12 @@ def barcodes_search(q: str = Query(default=""), db: Session = Depends(get_db)):
             }
         results_by_id[key] = result
 
+    query_prefix = " ".join(q.casefold().split())
     ranked = sorted(
         results_by_id.values(),
         key=lambda result: (
             not bool(result.get("exact")),
+            not " ".join(str(result.get("name") or "").casefold().split()).startswith(query_prefix),
             -int(result.get("score") or 0),
             str(result.get("name") or "").casefold(),
         ),
