@@ -449,15 +449,42 @@ def barcodes_search(q: str = Query(default=""), db: Session = Depends(get_db)):
     q = q.strip()
     if not q:
         return []
+    # Combine Mealie's live search with the local fuzzy catalog. Mealie's
+    # server-side search can omit useful partial matches until more of the name
+    # is typed, while the local catalog can rank aliases and near matches.
+    results_by_id = {}
+    for row in fuzzy_match(q, None, db):
+        result = {
+            "id": row["item_id"], "name": row["item_name"], "source": row["source"],
+            "score": row["score"], "exact": row.get("exact", False),
+            "default_unit_id": row.get("default_unit_id"), "default_unit_name": row.get("default_unit_name"),
+        }
+        results_by_id[str(result["id"])] = result
+
     live_results = search_foods(q, limit=100)
-    if live_results is not None:
-        return live_results[:6]
-    # Keep search usable from the local catalog when Mealie is temporarily offline.
-    return [{
-        "id": row["item_id"], "name": row["item_name"], "source": row["source"],
-        "score": row["score"], "exact": row.get("exact", False),
-        "default_unit_id": row.get("default_unit_id"), "default_unit_name": row.get("default_unit_name"),
-    } for row in fuzzy_match(q, None, db)[:6]]
+    for result in live_results or []:
+        key = str(result["id"])
+        local = results_by_id.get(key)
+        if local:
+            # Prefer current Mealie names and units, but retain the strongest
+            # score found by either search and any exact match.
+            result = {
+                **local,
+                **result,
+                "score": max(int(local.get("score") or 0), int(result.get("score") or 0)),
+                "exact": bool(local.get("exact")) or bool(result.get("exact")),
+            }
+        results_by_id[key] = result
+
+    ranked = sorted(
+        results_by_id.values(),
+        key=lambda result: (
+            not bool(result.get("exact")),
+            -int(result.get("score") or 0),
+            str(result.get("name") or "").casefold(),
+        ),
+    )
+    return ranked[:6]
 
 
 @router.get("/recipes-search")
