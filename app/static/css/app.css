@@ -1188,22 +1188,33 @@ html body #barcodes-table-container {
 }
 
 
-/* Keep the barcode list's search/header and table as one continuous gray
-   surface. The outer card keeps its radius; inner bands and table cells do not. */
-html body .barcodes-list-card,
-html body .barcodes-list-card > .card-header:first-child,
-html body .barcodes-list-card > .card-footer,
-html body #barcodes-table-container,
-html body #barcodes-table-container .table-responsive,
-html body #barcodes-table,
-html body #barcodes-table > :not(caption) > * > * {
+/* Keep the search band square at the top while the card and white table
+   surface share the same selected radius along the bottom edge. */
+html body .barcodes-list-card {
+  background-color: var(--b2m-v35-surface-secondary, var(--tblr-bg-surface-secondary)) !important;
+  border-radius: var(--tblr-border-radius) !important;
+  overflow: hidden !important;
+}
+html body .barcodes-list-card > .card-header:first-child {
   background-color: var(--b2m-v35-surface-secondary, var(--tblr-bg-surface-secondary)) !important;
   border-radius: 0 !important;
+  margin: 0 !important;
 }
-html body .barcodes-list-card > .card-header,
 html body .barcodes-list-card > .card-footer {
+  background-color: var(--b2m-v35-surface-secondary, var(--tblr-bg-surface-secondary)) !important;
+  border-radius: 0 0 var(--tblr-border-radius) var(--tblr-border-radius) !important;
   margin: 0 !important;
 }
 html body #barcodes-table-container {
+  background-color: var(--b2m-v35-surface-bg, var(--tblr-bg-surface)) !important;
+  background-clip: padding-box !important;
   border: 0 !important;
+  border-radius: 0 0 var(--tblr-border-radius) var(--tblr-border-radius) !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+html body #barcodes-table-container .table-responsive,
+html body #barcodes-table {
+  background: transparent !important;
+  border-radius: 0 !important;
 }
