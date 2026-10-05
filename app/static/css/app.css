@@ -1136,7 +1136,6 @@ html[data-bs-theme="dark"] .b2m-base-swatch {
 .barcode-detail-page-header ~ .row .card,
 .barcodes-list-card,
 .shopping-print-list-card,
-.shopping-print-config-panel,
-.shopping-print-preview-card {
+.shopping-print-config-panel {
   overflow: hidden;
 }
