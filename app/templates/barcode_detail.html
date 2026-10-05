@@ -29,7 +29,7 @@
 {% block content %}
 <div class="page-header d-print-none mb-3 barcode-detail-page-header"><div class="row g-2 align-items-center">
   <div class="col"><div class="page-pretitle">Barcode <code>{{ cached.barcode if cached else '' }}</code></div><h2 class="page-title">{{ cached.display_title if cached and cached.display_title else ('Not Found' if not cached else 'Unknown product') }}</h2></div>
-  <div class="col-auto ms-auto btn-list">{% if cached %}<a href="/labels?code={{ cached.barcode|urlencode }}" class="btn btn-outline-primary"><i class="ti ti-qrcode icon"></i> Generate code</a>{% endif %}{% if next_unmapped %}<a href="/barcodes/{{ next_unmapped.barcode|urlencode }}" class="btn btn-outline-primary">Next unmapped →</a>{% endif %}</div>
+  <div class="col-auto ms-auto btn-list">{% if cached %}<a href="/labels?code={{ cached.barcode|urlencode }}" class="btn btn-outline-primary"><i class="ti ti-qrcode icon"></i> Generate code</a>{% endif %}{% if next_unmapped %}<a href="/barcodes/{{ next_unmapped.barcode|urlencode }}" class="btn btn-outline-primary">Next unmapped →</a>{% endif %}{% if cached %}<form id="barcode-delete-form" class="d-inline" method="post" action="/barcodes/{{ cached.barcode|urlencode }}/delete" data-confirm="Delete barcode {{ cached.barcode }}?"><button id="barcode-delete-button" type="submit" class="btn btn-outline-danger"><i class="ti ti-trash icon"></i> Delete barcode</button></form>{% endif %}</div>
 </div></div>
 
 {% if not cached %}<div class="alert alert-warning">This barcode is not in the cache.</div>{% else %}
@@ -56,7 +56,6 @@
   <div class="datagrid-item"><div class="datagrid-title">Found in product DB</div><div class="datagrid-content">{% if cached.found %}<span class="badge bg-green text-green-fg">Yes</span>{% else %}<span class="badge bg-red text-red-fg">No</span>{% endif %}</div></div>
   <div class="datagrid-item"><div class="datagrid-title">Last lookup</div><div class="datagrid-content" title="{{ cached.lookup_attempted_at|localtime }}">{{ cached.lookup_attempted_at|relative_time if cached.lookup_attempted_at else 'Never' }}</div></div>
 </div></div><div class="card-footer d-flex justify-content-between gap-2 flex-wrap"><div class="btn-list">{% if cached.barcode.isdigit() %}<button formaction="/barcodes/{{ cached.barcode|urlencode }}/refresh-lookup" class="btn btn-outline-warning" id="refresh-product-lookup"><i class="ti ti-refresh icon"></i> Re-run lookup & clear overrides</button>{% endif %}</div><button class="btn btn-primary" type="submit"><i class="ti ti-device-floppy icon"></i> Save metadata</button></div></form>
-<div class="card-footer text-end"><form method="post" action="/barcodes/{{ cached.barcode|urlencode }}/delete" data-confirm="Delete barcode {{ cached.barcode }}?"><button type="submit" class="btn btn-outline-danger"><i class="ti ti-trash icon"></i> Delete barcode</button></form></div>
 </div></div>
 
 <div class="col-lg-5"><div class="card h-100"><div class="card-header"><div><h3 class="card-title">Current targets <span class="text-secondary">({{ targets|length }})</span></h3><p class="card-subtitle">One scan executes every enabled target below.</p></div></div><div class="card-body p-0">
