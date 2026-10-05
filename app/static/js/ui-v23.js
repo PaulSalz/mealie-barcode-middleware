@@ -92,7 +92,7 @@
 
   function boot(){
     installBrand();
-    fetch('/api/access/me',{headers:{Accept:'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(access){if(!access)return;addPersonalAppearanceLink(access);enforceUiPermissions(access);installPermissionEditor(access).catch(function(){});installStorageOverview(access).catch(function(){});}).catch(function(){});
+    fetch('/api/access/me',{headers:{Accept:'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(access){if(!access)return;addPersonalAppearanceLink(access);enforceUiPermissions(access);installStorageOverview(access).catch(function(){});}).catch(function(){});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
