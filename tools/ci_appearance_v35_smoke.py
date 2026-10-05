@@ -111,6 +111,15 @@ def main() -> None:
         page.goto(f"{BASE_URL}/profile/appearance", wait_until="domcontentloaded", timeout=20_000)
         form = page.locator("#appearance-v35-form")
         form.wait_for(state="visible", timeout=5_000)
+        display_card = page.locator("#appearance-display-card")
+        display_radius = display_card.evaluate("""card => ({
+            card: getComputedStyle(card).borderBottomLeftRadius,
+            footer: getComputedStyle(card.querySelector(':scope > .card-footer')).borderBottomLeftRadius,
+            overflow: getComputedStyle(card).overflow
+        })""")
+        assert display_radius["card"] != "0px", display_radius
+        assert display_radius["footer"] == display_radius["card"], display_radius
+        assert display_radius["overflow"] == "hidden", display_radius
         assert page.locator('input[name="theme_color"]').count() == 0
         assert page.locator('input[name="theme_logo_color"][value="rainbow"]').count() == 1
         assert page.locator('input[name="theme_button_color"][value="rainbow"]').count() == 0
