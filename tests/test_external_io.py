@@ -108,3 +108,54 @@ def test_live_mealie_food_search_returns_ranked_matches_and_units(monkeypatch):
     assert results[0]["score"] == 100
     assert results[0]["default_unit_id"] == "unit-g"
     assert results[0]["default_unit_name"] == "Gram"
+
+
+def test_barcode_food_search_combines_and_ranks_live_and_local_results(monkeypatch):
+    from app.routers import barcodes
+
+    monkeypatch.setattr(
+        barcodes,
+        "fuzzy_match",
+        lambda _query, _brand, _db: [
+            {
+                "item_id": "food-local",
+                "item_name": "Mozzarella gerieben",
+                "source": "mealie",
+                "score": 88,
+                "exact": False,
+                "default_unit_id": "unit-g",
+                "default_unit_name": "Gram",
+            },
+            {
+                "item_id": "food-shared",
+                "item_name": "Mozzarella (old name)",
+                "source": "mealie",
+                "score": 91,
+                "exact": False,
+                "default_unit_id": "unit-old",
+                "default_unit_name": "Old unit",
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        barcodes,
+        "search_foods",
+        lambda _query, limit: [
+            {"id": "food-live", "name": "Melone", "score": 62, "exact": False},
+            {
+                "id": "food-shared",
+                "name": "Mozzarella",
+                "score": 74,
+                "exact": False,
+                "default_unit_id": "unit-current",
+                "default_unit_name": "Gram",
+            },
+        ],
+    )
+
+    results = barcodes.barcodes_search(q="mozz", db=None)
+
+    assert [result["id"] for result in results] == ["food-shared", "food-local", "food-live"]
+    assert results[0]["name"] == "Mozzarella"
+    assert results[0]["score"] == 91
+    assert results[0]["default_unit_id"] == "unit-current"
