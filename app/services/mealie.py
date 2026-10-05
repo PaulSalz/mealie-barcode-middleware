@@ -2,6 +2,7 @@ import json
 import logging
 
 import httpx
+from rapidfuzz import fuzz
 from sqlalchemy.orm import Session
 
 from app.models import Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
@@ -239,6 +240,55 @@ def update_food(
     if not isinstance(data, dict) or not data.get("id"):
         raise RuntimeError("Mealie food update returned no Food id")
     return data
+
+
+def search_foods(query: str = "", limit: int = 6) -> list[dict] | None:
+    """Search Mealie's live Food catalog; None means the API was unavailable."""
+    query = query.strip()
+    if not query:
+        return []
+    params = {
+        "page": 1,
+        "perPage": max(1, min(limit, 100)),
+        "orderBy": "name",
+        "orderDirection": "asc",
+        "search": query,
+    }
+    try:
+        resp = mealie_http.get(
+            "/api/foods",
+            params=params,
+            timeout=15,
+            log_name="search foods",
+        )
+        resp.raise_for_status()
+        wanted = " ".join(query.casefold().split())
+        results = []
+        for food in _items_from_response(resp.json()):
+            item_id = food.get("id")
+            name = str(food.get("name") or food.get("label") or "").strip()
+            if not item_id or not name:
+                continue
+            aliases_raw = food.get("aliases") or []
+            aliases = [str(alias.get("name") or "") if isinstance(alias, dict) else str(alias) for alias in aliases_raw]
+            terms = [name, *[alias for alias in aliases if alias]]
+            scores = [int(fuzz.WRatio(wanted, " ".join(term.casefold().split()))) for term in terms]
+            exact = any(" ".join(term.casefold().split()) == wanted for term in terms)
+            unit = food.get("unit") if isinstance(food.get("unit"), dict) else {}
+            results.append({
+                "id": str(item_id),
+                "name": name,
+                "source": "mealie",
+                "score": 100 if exact else max(scores, default=0),
+                "exact": exact,
+                "default_unit_id": food.get("unitId") or unit.get("id"),
+                "default_unit_name": unit.get("name") or unit.get("abbreviation"),
+            })
+        results.sort(key=lambda item: (not item["exact"], -item["score"], item["name"].casefold()))
+        return results
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Failed to search Mealie Foods for '%s': %s", query, exc)
+        return None
 
 
 def search_recipes(query: str = "", limit: int = 20) -> list[dict]:

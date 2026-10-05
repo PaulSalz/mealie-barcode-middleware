@@ -60,3 +60,45 @@ def test_generic_scan_writes_only_barcode_target():
     finally:
         _cleanup(db, barcode, item_id)
         db.close()
+
+
+def test_barcode_map_imports_live_mealie_food_missing_from_local_cache(monkeypatch):
+    from fastapi import BackgroundTasks
+
+    from app.routers import barcodes
+
+    init_db()
+    barcode = "ci-barcode-live-food-search"
+    item_id = "ci-food-live-search"
+    db = SessionLocal()
+    try:
+        _cleanup(db, barcode, item_id)
+        monkeypatch.setattr(barcodes, "get_food", lambda _item_id: {
+            "id": item_id,
+            "name": "Fresh Mealie Food",
+            "unitId": "unit-live",
+            "unit": {"name": "Gram", "abbreviation": "g"},
+            "aliases": [],
+        })
+        monkeypatch.setattr(barcodes, "_resolve_notifications_async", lambda *args: None)
+
+        response = barcodes.barcode_map(
+            barcode=barcode,
+            background_tasks=BackgroundTasks(),
+            item_id=item_id,
+            quantity="1",
+            unit_id="",
+            route="inherit",
+            shopping_list_ids=[],
+            db=db,
+        )
+
+        item = db.get(Item, item_id)
+        target = db.query(BarcodeTarget).filter(BarcodeTarget.barcode == barcode).one()
+        assert response.status_code == 303
+        assert item and item.name == "Fresh Mealie Food"
+        assert target.target_id == item_id
+        assert target.unit_id == "unit-live"
+    finally:
+        _cleanup(db, barcode, item_id)
+        db.close()

@@ -15,7 +15,7 @@ from app.services.barcode_lookup import perform_lookup
 from app.services.barcode_stats import barcode_scan_stats
 from app.services.fuzzy import fuzzy_match
 from app.services.homeassistant import dismiss_notification as ha_dismiss
-from app.services.mealie import create_food, find_food_by_name, reconcile_linked_barcode, search_recipes
+from app.services.mealie import create_food, find_food_by_name, get_food, reconcile_linked_barcode, search_foods, search_recipes
 from app.services.mealie_extras import cached_labels, cached_units
 from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
 from app.services.targets import add_target, ensure_targets, list_ids, primary_targets_by_barcode, set_list_ids
@@ -290,6 +290,10 @@ def barcode_map(
     db: Session = Depends(get_db),
 ):
     item = db.get(Item, item_id)
+    fresh_food = get_food(item_id)
+    if fresh_food and str(fresh_food.get("id") or "") == item_id:
+        item = _cache_food(fresh_food, db)
+        db.commit()
     if not item or item.source != "mealie":
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
     effective_unit = item.default_unit_id if unit_id in {"", "__item_default__"} else unit_id
@@ -445,6 +449,10 @@ def barcodes_search(q: str = Query(default=""), db: Session = Depends(get_db)):
     q = q.strip()
     if not q:
         return []
+    live_results = search_foods(q, limit=100)
+    if live_results is not None:
+        return live_results[:6]
+    # Keep search usable from the local catalog when Mealie is temporarily offline.
     return [{
         "id": row["item_id"], "name": row["item_name"], "source": row["source"],
         "score": row["score"], "exact": row.get("exact", False),
