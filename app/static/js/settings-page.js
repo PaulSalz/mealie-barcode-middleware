@@ -549,7 +549,7 @@
     }
     function renderPermissions(user, catalog, mayChangeAdmin) {
         fields.replaceChildren();
-        var configured = user.configured_permissions || user.permissions || {};
+        var configured = user.is_admin ? (user.permissions || {}) : (user.configured_permissions || user.permissions || {});
         catalog.forEach(function(permission) {
             var row = document.createElement('label');
             row.className = 'settings-permission-option';

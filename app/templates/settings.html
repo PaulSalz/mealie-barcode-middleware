@@ -708,7 +708,7 @@
                                         data-bs-toggle="modal" data-bs-target="#user-permissions-modal"
                                         data-permission-user-id="{{ user.id }}"
                                         data-permission-username="{{ user.username }}">
-                                        <i class="ti ti-shield-lock icon"></i> Permissions
+                                        <i class="ti ti-shield-lock icon"></i> Configure
                                     </button>
                                     {% endif %}
                                     {% if user.id != request.session.get('user_id') and (is_admin or not user.is_admin) %}
@@ -942,5 +942,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/settings-page.js?v={{ v }}"></script>
+<script src="/static/js/settings-page.js?v={{ v }}&rev=1"></script>
 {% endblock %}

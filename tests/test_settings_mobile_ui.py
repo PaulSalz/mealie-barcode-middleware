@@ -190,3 +190,19 @@ def test_mobile_barcode_bulk_checkbox_is_right_aligned_and_page_is_compact():
     assert "background: var(--tblr-bg-surface);\n    overflow: hidden;" in css
     assert "#barcodes-table > tbody { display: grid; gap: .22rem;" in css
     assert "font-size: .67rem;" in css
+
+
+def test_user_permissions_has_one_configure_button_and_all_admin_grants_checked():
+    template = read("app/templates/settings.html")
+    client = read("app/static/js/settings-page.js")
+    legacy_ui = read("app/static/js/ui-v23.js")
+    table_start = template.index('<table class="table table-vcenter settings-users-table">')
+    table_end = template.index("</table>", table_start)
+    table = template[table_start:table_end]
+
+    assert table.count('data-bs-target="#user-permissions-modal"') == 1
+    assert '<i class="ti ti-shield-lock icon"></i> Configure' in table
+    assert '<i class="ti ti-shield-lock icon"></i> Permissions' not in table
+    assert "installPermissionEditor(access).catch(function(){})" not in legacy_ui
+    assert "var configured = user.is_admin ? (user.permissions || {}) : (user.configured_permissions || user.permissions || {});" in client
+
