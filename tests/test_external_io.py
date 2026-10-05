@@ -77,3 +77,34 @@ def test_background_complement_keeps_secondary_out_of_hot_path(monkeypatch):
     assert first and first["source"] == "primary"
     assert second is None
     assert calls == ["primary"]
+
+
+def test_live_mealie_food_search_returns_ranked_matches_and_units(monkeypatch):
+    from app.services import mealie
+
+    calls = []
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"items": [
+                {"id": "food-other", "name": "Soy Dessert", "unitId": "unit-ml", "unit": {"name": "Milliliter", "abbreviation": "ml"}},
+                {"id": "food-exact", "name": "Soy Yogurt", "unitId": "unit-g", "unit": {"name": "Gram", "abbreviation": "g"}},
+            ]}
+
+    def fake_get(path, **kwargs):
+        calls.append((path, kwargs))
+        return Response()
+
+    monkeypatch.setattr(mealie.mealie_http, "get", fake_get)
+    results = mealie.search_foods("Soy Yogurt", limit=6)
+
+    assert calls[0][0] == "/api/foods"
+    assert calls[0][1]["params"]["search"] == "Soy Yogurt"
+    assert results[0]["id"] == "food-exact"
+    assert results[0]["exact"] is True
+    assert results[0]["score"] == 100
+    assert results[0]["default_unit_id"] == "unit-g"
+    assert results[0]["default_unit_name"] == "Gram"
