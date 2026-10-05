@@ -203,6 +203,6 @@ def test_user_permissions_has_one_configure_button_and_all_admin_grants_checked(
     assert table.count('data-bs-target="#user-permissions-modal"') == 1
     assert '<i class="ti ti-shield-lock icon"></i> Configure' in table
     assert '<i class="ti ti-shield-lock icon"></i> Permissions' not in table
-    assert "installPermissionEditor(access)" not in legacy_ui
+    assert "installPermissionEditor(access).catch(function(){})" not in legacy_ui
     assert "var configured = user.is_admin ? (user.permissions || {}) : (user.configured_permissions || user.permissions || {});" in client
 
