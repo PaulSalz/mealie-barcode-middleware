@@ -1166,3 +1166,23 @@ html[data-bs-theme="dark"] .b2m-base-swatch {
 .shopping-print-config-panel .list-group-flush > .list-group-item {
   border-radius: 0 !important;
 }
+
+
+/* The barcode status tabs and their content must share the live card surface.
+   Tabler's active tab otherwise keeps its fixed white background. */
+.barcodes-tabs,
+.barcodes-tabs > .tab-content {
+  background: transparent !important;
+}
+html body .barcodes-tabs > .nav-tabs .nav-link.active,
+html body .barcodes-tabs > .nav-tabs .nav-item.show .nav-link {
+  background-color: var(--b2m-v35-surface-bg, var(--tblr-bg-surface)) !important;
+  color: var(--b2m-v35-text, var(--tblr-body-color)) !important;
+  border-color: var(--b2m-v35-border, var(--tblr-border-color)) !important;
+  border-bottom-color: transparent !important;
+}
+html body .barcodes-list-card,
+html body #barcodes-table-container {
+  background-color: var(--b2m-v35-surface-bg, var(--tblr-bg-surface)) !important;
+  background-clip: padding-box !important;
+}
