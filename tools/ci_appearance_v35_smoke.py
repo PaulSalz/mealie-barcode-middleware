@@ -413,8 +413,10 @@ def main() -> None:
         assert mobile_barcodes["header"] == "none" and mobile_barcodes["body"] == "grid", mobile_barcodes
         assert mobile_barcodes["rowRadius"] != "0px", mobile_barcodes
         assert mobile_barcodes["rowOverflow"] == "hidden", mobile_barcodes
-        assert mobile_barcodes["searchHeaderRadius"] != "0px", mobile_barcodes
-        assert mobile_barcodes["listContainerRadius"] != "0px", mobile_barcodes
+        # Search band and table form one continuous gray surface, without
+        # their own nested corner radii. Individual row cards stay rounded.
+        assert mobile_barcodes["searchHeaderRadius"] == "0px", mobile_barcodes
+        assert mobile_barcodes["listContainerRadius"] == "0px", mobile_barcodes
         assert mobile_barcodes["listContainerOverflow"] == "hidden", mobile_barcodes
         assert mobile_barcodes["compactGap"] <= 4, mobile_barcodes
         if mobile_barcodes["bulkLayout"]:
