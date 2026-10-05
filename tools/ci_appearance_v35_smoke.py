@@ -400,6 +400,9 @@ def main() -> None:
                 listContainerTopRadius: getComputedStyle(document.getElementById('barcodes-table-container')).borderTopLeftRadius,
                 cardBottomRadius: getComputedStyle(document.querySelector('.barcodes-list-card')).borderBottomLeftRadius,
                 listContainerBottomRadius: getComputedStyle(document.getElementById('barcodes-table-container')).borderBottomLeftRadius,
+                footerBottomRadius: getComputedStyle(document.querySelector('#barcodes-table-container > .card-footer')).borderBottomLeftRadius,
+                cardBottomColor: getComputedStyle(document.querySelector('.barcodes-list-card')).backgroundColor,
+                footerBackground: getComputedStyle(document.querySelector('#barcodes-table-container > .card-footer')).backgroundColor,
                 listContainerOverflow: getComputedStyle(document.getElementById('barcodes-table-container')).overflow,
                 bulkLayout: row && row.querySelector('.b2m-bulk-row') ? (() => {
                     const box = row.querySelector('.b2m-bulk-row').getBoundingClientRect();
@@ -421,6 +424,8 @@ def main() -> None:
         assert mobile_barcodes["listContainerTopRadius"] == "0px", mobile_barcodes
         assert mobile_barcodes["cardBottomRadius"] != "0px", mobile_barcodes
         assert mobile_barcodes["listContainerBottomRadius"] == mobile_barcodes["cardBottomRadius"], mobile_barcodes
+        assert mobile_barcodes["footerBottomRadius"] == mobile_barcodes["cardBottomRadius"], mobile_barcodes
+        assert mobile_barcodes["footerBackground"] == mobile_barcodes["cardBottomColor"], mobile_barcodes
         assert mobile_barcodes["listContainerOverflow"] == "hidden", mobile_barcodes
         assert mobile_barcodes["compactGap"] <= 4, mobile_barcodes
         if mobile_barcodes["bulkLayout"]:
