@@ -1130,3 +1130,13 @@ html[data-bs-theme="dark"] .b2m-base-swatch {
   background-color: var(--b2m-base-swatch-dark) !important;
   border: 0 !important;
 }
+
+
+/* Clip colored inner surfaces to the selected card radius on these pages. */
+.barcode-detail-page-header ~ .row .card,
+.barcodes-list-card,
+.shopping-print-list-card,
+.shopping-print-config-panel,
+.shopping-print-preview-card {
+  overflow: hidden;
+}
