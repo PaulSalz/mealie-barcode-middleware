@@ -252,12 +252,14 @@ def remove_item_mapping(item_id: str, barcode: str, db: Session = Depends(get_db
 
 
 @router.post("/items/sync")
-def trigger_sync(db: Session = Depends(get_db)):
+def trigger_sync(return_to: str = Form("/items"), db: Session = Depends(get_db)):
     try:
         sync_items_enhanced(db)
     except Exception as e:
         logger.error("Manual item sync failed: %s", e)
-    return RedirectResponse("/items", status_code=303)
+    # Only allow known in-app destinations; never redirect to a caller-supplied URL.
+    redirect_to = "/" if return_to == "/" else "/items"
+    return RedirectResponse(redirect_to, status_code=303)
 
 
 @router.post("/items/add")
