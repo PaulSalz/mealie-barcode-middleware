@@ -397,7 +397,9 @@ def main() -> None:
                 rowRadius: row ? getComputedStyle(row).borderRadius : '',
                 rowOverflow: row ? getComputedStyle(row).overflow : '',
                 searchHeaderRadius: getComputedStyle(document.querySelector('.barcodes-list-card > .card-header')).borderTopLeftRadius,
-                listContainerRadius: getComputedStyle(document.getElementById('barcodes-table-container')).borderTopLeftRadius,
+                listContainerTopRadius: getComputedStyle(document.getElementById('barcodes-table-container')).borderTopLeftRadius,
+                cardBottomRadius: getComputedStyle(document.querySelector('.barcodes-list-card')).borderBottomLeftRadius,
+                listContainerBottomRadius: getComputedStyle(document.getElementById('barcodes-table-container')).borderBottomLeftRadius,
                 listContainerOverflow: getComputedStyle(document.getElementById('barcodes-table-container')).overflow,
                 bulkLayout: row && row.querySelector('.b2m-bulk-row') ? (() => {
                     const box = row.querySelector('.b2m-bulk-row').getBoundingClientRect();
@@ -413,10 +415,12 @@ def main() -> None:
         assert mobile_barcodes["header"] == "none" and mobile_barcodes["body"] == "grid", mobile_barcodes
         assert mobile_barcodes["rowRadius"] != "0px", mobile_barcodes
         assert mobile_barcodes["rowOverflow"] == "hidden", mobile_barcodes
-        # Search band and table form one continuous gray surface, without
-        # their own nested corner radii. Individual row cards stay rounded.
+        # The search band joins the table squarely at the top; the inner white
+        # table surface and gray outer card share the selected lower radius.
         assert mobile_barcodes["searchHeaderRadius"] == "0px", mobile_barcodes
-        assert mobile_barcodes["listContainerRadius"] == "0px", mobile_barcodes
+        assert mobile_barcodes["listContainerTopRadius"] == "0px", mobile_barcodes
+        assert mobile_barcodes["cardBottomRadius"] != "0px", mobile_barcodes
+        assert mobile_barcodes["listContainerBottomRadius"] == mobile_barcodes["cardBottomRadius"], mobile_barcodes
         assert mobile_barcodes["listContainerOverflow"] == "hidden", mobile_barcodes
         assert mobile_barcodes["compactGap"] <= 4, mobile_barcodes
         if mobile_barcodes["bulkLayout"]:
