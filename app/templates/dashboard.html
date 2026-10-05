@@ -7,6 +7,10 @@
   <div class="row g-2 align-items-center">
     <div class="col"><h2 class="page-title">Dashboard <span class="text-secondary small fw-normal ms-2">v2026.09.21.1</span></h2></div>
     <div class="col-auto btn-list">
+      <form method="post" action="/items/sync" class="d-inline">
+        <input type="hidden" name="return_to" value="/">
+        <button type="submit" class="btn btn-outline-primary"><i class="ti ti-refresh icon"></i> Sync Mealie</button>
+      </form>
       <a class="btn btn-primary" href="{{ mealie_url }}" target="_blank" rel="noopener"><i class="ti ti-external-link icon"></i> Mealie</a>
     </div>
   </div>
