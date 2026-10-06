@@ -215,7 +215,7 @@ def test_dashboard_sync_button_is_single_and_responsive():
     assert template.count('action="/items/sync"') == 1
     assert 'id="b2m-mealie-sync-form"' in template
     assert 'id="b2m-mealie-sync-button"' in template
-    assert 'dashboard-v2.js?v={{ v }}&rev=5' in template
+    assert 'dashboard-v2.js?v={{ v }}&rev=6' in template
     assert 'class="btn btn-outline-primary btn-lg b2m-sync-button"' in template
     assert 'b2m-sync-label d-none d-md-inline' in template
     assert '.b2m-dashboard-mealie-card .b2m-sync-button' in css
@@ -229,4 +229,6 @@ def test_dashboard_sync_button_is_single_and_responsive():
     assert '.btn-outline-primary.btn-lg.d-none.d-md-inline-flex' in css
     assert 'form[action="/items/sync"]:not(#b2m-mealie-sync-form)' in css
     assert 'function dedupeMealieSyncControls()' in read("app/static/js/dashboard-v2.js")
+    assert "document.querySelectorAll('form[action=\"/items/sync\"]')" in read("app/static/js/dashboard-v2.js")
+    assert "observe(document.body, {childList: true, subtree: true})" in read("app/static/js/dashboard-v2.js")
     assert "forms.forEach(function (form)" in read("app/static/js/dashboard-v2.js")
