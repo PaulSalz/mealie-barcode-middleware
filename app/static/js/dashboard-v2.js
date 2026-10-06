@@ -209,12 +209,18 @@
   }
 
   function dedupeMealieSyncControls() {
+    var card = document.querySelector('.b2m-dashboard-mealie-card');
     var forms = Array.prototype.slice.call(document.querySelectorAll('form[action="/items/sync"]'));
     var buttons = Array.prototype.slice.call(document.querySelectorAll(
       'form[action="/items/sync"] button[type="submit"], .b2m-sync-button, .b2m-mobile-sync-button, ' +
       'button[title="Sync Mealie"], button[aria-label="Sync Mealie"], ' +
       '.btn-outline-primary.btn-lg.d-none.d-md-inline-flex'
     ));
+    if (card) {
+      Array.prototype.slice.call(card.querySelectorAll('button')).forEach(function (button) {
+        if (buttons.indexOf(button) < 0) buttons.push(button);
+      });
+    }
     Array.prototype.slice.call(document.querySelectorAll('button')).forEach(function (button) {
       if (button.textContent.replace(/\s+/g, ' ').trim() === 'Sync Mealie' && buttons.indexOf(button) < 0) {
         buttons.push(button);

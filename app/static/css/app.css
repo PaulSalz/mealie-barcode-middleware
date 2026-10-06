@@ -1232,15 +1232,32 @@ html body #appearance-display-card > .card-footer:last-child {
 /* Keep the responsive status-card control unique, including when an older
    template is still present during a rolling deployment. */
 .b2m-dashboard-mealie-card .b2m-sync-button { white-space: nowrap; }
-.b2m-dashboard-mealie-card .b2m-sync-button,
-.b2m-dashboard-mealie-card .b2m-sync-button .icon {
+.b2m-dashboard-mealie-card #b2m-mealie-sync-button,
+.b2m-dashboard-mealie-card #b2m-mealie-sync-button .icon,
+.b2m-dashboard-mealie-card #b2m-mealie-sync-button .b2m-sync-label {
   color: var(--tblr-primary) !important;
 }
-.b2m-dashboard-mealie-card form[action="/items/sync"]:not(#b2m-mealie-sync-form),
+.b2m-dashboard-mealie-card form:not(#b2m-mealie-sync-form),
+.b2m-dashboard-mealie-card button:not(#b2m-mealie-sync-button),
 .b2m-dashboard-mealie-card .b2m-sync-button:not(#b2m-mealie-sync-button),
 .b2m-dashboard-mealie-card .b2m-mobile-sync-button,
 .b2m-dashboard-mealie-card .btn-outline-primary.btn-lg.d-none.d-md-inline-flex {
   display: none !important;
+}
+@media (min-width: 768px) {
+  .b2m-dashboard-mealie-card #b2m-mealie-sync-button:hover,
+  .b2m-dashboard-mealie-card #b2m-mealie-sync-button:focus,
+  .b2m-dashboard-mealie-card #b2m-mealie-sync-button:active {
+    color: var(--tblr-primary) !important;
+    background: color-mix(in srgb, var(--tblr-primary) 10%, var(--tblr-bg-surface)) !important;
+    background-image: none !important;
+    border-color: var(--tblr-primary) !important;
+    box-shadow: none !important;
+  }
+  .b2m-dashboard-mealie-card #b2m-mealie-sync-button:focus-visible {
+    outline: 2px solid var(--tblr-primary) !important;
+    outline-offset: 2px;
+  }
 }
 
 @media (max-width: 767.98px) {
