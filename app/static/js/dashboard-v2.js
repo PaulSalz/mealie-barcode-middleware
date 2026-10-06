@@ -208,7 +208,36 @@
     else if (media.addListener) media.addListener(keepDesktopSectionsOpen);
   }
 
+  function dedupeMealieSyncControls() {
+    var card = document.querySelector('.b2m-dashboard-mealie-card');
+    if (!card) return;
+    var forms = Array.prototype.slice.call(card.querySelectorAll('form[action="/items/sync"]'));
+    var primaryForm = card.querySelector('#b2m-mealie-sync-form') || forms[0];
+    if (!primaryForm) return;
+    forms.forEach(function (form) {
+      if (form !== primaryForm) form.remove();
+    });
+
+    var buttons = Array.prototype.slice.call(primaryForm.querySelectorAll('button[type="submit"]'));
+    var preferredButton = primaryForm.querySelector('#b2m-mealie-sync-button, .b2m-sync-button') ||
+      (window.matchMedia('(max-width: 767.98px)').matches
+        ? primaryForm.querySelector('.b2m-mobile-sync-button')
+        : primaryForm.querySelector('.btn-lg.d-md-inline-flex'));
+    var primaryButton = preferredButton || buttons[0];
+    buttons.forEach(function (button) {
+      if (button !== primaryButton) button.remove();
+    });
+  }
+
+  function watchMealieSyncControls() {
+    var card = document.querySelector('.b2m-dashboard-mealie-card');
+    if (!card) return;
+    dedupeMealieSyncControls();
+    new MutationObserver(dedupeMealieSyncControls).observe(card, {childList: true, subtree: true});
+  }
+
   function boot() {
+    watchMealieSyncControls();
     ensureRefreshState();
     installRecentTableGuard();
     installMobileCollapses();
