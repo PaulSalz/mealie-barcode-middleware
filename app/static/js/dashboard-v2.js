@@ -216,7 +216,7 @@
       '.btn-outline-primary.btn-lg.d-none.d-md-inline-flex'
     ));
     Array.prototype.slice.call(document.querySelectorAll('button')).forEach(function (button) {
-      if (button.textContent.replace(/\\s+/g, ' ').trim() === 'Sync Mealie' && buttons.indexOf(button) < 0) {
+      if (button.textContent.replace(/\s+/g, ' ').trim() === 'Sync Mealie' && buttons.indexOf(button) < 0) {
         buttons.push(button);
       }
     });
