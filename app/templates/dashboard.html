@@ -47,9 +47,10 @@
     <div class="col-auto"><span id="health-indicator" class="status-indicator status-{{ 'green' if mealie_reachable else 'red' }}{{ ' status-indicator-animated' if mealie_reachable }}"><span class="status-indicator-circle"></span><span class="status-indicator-circle"></span><span class="status-indicator-circle"></span></span></div>
     <div class="col"><h2 class="page-title mb-0">Mealie</h2><div class="text-secondary"><ul class="list-inline list-inline-dots mb-0"><li class="list-inline-item"><span id="health-status" class="text-{{ 'green' if mealie_reachable else 'red' }}">{{ 'Connected' if mealie_reachable else 'Unreachable' }}</span></li>{% if last_sync_time %}<li class="list-inline-item" title="{{ last_sync_time|localtime }}">Last sync: {{ last_sync_time|relative_time }}</li>{% else %}<li class="list-inline-item">No item sync yet</li>{% endif %}</ul></div></div>
   </div>
-  <form method="post" action="/items/sync" class="d-none d-md-block position-absolute top-0 end-0 mt-3 me-3">
+  <form method="post" action="/items/sync" class="position-absolute top-0 end-0 mt-3 me-3">
     <input type="hidden" name="return_to" value="/">
-    <button type="submit" class="btn btn-outline-primary"><i class="ti ti-refresh icon"></i> Sync Mealie</button>
+    <button type="submit" class="btn btn-outline-primary btn-lg d-none d-md-inline-flex"><i class="ti ti-refresh icon"></i> Sync Mealie</button>
+    <button type="submit" class="btn btn-outline-primary btn-sm btn-icon d-md-none" title="Sync Mealie" aria-label="Sync Mealie"><i class="ti ti-refresh icon"></i></button>
   </form>
 </div></div></div>
   <div class="col-sm-6 col-lg-2"><a href="/settings?tab=tokens" class="card card-link h-100 b2m-stat-card"><div class="card-body"><div class="d-flex align-items-center gap-3"><span class="avatar bg-azure-lt text-azure"><i class="ti ti-scan"></i></span><div><div class="subheader">Scanners</div><div class="h1 mb-0"><span id="stat-scanner-online">{{ scanner_online }}</span><span class="text-secondary fs-3"> / <span id="stat-scanner-total">{{ scanner_total }}</span></span></div><div class="text-secondary small">connected / known</div></div></div></div></a></div>
