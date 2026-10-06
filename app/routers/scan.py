@@ -575,7 +575,7 @@ def _handle_generic(term: str, barcode: str, db: Session, paused: bool = False) 
             best_item.id,
             best_item.name,
             db,
-            quantity=1.0,
+            quantity=best_item.default_quantity or 1.0,
             unit_id=best_item.default_unit_id,
             mapped_by="generic",
         )

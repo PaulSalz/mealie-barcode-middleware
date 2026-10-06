@@ -76,6 +76,7 @@ def fuzzy_match(title: str, brand: str | None, db: Session, threshold: int | Non
             "exact": exact,
             "default_unit_id": item.default_unit_id,
             "default_unit_name": item.default_unit_name,
+            "default_quantity": item.default_quantity,
         })
 
     candidates.sort(key=lambda c: (not c["exact"], -c["score"], c["item_name"].casefold()))
@@ -110,7 +111,7 @@ def try_auto_map(barcode: str, title: str, brand: str | None, db: Session) -> st
         top["item_id"],
         top["item_name"],
         db,
-        quantity=1.0,
+        quantity=top.get("default_quantity") or 1.0,
         unit_id=top.get("default_unit_id"),
         mapped_by="auto",
     )

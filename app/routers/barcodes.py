@@ -49,6 +49,13 @@ def _parse_optional_quantity(value: str | float | int | None) -> float | None:
     return round(parsed, 3)
 
 
+def _food_quantity(value: str | float | int | None, item: Item | None) -> float:
+    quantity = _parse_optional_quantity(value)
+    if quantity is not None:
+        return quantity
+    return float(item.default_quantity or 1.0) if item else 1.0
+
+
 def _is_database_locked(exc: OperationalError) -> bool:
     return "database is locked" in str(exc).casefold()
 
@@ -297,7 +304,7 @@ def barcode_map(
     if not item or item.source != "mealie":
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
     effective_unit = item.default_unit_id if unit_id in {"", "__item_default__"} else unit_id
-    target = add_target(barcode, "food", item.id, item.name, db, route=route, list_ids_value=shopping_list_ids, quantity=_parse_optional_quantity(quantity), unit_id=effective_unit)
+    target = add_target(barcode, "food", item.id, item.name, db, route=route, list_ids_value=shopping_list_ids, quantity=_food_quantity(quantity, item), unit_id=effective_unit)
     _resolve_notifications_async(barcode, target.target_name, background_tasks, db)
     background_tasks.add_task(reconcile_linked_barcode, barcode)
     return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
@@ -328,7 +335,7 @@ def barcode_create_and_map(
             duplicate = True
     item = _cache_food(food, db)
     effective_unit = item.default_unit_id if unit_id in {"", "__item_default__"} else unit_id
-    target = add_target(barcode, "food", item.id, item.name, db, route=route, list_ids_value=shopping_list_ids, quantity=_parse_optional_quantity(quantity), unit_id=effective_unit)
+    target = add_target(barcode, "food", item.id, item.name, db, route=route, list_ids_value=shopping_list_ids, quantity=_food_quantity(quantity, item), unit_id=effective_unit)
     _resolve_notifications_async(barcode, target.target_name, background_tasks, db)
     background_tasks.add_task(reconcile_linked_barcode, barcode)
     suffix = "?duplicate_food=1" if duplicate else ""
@@ -366,7 +373,7 @@ def barcode_target_settings(
         set_list_ids(target, shopping_list_ids)
         if target.target_type == "food":
             item = db.get(Item, target.target_id)
-            target.quantity = _parse_optional_quantity(quantity)
+            target.quantity = _food_quantity(quantity, item)
             target.unit_id = (item.default_unit_id if item and unit_id in {"", "__item_default__"} else (unit_id or None))
         else:
             target.recipe_scale = _parse_positive_float(recipe_scale)
@@ -393,8 +400,9 @@ def barcode_mapping_settings(
     if targets:
         target = targets[0]
         if target.target_type == "food":
-            target.quantity = _parse_optional_quantity(quantity)
-            target.unit_id = unit_id or None
+            item = db.get(Item, target.target_id)
+            target.quantity = _food_quantity(quantity, item)
+            target.unit_id = (item.default_unit_id if item and unit_id in {"", "__item_default__"} else (unit_id or None))
         else:
             target.recipe_scale = _parse_positive_float(recipe_scale)
             set_list_ids(target, [shopping_list_id] if shopping_list_id else [])
