@@ -1229,9 +1229,23 @@ html body #appearance-display-card > .card-footer:last-child {
   border-bottom-right-radius: var(--tblr-border-radius) !important;
 }
 
-/* Keep the compact mobile sync control visibly outlined. */
+/* One sync button adapts to the available viewport width. */
+.b2m-dashboard-mealie-card .b2m-sync-button { white-space: nowrap; }
+
 @media (max-width: 767.98px) {
-  .b2m-dashboard-mealie-card .b2m-mobile-sync-button {
-    border: 1px solid var(--tblr-primary) !important;
+  .b2m-dashboard-mealie-card .b2m-sync-button {
+    width: 2.375rem;
+    height: 2.375rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--tblr-border-color) !important;
+    border-radius: var(--tblr-border-radius);
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--tblr-body-color);
   }
+  .b2m-dashboard-mealie-card .b2m-sync-button .icon { margin: 0 !important; }
+  .b2m-dashboard-mealie-card .b2m-sync-label { display: none !important; }
 }
