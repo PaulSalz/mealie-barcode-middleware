@@ -223,7 +223,8 @@ def test_dashboard_sync_button_is_single_and_responsive():
     assert 'border: 1px solid var(--tblr-primary) !important;' in css
     assert 'background: transparent !important;' in css
     assert 'color: var(--tblr-primary) !important;' in css
-    assert 'form[action="/items/sync"] ~ form[action="/items/sync"]' in css
+    assert 'form[action="/items/sync"]:not(#b2m-mealie-sync-form)' in css
+    assert '.b2m-sync-button:not(#b2m-mealie-sync-button)' in css
     assert '.b2m-mobile-sync-button' in css
     assert '.btn-outline-primary.btn-lg.d-none.d-md-inline-flex' in css
     assert 'form[action="/items/sync"]:not(#b2m-mealie-sync-form)' in css
