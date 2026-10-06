@@ -209,31 +209,45 @@
   }
 
   function dedupeMealieSyncControls() {
-    var card = document.querySelector('.b2m-dashboard-mealie-card');
-    if (!card) return;
-    var forms = Array.prototype.slice.call(card.querySelectorAll('form[action="/items/sync"]'));
-    var primaryForm = card.querySelector('#b2m-mealie-sync-form') || forms[0];
-    if (!primaryForm) return;
+    var forms = Array.prototype.slice.call(document.querySelectorAll('form[action="/items/sync"]'));
+    var buttons = Array.prototype.slice.call(document.querySelectorAll(
+      'form[action="/items/sync"] button[type="submit"], .b2m-sync-button, .b2m-mobile-sync-button, ' +
+      'button[title="Sync Mealie"], button[aria-label="Sync Mealie"], ' +
+      '.btn-outline-primary.btn-lg.d-none.d-md-inline-flex'
+    ));
+    Array.prototype.slice.call(document.querySelectorAll('button')).forEach(function (button) {
+      if (button.textContent.replace(/\\s+/g, ' ').trim() === 'Sync Mealie' && buttons.indexOf(button) < 0) {
+        buttons.push(button);
+      }
+    });
+    if (forms.length < 2 && buttons.length < 2) return;
+
+    var primaryForm = document.querySelector('#b2m-mealie-sync-form') || forms[0];
     forms.forEach(function (form) {
       if (form !== primaryForm) form.remove();
     });
 
-    var buttons = Array.prototype.slice.call(primaryForm.querySelectorAll('button[type="submit"]'));
-    var preferredButton = primaryForm.querySelector('#b2m-mealie-sync-button, .b2m-sync-button') ||
-      (window.matchMedia('(max-width: 767.98px)').matches
+    var primaryButton = primaryForm && primaryForm.querySelector('#b2m-mealie-sync-button, .b2m-sync-button');
+    if (!primaryButton && primaryForm) {
+      primaryButton = window.matchMedia('(max-width: 767.98px)').matches
         ? primaryForm.querySelector('.b2m-mobile-sync-button')
-        : primaryForm.querySelector('.btn-lg.d-md-inline-flex'));
-    var primaryButton = preferredButton || buttons[0];
+        : primaryForm.querySelector('.btn-lg.d-md-inline-flex');
+    }
+    primaryButton = primaryButton || buttons[0];
     buttons.forEach(function (button) {
       if (button !== primaryButton) button.remove();
     });
+    if (primaryForm) {
+      Array.prototype.slice.call(primaryForm.querySelectorAll('button[type="submit"]')).forEach(function (button) {
+        if (button !== primaryButton) button.remove();
+      });
+    }
   }
 
   function watchMealieSyncControls() {
-    var card = document.querySelector('.b2m-dashboard-mealie-card');
-    if (!card) return;
+    if (!document.querySelector('.b2m-dashboard-mealie-card')) return;
     dedupeMealieSyncControls();
-    new MutationObserver(dedupeMealieSyncControls).observe(card, {childList: true, subtree: true});
+    new MutationObserver(dedupeMealieSyncControls).observe(document.body, {childList: true, subtree: true});
   }
 
   function boot() {
