@@ -1228,3 +1228,10 @@ html body #appearance-display-card > .card-footer:last-child {
   border-bottom-left-radius: var(--tblr-border-radius) !important;
   border-bottom-right-radius: var(--tblr-border-radius) !important;
 }
+
+/* Keep the compact mobile sync control visibly outlined. */
+@media (max-width: 767.98px) {
+  .b2m-dashboard-mealie-card .b2m-mobile-sync-button {
+    border: 1px solid var(--tblr-primary) !important;
+  }
+}
