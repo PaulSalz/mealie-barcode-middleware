@@ -182,6 +182,7 @@ def _food_update_payload(
     plural_name: str | None,
     description: str | None,
     label_id: str | None,
+    unit_id: str | None = None,
 ) -> dict:
     aliases = existing.get("aliases") or []
     substitutions = []
@@ -202,6 +203,10 @@ def _food_update_payload(
         "pluralName": plural_name or None,
         "description": description or "",
         "labelId": label_id or None,
+        "unitId": (
+            (existing.get("unitId") or ((existing.get("unit") or {}).get("id") if isinstance(existing.get("unit"), dict) else None))
+            if unit_id is None else (unit_id.strip() or None)
+        ),
         "aliases": aliases,
         "substitutions": substitutions,
         "householdsWithIngredientFood": existing.get("householdsWithIngredientFood") or [],
@@ -216,6 +221,7 @@ def update_food(
     plural_name: str | None = None,
     description: str | None = None,
     label_id: str | None = None,
+    unit_id: str | None = None,
 ) -> dict:
     """Update a real Mealie Food while preserving aliases/substitutions/extras."""
     existing = get_food(item_id)
@@ -227,6 +233,7 @@ def update_food(
         plural_name=plural_name,
         description=description,
         label_id=label_id,
+        unit_id=unit_id,
     )
     resp = mealie_http.put(
         f"/api/foods/{item_id}",
@@ -509,6 +516,8 @@ def reconcile_linked_barcode(barcode: str) -> None:
             if not item:
                 return
 
+            effective_quantity = target.quantity if target.quantity is not None else (item.default_quantity or 1.0)
+            effective_unit_id = target.unit_id or item.default_unit_id
             rewrote = False
             for entry in pending:
                 try:
@@ -517,9 +526,9 @@ def reconcile_linked_barcode(barcode: str) -> None:
                     continue
                 payload.pop("note", None)
                 payload["foodId"] = target.target_id
-                payload["quantity"] = target.quantity or 1
-                if target.unit_id:
-                    payload["unitId"] = target.unit_id
+                payload["quantity"] = effective_quantity
+                if effective_unit_id:
+                    payload["unitId"] = effective_unit_id
                 else:
                     payload.pop("unitId", None)
                 if not payload.get("shoppingListId"):
@@ -544,11 +553,11 @@ def reconcile_linked_barcode(barcode: str) -> None:
                 return
             payload = {
                 "shoppingListId": list_id,
-                "quantity": target.quantity or 1,
+                "quantity": effective_quantity,
                 "checked": current.get("checked", False),
                 "position": current.get("position", 0),
                 "foodId": target.target_id,
-                "unitId": target.unit_id,
+                "unitId": effective_unit_id,
                 "note": "",
             }
             if _put_shopping_item(shopping_item_id, payload):

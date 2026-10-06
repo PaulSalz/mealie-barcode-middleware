@@ -92,8 +92,8 @@ def get_target_food_v6(target_id: int, db: Session = Depends(get_db)):
         "target": {
             "id": target.id,
             "barcode": target.barcode,
-            "quantity": target.quantity,
-            "unit_id": target.unit_id,
+            "quantity": target.quantity if target.quantity is not None else (item.default_quantity if item else 1.0),
+            "unit_id": target.unit_id or (item.default_unit_id if item else None),
         },
         "food": {
             "id": target.target_id,

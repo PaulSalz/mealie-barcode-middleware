@@ -7,10 +7,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import BarcodeCache, BarcodeTarget, Item
+from app.models import BarcodeCache, BarcodeMapping, BarcodeTarget, Item
 from app.services.mealie import get_food, update_food
 from app.services.mealie_extras import (
     cached_labels,
+    cached_units,
     clear_catalog_cache,
     refresh_open_shopping_items_for_food,
     sync_items_enhanced,
@@ -152,11 +153,15 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
 
     mealie_food = get_food(item_id) if item.source == "mealie" else None
     labels = cached_labels() if item.source == "mealie" else []
-    current_label_id = None
+    units = cached_units() if item.source == "mealie" else []
+    current_label_id = item.label_id
+    current_unit_id = item.default_unit_id
     if mealie_food:
-        current_label_id = mealie_food.get("labelId")
+        current_label_id = mealie_food.get("labelId") or item.label_id
         if not current_label_id and isinstance(mealie_food.get("label"), dict):
             current_label_id = mealie_food["label"].get("id")
+        food_unit = mealie_food.get("unit") if isinstance(mealie_food.get("unit"), dict) else {}
+        current_unit_id = mealie_food.get("unitId") or food_unit.get("id") or item.default_unit_id
 
     shopping_lists = get_shopping_lists()
     default_shopping_list_id = get_default_shopping_list_id(db)
@@ -170,7 +175,9 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
         "mapped_items": mapped_items,
         "mealie_food": mealie_food,
         "labels": labels,
+        "units": units,
         "current_label_id": current_label_id,
+        "current_unit_id": current_unit_id,
         "stats": _item_scan_stats(db, item_id),
         "shopping_lists": shopping_lists,
         "default_shopping_list_id": default_shopping_list_id,
@@ -209,14 +216,31 @@ def edit_mealie_item(
     plural_name: str = Form(""),
     description: str = Form(""),
     label_id: str = Form(""),
+    unit_id: str = Form(""),
+    default_quantity: float = Form(..., gt=0),
     db: Session = Depends(get_db),
 ):
     item = db.get(Item, item_id)
     name = name.strip()
     if not item or item.source != "mealie" or not name:
         return RedirectResponse(f"/items/{item_id}?edit_error=1", status_code=303)
+    old_default_quantity = round(float(item.default_quantity or 1.0), 3)
+    old_default_unit = item.default_unit_id
+    selected_unit_id = unit_id.strip() or None
+    selected_label_id = label_id.strip() or None
+    new_quantity = round(float(default_quantity), 3)
+    if new_quantity <= 0:
+        return RedirectResponse(f"/items/{item_id}?edit_error=1", status_code=303)
+
     try:
-        food = update_food(item_id, name=name, plural_name=plural_name.strip() or None, description=description.strip() or None, label_id=label_id or None)
+        food = update_food(
+            item_id,
+            name=name,
+            plural_name=plural_name.strip() or None,
+            description=description.strip() or None,
+            label_id=selected_label_id,
+            unit_id=unit_id.strip(),
+        )
     except Exception:
         logger.exception("Failed to update Mealie Food %s", item_id)
         return RedirectResponse(f"/items/{item_id}?edit_error=1", status_code=303)
@@ -225,15 +249,61 @@ def edit_mealie_item(
     aliases = [a.get("name", a) if isinstance(a, dict) else a for a in aliases_raw]
     returned_label = food.get("label") if isinstance(food.get("label"), dict) else None
     returned_unit = food.get("unit") if isinstance(food.get("unit"), dict) else None
+    unit_rows = cached_units()
+    label_rows = cached_labels()
+    unit_lookup = {str(row.get("id")): row for row in unit_rows if isinstance(row, dict) and row.get("id")}
+    label_lookup = {str(row.get("id")): row for row in label_rows if isinstance(row, dict) and row.get("id")}
+
     item.name = food.get("name") or name
     item.aliases = json.dumps(aliases)
-    item.label_id = food.get("labelId") or (returned_label.get("id") if returned_label else None) or (label_id or None)
-    item.label_name = returned_label.get("name") if returned_label else next((label.get("name") for label in cached_labels() if label.get("id") == item.label_id), None)
-    item.default_unit_id = food.get("unitId") or (returned_unit.get("id") if returned_unit else item.default_unit_id)
-    item.default_unit_name = returned_unit.get("name") if returned_unit else item.default_unit_name
+    item.label_id = selected_label_id
+    label_row = label_lookup.get(str(selected_label_id)) if selected_label_id else None
+    if returned_label and str(returned_label.get("id") or selected_label_id) == str(selected_label_id or ""):
+        item.label_name = returned_label.get("name")
+    else:
+        item.label_name = label_row.get("name") if label_row else None
+
+    item.default_unit_id = selected_unit_id
+    unit_row = unit_lookup.get(str(selected_unit_id)) if selected_unit_id else None
+    if returned_unit and str(food.get("unitId") or returned_unit.get("id") or "") == str(selected_unit_id or ""):
+        item.default_unit_name = returned_unit.get("name") or returned_unit.get("abbreviation")
+    else:
+        item.default_unit_name = (unit_row.get("name") or unit_row.get("abbreviation")) if unit_row else None
+
+    item.default_quantity = new_quantity
     item.updated_at = utcnow()
     item.synced_at = utcnow()
-    db.query(BarcodeTarget).filter(BarcodeTarget.target_type == "food", BarcodeTarget.target_id == item_id).update({"target_name": item.name})
+
+    def uses_previous_quantity(value) -> bool:
+        if value is None:
+            return True
+        try:
+            return round(float(value), 3) == old_default_quantity
+        except (TypeError, ValueError):
+            return False
+
+    targets = db.query(BarcodeTarget).filter(
+        BarcodeTarget.target_type == "food",
+        BarcodeTarget.target_id == item_id,
+    ).all()
+    for target in targets:
+        target.target_name = item.name
+        if uses_previous_quantity(target.quantity):
+            target.quantity = new_quantity
+        if target.unit_id in {None, "", old_default_unit}:
+            target.unit_id = selected_unit_id
+
+    mappings = db.query(BarcodeMapping).filter(
+        BarcodeMapping.target_type == "food",
+        BarcodeMapping.target_id == item_id,
+    ).all()
+    for mapping in mappings:
+        mapping.target_name = item.name
+        if uses_previous_quantity(mapping.quantity):
+            mapping.quantity = new_quantity
+        if mapping.unit_id in {None, "", old_default_unit}:
+            mapping.unit_id = selected_unit_id
+
     db.commit()
     clear_catalog_cache()
     background_tasks.add_task(refresh_open_shopping_items_for_food, item_id)

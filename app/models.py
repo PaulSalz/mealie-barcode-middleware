@@ -19,6 +19,8 @@ class Item(Base):
     label_name: Mapped[str | None] = mapped_column(String, nullable=True)
     default_unit_id: Mapped[str | None] = mapped_column(String, nullable=True)
     default_unit_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # B2M default quantity applied to barcode targets unless they have an override.
+    default_quantity: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     # default | mealie | homeassistant | both | none
     shopping_route: Mapped[str] = mapped_column(String, nullable=False, default="default")
     shopping_list_id: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -192,7 +192,7 @@ def route_targets(barcode: str, targets: list[BarcodeTarget], db, *, paused: boo
                 "item": _food_snapshot(item),
                 "route": route,
                 "list_ids": ids,
-                "quantity": target.quantity,
+                "quantity": target.quantity if target.quantity is not None else (item.default_quantity or 1.0),
                 "unit_id": target.unit_id or item.default_unit_id,
             }
             future = _ROUTE_POOL.submit(_route_food, plan, block=True)

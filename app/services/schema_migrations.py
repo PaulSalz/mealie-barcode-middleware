@@ -45,8 +45,18 @@ def _forward_barcode_targets(conn: Connection) -> None:
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_barcode_targets_barcode ON barcode_targets (barcode)"))
 
 
+def _add_item_default_quantity(conn: Connection) -> None:
+    tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+    if "items" not in tables:
+        return
+    columns = {row[1] for row in conn.execute(text("PRAGMA table_info(items)"))}
+    if "default_quantity" not in columns:
+        conn.execute(text("ALTER TABLE items ADD COLUMN default_quantity FLOAT NOT NULL DEFAULT 1.0"))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("2026-09-23-001-forward-barcode-targets", _forward_barcode_targets),
+    ("2026-10-06-001-item-default-quantity", _add_item_default_quantity),
 )
 
 
