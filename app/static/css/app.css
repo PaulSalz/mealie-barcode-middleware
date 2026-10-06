@@ -1236,7 +1236,8 @@ html body #appearance-display-card > .card-footer:last-child {
 .b2m-dashboard-mealie-card .b2m-sync-button .icon {
   color: var(--tblr-primary) !important;
 }
-.b2m-dashboard-mealie-card form[action="/items/sync"] ~ form[action="/items/sync"],
+.b2m-dashboard-mealie-card form[action="/items/sync"]:not(#b2m-mealie-sync-form),
+.b2m-dashboard-mealie-card .b2m-sync-button:not(#b2m-mealie-sync-button),
 .b2m-dashboard-mealie-card .b2m-mobile-sync-button,
 .b2m-dashboard-mealie-card .btn-outline-primary.btn-lg.d-none.d-md-inline-flex {
   display: none !important;
