@@ -203,7 +203,7 @@
         if (sseLockPending || sseLockHeld) return;
         sseLockPending = true;
         navigator.locks.request(sseLockName, {mode: 'exclusive', ifAvailable: true}, function(lock) {
-            if (!lock) return;
+            if (!lock || !ssePageActive) return;
             sseLockHeld = true;
             connectSSE();
             return new Promise(function(resolve) {
