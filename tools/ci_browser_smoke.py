@@ -648,7 +648,7 @@ def main() -> None:
         }""")
         page.evaluate("""() => {
           const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
-          data.queue[0].label = 'Canned tomatoes with basil and oregano';
+          data.queue[0].label = 'Canned tomatoes with basil and oregano for homemade pasta sauce and hearty vegetable soup all winter long';
           localStorage.setItem('b2m-label-generator-v2', JSON.stringify(data));
         }""")
         page.locator('#b21-v4-presets [data-preset="stacked"]').click()
