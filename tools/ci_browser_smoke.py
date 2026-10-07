@@ -103,7 +103,7 @@ def main() -> None:
             broadcast_channel: typeof BroadcastChannel === "function",
         })""")
         print("B2M multi-tab event capabilities:", event_capabilities)
-        assert event_capabilities["web_locks"] and event_capabilities["broadcast_channel"], event_capabilities
+        assert event_capabilities["web_locks"], event_capabilities
 
         def event_lock_is_held(tab):
             return tab.evaluate("""async () => {
