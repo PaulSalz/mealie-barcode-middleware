@@ -638,6 +638,70 @@ def main() -> None:
         assert saved_order == reloaded_order
         assert saved_order.index("label") > saved_order.index("code")
 
+        # Presets fit label text to the selected roll; copy/paste keeps each code's identity.
+        page.locator("#b21-entry-select").select_option("0")
+        page.evaluate("window.__b2mB21LabelEditor.prepareQueue()")
+        page.locator('#b21-v4-presets [data-preset="stacked"]').click()
+        short_font = page.evaluate("""() => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return all['ci-label-1'].elements.find(row => row.id === 'label').fontSizePt;
+        }""")
+        page.evaluate("""() => {
+          const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          data.queue[0].label = 'Canned tomatoes with basil and oregano';
+          localStorage.setItem('b2m-label-generator-v2', JSON.stringify(data));
+        }""")
+        page.locator('#b21-v4-presets [data-preset="stacked"]').click()
+        long_font = page.evaluate("""() => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return all['ci-label-1'].elements.find(row => row.id === 'label').fontSizePt;
+        }""")
+        assert long_font < short_font, (short_font, long_font)
+        page.evaluate("""() => {
+          const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          data.queue[0].label = 'CI Label One';
+          localStorage.setItem('b2m-label-generator-v2', JSON.stringify(data));
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const source = all['ci-label-1'];
+          source.elements.find(row => row.id === 'label').x = 36;
+          source.elements.push({id:'text-smoke',type:'text',name:'Free text',text:'Copied note',visible:true,x:50,y:10,w:50,h:10,rotation:0,fontSizePt:8});
+          source.frame = false;
+          source.frameInsetMm = 0.8;
+          source.threshold = 102;
+          localStorage.setItem('b2m-b21-entry-settings-v3', JSON.stringify(all));
+          localStorage.setItem('b2m-b21-text-style-v22', JSON.stringify({
+            'ci-label-1': {label: {fontFamily:'mono',bold:false}}
+          }));
+        }""")
+        page.locator("#b21-entry-select").dispatch_event("change")
+        page.locator("#b21-v4-copy-design").click()
+        page.locator("#b21-entry-select").select_option("1")
+        target_before = page.evaluate("""() => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const row = all['ci-label-2'];
+          return {codeValue:row.codeValue,profileId:row.profileId,copies:row.copies};
+        }""")
+        page.locator("#b21-v4-paste-design").click()
+        target_after = page.evaluate("""() => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const row = all['ci-label-2'];
+          const styles = JSON.parse(localStorage.getItem('b2m-b21-text-style-v22') || '{}');
+          return {
+            codeValue:row.codeValue,profileId:row.profileId,copies:row.copies,frame:row.frame,
+            labelX:row.elements.find(element => element.id === 'label').x,
+            note:row.elements.find(element => element.id === 'text-smoke')?.text,
+            labelText:document.querySelector('#b21-label-stage [data-element-id="label"]')?.textContent,
+            textStyle:styles['ci-label-2']?.label
+          };
+        }""")
+        assert target_after["codeValue"] == target_before["codeValue"] == "87654321", target_after
+        assert target_after["profileId"] == target_before["profileId"], target_after
+        assert target_after["copies"] == target_before["copies"], target_after
+        assert target_after["frame"] is False and target_after["labelX"] == 36, target_after
+        assert target_after["note"] == "Copied note", target_after
+        assert target_after["labelText"] == "CI Label Two", target_after
+        assert target_after["textStyle"] == {"fontFamily": "mono", "bold": False}, target_after
+
         # Current label only must use the canonical job endpoint, never v30 batch queue.
         label_hits = {"batch": 0, "jobs_post": 0}
 
