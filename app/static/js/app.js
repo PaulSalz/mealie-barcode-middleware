@@ -130,10 +130,6 @@
     var sseChannel = null;
     var sseLockName = 'b2m-live-events-v1';
     var sseLockSupported = !!(navigator.locks && navigator.locks.request);
-    var sseDebug = window.__B2M_DEBUG_SSE ? window.__b2mSseDebug = {
-        lockSupported: sseLockSupported, channelSupported: false,
-        lockHeld: false, lockError: null, sources: 0,
-    } : null;
     var sseStorageKey = 'b2m-live-event-v1';
     var sseLockPending = false, sseLockHeld = false, releaseSseLock = null, sseLockRetryTimer = null;
     var sseTabId = Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -152,8 +148,6 @@
             try { receiveSSEMessage(JSON.parse(event.newValue)); } catch (e) {}
         });
     }
-    if (sseDebug) sseDebug.channelSupported = !!sseChannel;
-
     function deliverSSEEvent(type, data) {
         if (type === 'scan') onScanEvent({data: data});
         else if (type === 'pause') onPauseEvent({data: data});
@@ -174,7 +168,6 @@
     }
     function connectSSE() {
         if (es || !canConnectSSE()) return;
-        if (sseDebug) sseDebug.sources += 1;
         es = new EventSource('/events');
         es.addEventListener('open', function() { esRetryDelay = 1000; });
         es.onerror = function() {
@@ -219,17 +212,14 @@
         navigator.locks.request(sseLockName, {mode: 'exclusive', ifAvailable: true}, function(lock) {
             if (!lock || !ssePageActive) return;
             sseLockHeld = true;
-            if (sseDebug) sseDebug.lockHeld = true;
             connectSSE();
             return new Promise(function(resolve) {
                 releaseSseLock = resolve;
             }).finally(function() {
                 releaseSseLock = null;
                 sseLockHeld = false;
-                if (sseDebug) sseDebug.lockHeld = false;
             });
         }).catch(function(error) {
-            if (sseDebug) { sseDebug.lockError = String(error); sseDebug.lockSupported = false; }
             sseLockSupported = false;
             if (sseChannel) {
                 sseChannel.close();
@@ -424,5 +414,4 @@
     var closeBtn = document.getElementById('notif-close');
     if (closeBtn) closeBtn.addEventListener('click', function() { var menu = closeBtn.closest('.dropdown-menu'); if (menu) menu.classList.remove('show'); });
 
-    connectSSE();
 })();
