@@ -85,6 +85,7 @@ def main() -> None:
         # Keep several authenticated tabs open and verify the browser shares one
         # long-lived SSE connection instead of exhausting its per-origin slots.
         context.add_init_script(script="""(() => {
+            try { Object.defineProperty(navigator, "locks", {configurable: true, value: undefined}); } catch (e) {}
             const NativeEventSource = window.EventSource;
             window.__b2mEventSources = [];
             if (typeof NativeEventSource === "function") {
@@ -104,7 +105,7 @@ def main() -> None:
             broadcast_channel: typeof BroadcastChannel === "function",
         })""")
         print("B2M multi-tab event capabilities:", event_capabilities)
-        assert event_capabilities["web_locks"], event_capabilities
+        assert not event_capabilities["web_locks"], event_capabilities
 
         def event_lock_is_held(tab):
             return tab.evaluate("""async () => {
