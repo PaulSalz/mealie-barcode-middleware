@@ -82,6 +82,40 @@ def main() -> None:
             assert initial_nav == current_nav, (route, "load shift", initial_nav, current_nav)
             assert activity_nav == current_nav, (route, activity_nav, current_nav)
 
+        # Keep several authenticated tabs open and verify the browser shares one
+        # long-lived SSE connection instead of exhausting its per-origin slots.
+        active_event_requests = set()
+
+        def track_event_request(request):
+            if request.url.endswith("/events"):
+                active_event_requests.add(request)
+
+        def untrack_event_request(request):
+            active_event_requests.discard(request)
+
+        context.on("request", track_event_request)
+        context.on("requestfinished", untrack_event_request)
+        context.on("requestfailed", untrack_event_request)
+        page.reload(wait_until="domcontentloaded", timeout=20_000)
+        event_tabs = []
+        for _ in range(3):
+            event_tab = context.new_page()
+            event_tab.goto(f"{BASE_URL}/items", wait_until="domcontentloaded", timeout=20_000)
+            event_tab.wait_for_load_state("load", timeout=20_000)
+            event_tabs.append(event_tab)
+        wait_until(
+            lambda: len(active_event_requests) == 1,
+            "B2M tabs did not settle on one shared event stream.",
+            timeout_ms=8_000,
+        )
+        page.wait_for_timeout(500)
+        assert len(active_event_requests) == 1, sorted(request.url for request in active_event_requests)
+        for event_tab in event_tabs:
+            event_tab.close()
+        context.remove_listener("request", track_event_request)
+        context.remove_listener("requestfinished", untrack_event_request)
+        context.remove_listener("requestfailed", untrack_event_request)
+
         # Simulate a slow post-b21.css request. Navigation must already have
         # its final position from app.css before the late stylesheet loads.
         page.goto(f"{BASE_URL}/items", wait_until="load", timeout=20_000)
