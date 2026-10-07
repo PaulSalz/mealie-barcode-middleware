@@ -662,7 +662,18 @@ def main() -> None:
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
           return all['ci-label-1'].elements.find(row => row.id === 'label').fontSizePt;
         }""")
-        assert long_font < short_font, (short_font, long_font)
+        font_debug = page.evaluate("""() => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const queue = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          return {
+            queueLabel: queue.queue?.[0]?.label,
+            selectedIndex: document.querySelector('#b21-entry-select')?.value,
+            stageAspect: document.querySelector('#b21-label-stage')?.style.aspectRatio,
+            presetActive: document.querySelector('#b21-v4-presets [data-preset="stacked"]')?.classList.contains('active'),
+            savedLabel: all['ci-label-1']?.elements.find(row => row.id === 'label')
+          };
+        }""")
+        assert long_font < short_font, (short_font, long_font, smallest_profile, font_debug)
         page.evaluate("""() => {
           const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
           data.queue[0].label = 'CI Label One';
