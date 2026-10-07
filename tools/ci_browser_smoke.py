@@ -454,6 +454,8 @@ def main() -> None:
         )
         assert page.locator("#label-queue .label-card").count() == 35
         assert page.locator("#preview-grid .label-preview-cell").count() == 24
+        assert page.locator("#preview-grid img[loading='lazy']").count() == 24
+        assert page.locator("#label-queue img.label-code-preview[loading='lazy']").count() == 35
         preview_summary = page.locator("#preview-summary").inner_text()
         assert "showing 24 of 35 code previews" in preview_summary, preview_summary
         assert "printing includes all labels" in preview_summary, preview_summary
