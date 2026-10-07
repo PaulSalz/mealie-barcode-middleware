@@ -15,7 +15,8 @@ BASE_URL = os.environ.get("B2M_BROWSER_URL", "http://127.0.0.1:8001")
 def main() -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        context = browser.new_context(viewport={"width": 1280, "height": 900})
+        page = context.new_page()
         page_errors: list[str] = []
         console_messages: list[str] = []
         page.on("pageerror", lambda error: page_errors.append(str(error)))
@@ -903,6 +904,40 @@ def main() -> None:
         preview_summary = page.locator("#preview-summary").inner_text()
         assert "showing 24 of 35 code previews" in preview_summary, preview_summary
         assert "printing includes all labels" in preview_summary, preview_summary
+
+        # A second tab must see new codes, and later writes must preserve both tabs' entries.
+        second_tab = context.new_page()
+        second_tab_errors: list[str] = []
+        second_tab.on("pageerror", lambda error: second_tab_errors.append(str(error)))
+        second_tab.goto(f"{BASE_URL}/labels", wait_until="domcontentloaded", timeout=20_000)
+        second_tab.wait_for_function(
+            "() => document.querySelector('#label-count')?.textContent === '(3465)'",
+            timeout=5_000,
+        )
+        second_tab.locator("#generic-text").fill("Generated from second tab")
+        second_tab.locator("#generic-add").click()
+        page.wait_for_function(
+            "() => document.querySelector('#label-count')?.textContent === '(3466)'",
+            timeout=5_000,
+        )
+        assert page.locator("#label-queue .label-card").count() == 36
+
+        page.locator("#generic-text").fill("Generated from first tab")
+        page.locator("#generic-add").click()
+        second_tab.wait_for_function(
+            "() => document.querySelector('#label-count')?.textContent === '(3467)'",
+            timeout=5_000,
+        )
+        assert page.locator("#label-queue .label-card").count() == 37
+        assert second_tab.locator("#label-queue .label-card").count() == 37
+        assert page.locator("#preview-grid .label-preview-cell").count() == 24
+        assert second_tab.locator("#preview-grid .label-preview-cell").count() == 24
+        labels = page.locator("#label-queue .entry-label").evaluate_all(
+            "(inputs) => inputs.map(input => input.value)"
+        )
+        assert "Generated from second tab" in labels
+        assert "Generated from first tab" in labels
+        assert second_tab_errors == [], second_tab_errors
 
         if page_errors:
             raise AssertionError("Browser JavaScript errors: " + " | ".join(page_errors))
