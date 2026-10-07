@@ -1,9 +1,12 @@
+import asyncio
+import threading
+
 from fastapi import BackgroundTasks
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, init_db
-from app.models import BarcodeMapping, BarcodeTarget, Item
+from app.models import BarcodeCache, BarcodeMapping, BarcodeTarget, Item
 from app.routers import barcodes as barcode_router
 from app.routers import items as item_router
 from app.services.fuzzy import try_auto_map
@@ -178,7 +181,10 @@ def test_new_item_barcode_targets_use_the_item_default_quantity(monkeypatch):
         assert auto_target.quantity == 2.5
         assert auto_target.unit_id == "unit-pack"
 
-        monkeypatch.setattr(barcode_router, "get_food", lambda _item_id: None)
+        def unexpected_food_fetch(_item_id):
+            raise AssertionError("linking a local Food must not wait for a Mealie Food GET")
+
+        monkeypatch.setattr(barcode_router, "get_food", unexpected_food_fetch, raising=False)
         monkeypatch.setattr(barcode_router, "_resolve_notifications_async", lambda *args: None)
         response = barcode_router.barcode_map(
             barcode=manual_barcode,
@@ -209,3 +215,96 @@ def test_item_details_form_exposes_quantity_unit_category_and_description():
     assert 'name="description"' in template
     assert "Default scan quantity" in template
     assert "Default unit" in template
+
+def test_barcode_detail_loads_mealie_catalogs_concurrently(monkeypatch):
+    from types import SimpleNamespace
+
+    init_db()
+    barcode = "ci-barcode-detail-fast-load"
+    db = SessionLocal()
+    try:
+        db.query(BarcodeTarget).filter(BarcodeTarget.barcode == barcode).delete(synchronize_session=False)
+        existing = db.get(BarcodeCache, barcode)
+        if existing:
+            db.delete(existing)
+        db.add(BarcodeCache(barcode=barcode, source="manual", found=False))
+        db.commit()
+
+        barrier = threading.Barrier(3)
+        def blocking_loader():
+            barrier.wait(timeout=3)
+            return []
+
+        monkeypatch.setattr(barcode_router, "get_shopping_lists", blocking_loader)
+        monkeypatch.setattr(barcode_router, "cached_units", blocking_loader)
+        monkeypatch.setattr(barcode_router, "cached_labels", blocking_loader)
+        monkeypatch.setattr(barcode_router, "get_default_shopping_list_id", lambda _db: None)
+        monkeypatch.setattr(barcode_router, "_barcode_stats", lambda *_args: {"recent": []})
+        monkeypatch.setattr(
+            barcode_router,
+            "templates",
+            SimpleNamespace(TemplateResponse=lambda _request, _template, context: {"context": context}),
+        )
+
+        response = asyncio.run(barcode_router.barcode_detail(
+            request=SimpleNamespace(query_params={}),
+            barcode=barcode,
+            db=db,
+        ))
+        assert response["context"]["units"] == []
+        assert response["context"]["labels"] == []
+        assert response["context"]["shopping_lists"] == []
+    finally:
+        db.query(BarcodeTarget).filter(BarcodeTarget.barcode == barcode).delete(synchronize_session=False)
+        existing = db.get(BarcodeCache, barcode)
+        if existing:
+            db.delete(existing)
+        db.commit()
+        db.close()
+
+
+def test_item_detail_loads_mealie_data_concurrently(monkeypatch):
+    from types import SimpleNamespace
+
+    init_db()
+    item_id = "ci-item-detail-fast-load"
+    db = SessionLocal()
+    try:
+        _cleanup(db, item_id)
+        db.add(Item(id=item_id, name="Fast load food", source="mealie"))
+        db.commit()
+
+        barrier = threading.Barrier(4)
+        def blocking_loader():
+            barrier.wait(timeout=3)
+            return []
+
+        def blocking_food(_item_id):
+            barrier.wait(timeout=3)
+            return {}
+
+        monkeypatch.setattr(item_router, "get_food", blocking_food)
+        monkeypatch.setattr(item_router, "cached_labels", blocking_loader)
+        monkeypatch.setattr(item_router, "cached_units", blocking_loader)
+        monkeypatch.setattr(item_router, "get_shopping_lists", blocking_loader)
+        monkeypatch.setattr(item_router, "get_default_shopping_list_id", lambda _db: None)
+        monkeypatch.setattr(item_router, "_item_scan_stats", lambda *_args: {})
+        monkeypatch.setattr(
+            item_router,
+            "templates",
+            SimpleNamespace(TemplateResponse=lambda _request, _template, context: {"context": context}),
+        )
+
+        response = asyncio.run(item_router.item_detail(
+            request=SimpleNamespace(query_params={}),
+            item_id=item_id,
+            db=db,
+        ))
+        assert response["context"]["mealie_food"] == {}
+        assert response["context"]["labels"] == []
+        assert response["context"]["units"] == []
+        assert response["context"]["shopping_lists"] == []
+    finally:
+        _cleanup(db, item_id)
+        db.close()
+
