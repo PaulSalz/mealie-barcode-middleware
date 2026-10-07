@@ -42,41 +42,26 @@
     }
     installScannerMenuStatus();
 
-    // Immediate scanner acknowledgement is deliberately not a notification.
-    // On the dashboard it appears as a tiny transient status in the Mealie card;
-    // elsewhere the bell briefly fills and turns blue.
-    if(window.EventSource){
-        var receivedEvents=new EventSource('/events');
-        receivedEvents.addEventListener('received',function(event){
-            var data;try{data=JSON.parse(event.data);}catch(e){return;}
-            var barcode=String(data.barcode||'');
-            var bell=document.querySelector('#notif-dropdown .ti-bell, #notif-dropdown .ti-bell-filled');
-            if(bell){
-                clearTimeout(window._b2mReceivedBellTimer);
-                bell.classList.remove('ti-bell');
-                bell.classList.add('ti-bell-filled','b2m-scan-received-bell');
-                window._b2mReceivedBellTimer=setTimeout(function(){
-                    bell.classList.remove('ti-bell-filled','b2m-scan-received-bell');
-                    bell.classList.add('ti-bell');
-                },1100);
+    // The shared live stream's stable bell listener handles the acknowledgement
+    // animation. This listener adds the dashboard's processing status.
+    window.addEventListener('b2m:scanner-received', function(event){
+        var data=(event&&event.detail)||{};
+        var barcode=String(data.barcode||'');
+        if(window.location.pathname==='/'){
+            var status=document.getElementById('scan-received-status');
+            if(!status){
+                var health=document.getElementById('health-status');
+                var host=health&&health.closest('.col');
+                if(host){status=document.createElement('div');status.id='scan-received-status';status.className='small text-primary mt-1';host.appendChild(status);}
             }
-            if(window.location.pathname==='/'){
-                var status=document.getElementById('scan-received-status');
-                if(!status){
-                    var health=document.getElementById('health-status');
-                    var host=health&&health.closest('.col');
-                    if(host){status=document.createElement('div');status.id='scan-received-status';status.className='small text-primary mt-1';host.appendChild(status);}
-                }
-                if(status){
-                    clearTimeout(window._b2mReceivedStatusTimer);
-                    status.textContent='Scan received'+(barcode?': '+barcode:'')+' · processing…';
-                    status.style.opacity='1';
-                    window._b2mReceivedStatusTimer=setTimeout(function(){status.style.opacity='0';setTimeout(function(){status.textContent='';},180);},1800);
-                }
+            if(status){
+                clearTimeout(window._b2mReceivedStatusTimer);
+                status.textContent='Scan received'+(barcode?': '+barcode:'')+' · processing…';
+                status.style.opacity='1';
+                window._b2mReceivedStatusTimer=setTimeout(function(){status.style.opacity='0';setTimeout(function(){status.textContent='';},180);},1800);
             }
-        });
-        window.addEventListener('beforeunload',function(){receivedEvents.close();});
-    }
+        }
+    });
 
     function installBulkSelection(){
         if(!document.querySelector('a[href="/settings"]'))return; // admin-only UI
