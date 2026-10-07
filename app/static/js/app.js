@@ -151,6 +151,11 @@
         if (!message || message.source === sseTabId || typeof message.data !== 'string') return;
         deliverSSEEvent(message.event, message.data);
     }
+    function deliverSSEEvent(type, data) {
+        window.dispatchEvent(new CustomEvent('b2m:sse', {detail: {event: type, data: data}}));
+        if (type === 'scan') onScanEvent({data: data});
+        else if (type === 'pause') onPauseEvent({data: data});
+    }
     function receiveSSEEventMessage(event) {
         if (sseChannel || event.key !== sseStorageKey || !event.newValue) return;
         try { receiveSSEMessage(JSON.parse(event.newValue)); } catch (e) {}
@@ -272,6 +277,7 @@
         };
         es.addEventListener('scan', function(event) { publishSSEEvent('scan', event); });
         es.addEventListener('pause', function(event) { publishSSEEvent('pause', event); });
+        es.addEventListener('received', function(event) { publishSSEEvent('received', event); });
     }
     function stopSSE() {
         if (esRetryTimer) {
