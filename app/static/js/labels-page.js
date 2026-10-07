@@ -3,10 +3,18 @@
 
     var STORAGE_KEY = 'b2m-label-generator-v2';
     var queue = [];
-    var nextId = 1;
+    var entryIdSequence = 1;
+    var tabId = (window.crypto && window.crypto.randomUUID)
+        ? window.crypto.randomUUID()
+        : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
     var activePane = 'generic';
     var MAX_PREVIEW_CODES = 24;
+    var pendingStorageSync = false;
     var $ = function(id) { return document.getElementById(id); };
+
+    function newEntryId() {
+        return tabId + ':' + (entryIdSequence++);
+    }
 
     function esc(value) {
         return String(value == null ? '' : value)
@@ -35,7 +43,7 @@
             target_id: entry.target_id || '',
             target_name: entry.target_name || entry.label || '',
             qty: Math.max(1, Math.min(99, Number(entry.qty || 1))),
-            _id: Number(entry._id || nextId++)
+            _id: entry._id == null || entry._id === '' ? newEntryId() : String(entry._id)
         };
     }
 
@@ -49,13 +57,31 @@
         return values;
     }
 
-    function persist() {
+    function readStoredState() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                queue: queue.map(cleanEntry),
-                settings: storageSettings(),
-                pane: activePane
-            }));
+            var raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            console.warn('Could not read label queue state', e);
+            return null;
+        }
+    }
+
+    function persist(changes) {
+        changes = changes || {};
+        try {
+            var latest = readStoredState() || {};
+            var nextState = {
+                queue: changes.queue
+                    ? queue.map(cleanEntry)
+                    : (Array.isArray(latest.queue) ? latest.queue.map(cleanEntry) : queue.map(cleanEntry)),
+                settings: changes.settings ? storageSettings() : (latest.settings || storageSettings()),
+                pane: changes.pane ? activePane : (latest.pane || activePane),
+                writer: tabId,
+                updated_at: Date.now()
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+            queue = nextState.queue;
         } catch (e) {
             console.warn('Could not persist label queue', e);
         }
@@ -63,12 +89,10 @@
 
     function restore() {
         try {
-            var raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return;
-            var state = JSON.parse(raw);
+            var state = readStoredState();
+            if (!state) return false;
             if (Array.isArray(state.queue)) {
                 queue = state.queue.map(cleanEntry).filter(function(e) { return e.code; });
-                nextId = queue.reduce(function(max, e) { return Math.max(max, e._id + 1); }, 1);
             }
             Object.keys(state.settings || {}).forEach(function(id) {
                 var el = $(id);
@@ -77,12 +101,32 @@
                 else el.value = state.settings[id];
             });
             if (state.pane) activePane = state.pane;
+            return true;
         } catch (e) {
             console.warn('Could not restore label queue', e);
+            return false;
         }
     }
 
+    function refreshQueueFromStorage() {
+        var latest = readStoredState();
+        if (latest && Array.isArray(latest.queue)) {
+            queue = latest.queue.map(cleanEntry).filter(function(e) { return e.code; });
+        }
+    }
+
+    function syncPageFromStorage() {
+        if (!restore()) {
+            queue = [];
+            activePane = 'generic';
+        }
+        switchPane(activePane, true);
+        updateSettingLabels();
+        render();
+    }
+
     function addEntry(entry, deferRender) {
+        refreshQueueFromStorage();
         entry = cleanEntry(entry);
         if (!entry.code) return;
         if (entry.kind === 'code128' && !asciiOnly(entry.code)) entry.kind = 'auto';
@@ -92,24 +136,26 @@
         if (duplicate) {
             duplicate.qty = Math.min(99, duplicate.qty + entry.qty);
         } else {
-            entry._id = nextId++;
+            entry._id = newEntryId();
             queue.push(entry);
         }
-        persist();
+        persist({queue: true});
         if (!deferRender) render();
     }
 
     function removeEntry(id) {
-        queue = queue.filter(function(entry) { return entry._id !== id; });
-        persist();
+        refreshQueueFromStorage();
+        queue = queue.filter(function(entry) { return entry._id !== String(id); });
+        persist({queue: true});
         render();
     }
 
     function updateQty(id, delta) {
-        var entry = queue.find(function(row) { return row._id === id; });
+        refreshQueueFromStorage();
+        var entry = queue.find(function(row) { return row._id === String(id); });
         if (!entry) return;
         entry.qty = Math.max(1, Math.min(99, entry.qty + delta));
-        persist();
+        persist({queue: true});
         render();
     }
 
@@ -150,25 +196,38 @@
                 button.addEventListener('click', function() { updateQty(entry._id, Number(button.dataset.delta)); });
             });
             col.querySelector('.entry-label').addEventListener('input', function() {
-                entry.label = this.value;
-                entry.target_name = entry.target_name || this.value;
-                persist(); renderPreview();
+                var entryId = entry._id;
+                var value = this.value;
+                refreshQueueFromStorage();
+                var current = queue.find(function(row) { return row._id === entryId; });
+                if (!current) { render(); return; }
+                current.label = value;
+                current.target_name = current.target_name || value;
+                persist({queue: true}); renderPreview();
             });
             col.querySelector('.entry-code').addEventListener('change', function() {
+                var entryId = entry._id;
                 var value = this.value.trim();
-                if (!value) { this.value = entry.code; return; }
-                entry.code = value;
-                if (entry.kind === 'code128' && !asciiOnly(value)) entry.kind = 'auto';
-                persist(); render();
+                refreshQueueFromStorage();
+                var current = queue.find(function(row) { return row._id === entryId; });
+                if (!current) { render(); return; }
+                if (!value) { this.value = current.code; return; }
+                current.code = value;
+                if (current.kind === 'code128' && !asciiOnly(value)) current.kind = 'auto';
+                persist({queue: true}); render();
             });
             col.querySelector('.entry-kind').addEventListener('change', function() {
+                var entryId = entry._id;
                 var selected = this.value;
-                if (selected === 'code128' && !asciiOnly(entry.code)) {
-                    entry.kind = 'auto';
+                refreshQueueFromStorage();
+                var current = queue.find(function(row) { return row._id === entryId; });
+                if (!current) { render(); return; }
+                if (selected === 'code128' && !asciiOnly(current.code)) {
+                    current.kind = 'auto';
                 } else {
-                    entry.kind = selected;
+                    current.kind = selected;
                 }
-                persist(); render();
+                persist({queue: true}); render();
             });
             col.querySelector('.label-code-preview').addEventListener('click', function() {
                 $('code-preview-title').textContent = entry.label || 'Code preview';
@@ -286,11 +345,11 @@
         renderPreview();
     }
 
-    function switchPane(type) {
+    function switchPane(type, skipPersist) {
         activePane = type;
         document.querySelectorAll('[data-code-type]').forEach(function(button) { button.classList.toggle('active', button.dataset.codeType === type); });
         document.querySelectorAll('.generator-pane').forEach(function(pane) { pane.classList.toggle('d-none', pane.dataset.pane !== type); });
-        persist();
+        if (!skipPersist) persist({pane: true});
     }
 
     function debounce(fn, wait) {
@@ -358,6 +417,8 @@
     }, 180);
 
     async function registerQueue() {
+        refreshQueueFromStorage();
+        render();
         if (!queue.length) return;
         var data = await fetchJson('/labels/register', {
             method: 'POST',
@@ -481,6 +542,26 @@
         $('label-margin-value').textContent = $('label-margin').value;
     }
 
+    window.addEventListener('storage', function(event) {
+        if (event.key !== STORAGE_KEY) return;
+        var active = document.activeElement;
+        if (active && active.closest && active.closest('#label-queue')) {
+            pendingStorageSync = true;
+            return;
+        }
+        syncPageFromStorage();
+    });
+
+    document.addEventListener('focusout', function(event) {
+        if (!pendingStorageSync || !event.target.closest || !event.target.closest('#label-queue')) return;
+        setTimeout(function() {
+            var active = document.activeElement;
+            if (active && active.closest && active.closest('#label-queue')) return;
+            pendingStorageSync = false;
+            syncPageFromStorage();
+        }, 0);
+    });
+
     document.querySelectorAll('[data-code-type]').forEach(function(button) { button.addEventListener('click', function() { switchPane(button.dataset.codeType); }); });
     $('generic-add').addEventListener('click', function() {
         var text = $('generic-text').value.trim();
@@ -500,8 +581,9 @@
     document.querySelectorAll('.queue-kind-all').forEach(function(button) {
         button.addEventListener('click', function() {
             var kind = button.dataset.kind;
+            refreshQueueFromStorage();
             queue.forEach(function(entry) { entry.kind = (kind === 'code128' && !asciiOnly(entry.code)) ? 'auto' : kind; });
-            persist(); render();
+            persist({queue: true}); render();
         });
     });
 
@@ -515,16 +597,16 @@
             $('label-padding').value = button.dataset.padding;
             $('label-margin').value = button.dataset.margin;
             $('label-font-size').value = button.dataset.font;
-            updateSettingLabels(); persist(); renderPreview();
+            updateSettingLabels(); persist({settings: true}); renderPreview();
         });
     });
 
     ['label-size','label-gap','label-padding','label-margin','label-font-size','label-format','label-page-format','label-show-text','label-show-border'].forEach(function(id) {
-        $(id).addEventListener('input', function() { updateSettingLabels(); persist(); renderPreview(); });
-        $(id).addEventListener('change', function() { updateSettingLabels(); persist(); renderPreview(); });
+        $(id).addEventListener('input', function() { updateSettingLabels(); persist({settings: true}); renderPreview(); });
+        $(id).addEventListener('change', function() { updateSettingLabels(); persist({settings: true}); renderPreview(); });
     });
 
-    $('label-clear').addEventListener('click', function() { queue = []; persist(); render(); });
+    $('label-clear').addEventListener('click', function() { refreshQueueFromStorage(); queue = []; persist({queue: true}); render(); });
     $('label-print').addEventListener('click', registerAndPrint);
     if ($('label-niim-print')) $('label-niim-print').addEventListener('click', printNiim);
 
@@ -555,7 +637,7 @@
     });
 
     restore();
-    switchPane(activePane);
+    switchPane(activePane, true);
     var prefillRaw = $('generator-prefill').dataset.prefill;
     if (prefillRaw && prefillRaw !== 'null') {
         try {
