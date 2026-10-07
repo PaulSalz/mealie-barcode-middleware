@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime
+from datetime import datetime
 
 from app.database import SessionLocal, init_db
 from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, RetryQueue
@@ -13,7 +13,6 @@ def test_delete_food_barcode_removes_mapping_and_recent_scan_history():
     barcode = "FOOD:ci-delete-created-food"
     target_id = "ci-delete-created-food-id"
     now = datetime.utcnow()
-    today = now.date()
     db = SessionLocal()
     try:
         db.query(RetryQueue).filter(RetryQueue.barcode == barcode).delete(synchronize_session=False)
@@ -67,6 +66,7 @@ def test_delete_food_barcode_removes_mapping_and_recent_scan_history():
         assert db.query(ScanDailyStat).filter(ScanDailyStat.barcode == barcode).count() == 0
         assert not any(row["barcode"] == barcode for row in _recent_scans(db, 25))
     finally:
+        db.rollback()
         db.query(RetryQueue).filter(RetryQueue.barcode == barcode).delete(synchronize_session=False)
         db.query(BarcodeTarget).filter(BarcodeTarget.barcode == barcode).delete(synchronize_session=False)
         db.query(BarcodeMapping).filter(BarcodeMapping.barcode == barcode).delete(synchronize_session=False)
