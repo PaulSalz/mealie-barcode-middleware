@@ -82,6 +82,84 @@ def main() -> None:
             assert initial_nav == current_nav, (route, "load shift", initial_nav, current_nav)
             assert activity_nav == current_nav, (route, activity_nav, current_nav)
 
+        # Keep several authenticated tabs open and verify the browser shares one
+        # long-lived SSE connection instead of exhausting its per-origin slots.
+        context.add_init_script(script="""(() => {
+            try { Object.defineProperty(navigator, "locks", {configurable: true, value: undefined}); } catch (e) {}
+            const NativeEventSource = window.EventSource;
+            window.__b2mEventSources = [];
+            if (typeof NativeEventSource === "function") {
+                window.EventSource = new Proxy(NativeEventSource, {
+                    construct(target, args, newTarget) {
+                        const source = Reflect.construct(target, args, newTarget);
+                        window.__b2mEventSources.push(source);
+                        return source;
+                    }
+                });
+            }
+        })();""")
+        page.reload(wait_until="domcontentloaded", timeout=20_000)
+        event_capabilities = page.evaluate("""() => ({
+            secure_context: window.isSecureContext,
+            web_locks: Boolean(navigator.locks && navigator.locks.request),
+            broadcast_channel: typeof BroadcastChannel === "function",
+        })""")
+        print("B2M multi-tab event capabilities:", event_capabilities)
+        assert not event_capabilities["web_locks"], event_capabilities
+
+        def event_lease_is_active(tab):
+            return tab.evaluate("""() => {
+                try {
+                    const lease = JSON.parse(localStorage.getItem("b2m-live-event-lease-v1") || "null");
+                    return Boolean(lease && lease.expires > Date.now());
+                } catch (error) {
+                    return false;
+                }
+            }""")
+
+        wait_until(lambda: event_lease_is_active(page), "The active B2M tab did not acquire the shared event lease.", timeout_ms=8_000)
+        event_tabs = []
+        for index in range(3):
+            event_tab = context.new_page()
+            event_tab.goto(f"{BASE_URL}/api/version", wait_until="load", timeout=20_000)
+            wait_until(
+                lambda tab=event_tab: event_lease_is_active(tab),
+                "A secondary tab could not see the active tab's event lease.",
+                timeout_ms=8_000,
+            )
+            event_tab.evaluate("document.body.innerHTML = '<div id=scan-toasts></div>'")
+            event_tab.add_script_tag(url=f"{BASE_URL}/static/js/app.js?multitab-smoke={index}")
+            event_tab.evaluate("""() => {
+                window.__b2mReceivedMessages = [];
+                window.addEventListener('b2m:sse', event => window.__b2mReceivedMessages.push(event.detail));
+            }""")
+            event_tabs.append(event_tab)
+        page.wait_for_timeout(500)
+        event_source_states = [page.evaluate("() => window.__b2mEventSources.map(source => source.readyState)")]
+        event_source_states.extend(
+            tab.evaluate("() => window.__b2mEventSources.map(source => source.readyState)")
+            for tab in event_tabs
+        )
+        active_streams = sum(
+            state in (0, 1)
+            for states in event_source_states
+            for state in states
+        )
+        print("B2M live event stream states:", event_source_states)
+        assert active_streams == 1, {"event_sources": event_source_states}
+        page.evaluate("""() => {
+            const source = window.__b2mEventSources.find(item => item.readyState === 1);
+            if (!source) throw new Error("No active B2M event stream");
+            source.dispatchEvent(new MessageEvent("received", {data: JSON.stringify({barcode: "ci-multitab"})}));
+        }""")
+        wait_until(
+            lambda: all(tab.evaluate("() => window.__b2mReceivedMessages.some(message => message.event === 'received' && message.data.includes('ci-multitab'))") for tab in event_tabs),
+            "The shared stream did not broadcast received events to every tab.",
+            timeout_ms=3_000,
+        )
+        for event_tab in event_tabs:
+            event_tab.close()
+
         # Simulate a slow post-b21.css request. Navigation must already have
         # its final position from app.css before the late stylesheet loads.
         page.goto(f"{BASE_URL}/items", wait_until="load", timeout=20_000)

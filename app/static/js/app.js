@@ -125,15 +125,249 @@
         }
     }
 
-    var esRetryDelay = 1000, es;
+    var esRetryDelay = 1000, es, esRetryTimer = null;
+    var ssePageActive = true;
+    var sseChannel = null;
+    var sseLockName = 'b2m-live-events-v1';
+    var sseLockSupported = !!(navigator.locks && navigator.locks.request);
+    var sseStorageKey = 'b2m-live-event-v1';
+    var sseLeaseKey = 'b2m-live-event-lease-v1';
+    var sseLeaseMs = 15000, sseLeaseHeartbeatMs = 5000;
+    var sseStorageAvailable = true;
+    var sseLockPending = false, sseLockHeld = false, releaseSseLock = null, sseLockRetryTimer = null;
+    var sseFallbackLeader = false, sseFallbackTimer = null, sseFallbackCheckTimer = null;
+    var sseTabId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    try {
+        var sseStorageProbe = sseLeaseKey + ':probe:' + sseTabId;
+        localStorage.setItem(sseStorageProbe, '1');
+        localStorage.removeItem(sseStorageProbe);
+    } catch (e) {
+        sseStorageAvailable = false;
+    }
+    if (window.BroadcastChannel) {
+        try { sseChannel = new BroadcastChannel(sseLockName); } catch (e) { sseChannel = null; }
+    }
+    function receiveSSEMessage(message) {
+        if (!message || message.source === sseTabId || typeof message.data !== 'string') return;
+        deliverSSEEvent(message.event, message.data);
+    }
+    function deliverSSEEvent(type, data) {
+        window.dispatchEvent(new CustomEvent('b2m:sse', {detail: {event: type, data: data}}));
+        if (type === 'scan') onScanEvent({data: data});
+        else if (type === 'pause') onPauseEvent({data: data});
+    }
+    function receiveSSEEventMessage(event) {
+        if (sseChannel || event.key !== sseStorageKey || !event.newValue) return;
+        try { receiveSSEMessage(JSON.parse(event.newValue)); } catch (e) {}
+    }
+    function readSSELease() {
+        if (!sseStorageAvailable) return null;
+        try {
+            var value = localStorage.getItem(sseLeaseKey);
+            return value ? JSON.parse(value) : null;
+        } catch (e) {
+            sseStorageAvailable = false;
+            return null;
+        }
+    }
+    function scheduleSSEFallbackCheck(delay) {
+        if (!ssePageActive || sseLockSupported || sseFallbackCheckTimer) return;
+        sseFallbackCheckTimer = setTimeout(function() {
+            sseFallbackCheckTimer = null;
+            syncSSEFallbackLease();
+        }, delay);
+    }
+    function scheduleSSEFallbackHeartbeat() {
+        if (sseFallbackTimer) clearTimeout(sseFallbackTimer);
+        sseFallbackTimer = setTimeout(function() {
+            sseFallbackTimer = null;
+            renewSSEFallbackLease();
+        }, sseLeaseHeartbeatMs);
+    }
+    function loseSSEFallbackLease() {
+        sseFallbackLeader = false;
+        if (sseFallbackTimer) {
+            clearTimeout(sseFallbackTimer);
+            sseFallbackTimer = null;
+        }
+        stopSSE();
+    }
+    function renewSSEFallbackLease() {
+        if (!ssePageActive || sseLockSupported || !sseFallbackLeader) return;
+        var current = readSSELease();
+        if (!current || current.owner !== sseTabId) {
+            loseSSEFallbackLease();
+            scheduleSSEFallbackCheck(250 + Math.floor(Math.random() * 500));
+            return;
+        }
+        try {
+            localStorage.setItem(sseLeaseKey, JSON.stringify({owner: sseTabId, expires: Date.now() + sseLeaseMs}));
+        } catch (e) {
+            sseStorageAvailable = false;
+            loseSSEFallbackLease();
+            if (document.visibilityState !== 'hidden') connectSSE();
+            return;
+        }
+        current = readSSELease();
+        if (current && current.owner === sseTabId) {
+            connectSSE();
+            scheduleSSEFallbackHeartbeat();
+        } else {
+            loseSSEFallbackLease();
+            scheduleSSEFallbackCheck(250 + Math.floor(Math.random() * 500));
+        }
+    }
+    function syncSSEFallbackLease() {
+        if (!ssePageActive || sseLockSupported) return;
+        if (!sseStorageAvailable) {
+            if (document.visibilityState !== 'hidden') connectSSE();
+            return;
+        }
+        var current = readSSELease();
+        if (current && current.owner !== sseTabId && Number(current.expires) > Date.now()) {
+            if (sseFallbackLeader) loseSSEFallbackLease();
+            scheduleSSEFallbackCheck(Math.min(4000, Math.max(500, Number(current.expires) - Date.now() + Math.floor(Math.random() * 250))));
+            return;
+        }
+        try {
+            localStorage.setItem(sseLeaseKey, JSON.stringify({owner: sseTabId, expires: Date.now() + sseLeaseMs}));
+        } catch (e) {
+            sseStorageAvailable = false;
+            if (document.visibilityState !== 'hidden') connectSSE();
+            return;
+        }
+        current = readSSELease();
+        if (current && current.owner === sseTabId) {
+            sseFallbackLeader = true;
+            connectSSE();
+            scheduleSSEFallbackHeartbeat();
+        } else {
+            loseSSEFallbackLease();
+            scheduleSSEFallbackCheck(250 + Math.floor(Math.random() * 750));
+        }
+    }
+    function publishSSEEvent(type, event) {
+        var message = {source: sseTabId, event: type, data: event.data, id: sseTabId + ':' + Date.now() + ':' + Math.random()};
+        if (sseChannel) {
+            try { sseChannel.postMessage(message); } catch (e) {}
+        } else if (sseStorageAvailable) {
+            try { localStorage.setItem(sseStorageKey, JSON.stringify(message)); } catch (e) {}
+        }
+        deliverSSEEvent(type, event.data);
+    }
+    function canConnectSSE() {
+        if (!ssePageActive) return false;
+        if (sseLockSupported) return sseLockHeld;
+        return sseStorageAvailable ? sseFallbackLeader : document.visibilityState !== 'hidden';
+    }
     function connectSSE() {
+        if (es || !canConnectSSE()) return;
         es = new EventSource('/events');
         es.addEventListener('open', function() { esRetryDelay = 1000; });
-        es.onerror = function() { es.close(); setTimeout(connectSSE, esRetryDelay); esRetryDelay = Math.min(esRetryDelay * 2, 30000); };
-        es.addEventListener('scan', onScanEvent);
-        es.addEventListener('pause', onPauseEvent);
+        es.onerror = function() {
+            if (es) es.close();
+            es = null;
+            if (esRetryTimer) clearTimeout(esRetryTimer);
+            var delay = esRetryDelay;
+            esRetryDelay = Math.min(esRetryDelay * 2, 30000);
+            esRetryTimer = setTimeout(function() {
+                esRetryTimer = null;
+                connectSSE();
+            }, delay);
+        };
+        es.addEventListener('scan', function(event) { publishSSEEvent('scan', event); });
+        es.addEventListener('pause', function(event) { publishSSEEvent('pause', event); });
+        es.addEventListener('received', function(event) { publishSSEEvent('received', event); });
     }
-    window.addEventListener('beforeunload', function() { if (es) es.close(); });
+    function stopSSE() {
+        if (esRetryTimer) {
+            clearTimeout(esRetryTimer);
+            esRetryTimer = null;
+        }
+        if (es) {
+            es.close();
+            es = null;
+        }
+    }
+    function scheduleSSELockRetry() {
+        if (!ssePageActive || !sseLockSupported || sseLockHeld || sseLockPending || sseLockRetryTimer) return;
+        sseLockRetryTimer = setTimeout(function() {
+            sseLockRetryTimer = null;
+            requestSSELock();
+        }, 1500 + Math.floor(Math.random() * 1000));
+    }
+    function requestSSELock() {
+        if (!ssePageActive) return;
+        if (!sseLockSupported) {
+            syncSSEFallbackLease();
+            return;
+        }
+        if (sseLockPending || sseLockHeld) return;
+        sseLockPending = true;
+        navigator.locks.request(sseLockName, {mode: 'exclusive', ifAvailable: true}, function(lock) {
+            if (!lock || !ssePageActive) return;
+            sseLockHeld = true;
+            connectSSE();
+            return new Promise(function(resolve) {
+                releaseSseLock = resolve;
+            }).finally(function() {
+                releaseSseLock = null;
+                sseLockHeld = false;
+            });
+        }).catch(function() {
+            sseLockSupported = false;
+            syncSSEFallbackLease();
+        }).finally(function() {
+            sseLockPending = false;
+            scheduleSSELockRetry();
+        });
+    }
+    function releaseSSEOwnership() {
+        ssePageActive = false;
+        stopSSE();
+        if (sseLockRetryTimer) {
+            clearTimeout(sseLockRetryTimer);
+            sseLockRetryTimer = null;
+        }
+        if (sseFallbackTimer) {
+            clearTimeout(sseFallbackTimer);
+            sseFallbackTimer = null;
+        }
+        if (sseFallbackCheckTimer) {
+            clearTimeout(sseFallbackCheckTimer);
+            sseFallbackCheckTimer = null;
+        }
+        if (sseFallbackLeader && sseStorageAvailable) {
+            var current = readSSELease();
+            if (current && current.owner === sseTabId) {
+                try { localStorage.removeItem(sseLeaseKey); } catch (e) {}
+            }
+        }
+        sseFallbackLeader = false;
+        if (releaseSseLock) releaseSseLock();
+    }
+    if (sseChannel) {
+        sseChannel.addEventListener('message', function(event) { receiveSSEMessage(event.data); });
+    }
+    window.addEventListener('storage', function(event) {
+        receiveSSEEventMessage(event);
+        if (!sseLockSupported && event.key === sseLeaseKey) syncSSEFallbackLease();
+    });
+    if (sseLockSupported) requestSSELock();
+    else syncSSEFallbackLease();
+    document.addEventListener('visibilitychange', function() {
+        if (sseLockSupported) return;
+        if (sseStorageAvailable) syncSSEFallbackLease();
+        else if (document.visibilityState === 'hidden') stopSSE();
+        else connectSSE();
+    });
+    window.addEventListener('pagehide', releaseSSEOwnership);
+    window.addEventListener('pageshow', function() {
+        ssePageActive = true;
+        if (sseLockSupported) requestSSELock();
+        else syncSSEFallbackLease();
+    });
+    window.addEventListener('beforeunload', releaseSSEOwnership);
 
     function onScanEvent(event) {
         var data; try { data = JSON.parse(event.data); } catch (e) { return; }
@@ -291,5 +525,4 @@
     var closeBtn = document.getElementById('notif-close');
     if (closeBtn) closeBtn.addEventListener('click', function() { var menu = closeBtn.closest('.dropdown-menu'); if (menu) menu.classList.remove('show'); });
 
-    connectSSE();
 })();
