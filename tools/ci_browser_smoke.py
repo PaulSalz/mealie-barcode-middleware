@@ -873,6 +873,37 @@ def main() -> None:
         assert shopping_hits["legacy_bootstrap"] == 0, shopping_hits
         assert 1 <= shopping_hits["lists"] <= 3, shopping_hits
 
+        # Large saved quantities must not create thousands of interactive preview cells.
+        page.goto(f"{BASE_URL}/labels", wait_until="domcontentloaded", timeout=20_000)
+        large_queue_payload = {
+            "queue": [
+                {
+                    "_id": index + 100,
+                    "code": "CI" + str(index).zfill(6),
+                    "label": "CI Preview " + str(index),
+                    "kind": "code128",
+                    "qty": 99,
+                }
+                for index in range(35)
+            ]
+        }
+        page.evaluate(
+            "payload => localStorage.setItem('b2m-label-generator-v2', JSON.stringify(payload))",
+            large_queue_payload,
+        )
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_function(
+            "() => document.querySelector('#label-count')?.textContent === '(3465)'",
+            timeout=5_000,
+        )
+        assert page.locator("#label-queue .label-card").count() == 35
+        assert page.locator("#preview-grid .label-preview-cell").count() == 24
+        assert page.locator("#preview-grid img[loading='lazy']").count() == 24
+        assert page.locator("#label-queue img.label-code-preview[loading='lazy']").count() == 35
+        preview_summary = page.locator("#preview-summary").inner_text()
+        assert "showing 24 of 35 code previews" in preview_summary, preview_summary
+        assert "printing includes all labels" in preview_summary, preview_summary
+
         if page_errors:
             raise AssertionError("Browser JavaScript errors: " + " | ".join(page_errors))
 

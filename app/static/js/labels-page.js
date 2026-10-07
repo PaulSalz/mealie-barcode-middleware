@@ -5,6 +5,7 @@
     var queue = [];
     var nextId = 1;
     var activePane = 'generic';
+    var MAX_PREVIEW_CODES = 24;
     var $ = function(id) { return document.getElementById(id); };
 
     function esc(value) {
@@ -81,7 +82,7 @@
         }
     }
 
-    function addEntry(entry) {
+    function addEntry(entry, deferRender) {
         entry = cleanEntry(entry);
         if (!entry.code) return;
         if (entry.kind === 'code128' && !asciiOnly(entry.code)) entry.kind = 'auto';
@@ -95,7 +96,7 @@
             queue.push(entry);
         }
         persist();
-        render();
+        if (!deferRender) render();
     }
 
     function removeEntry(id) {
@@ -127,13 +128,14 @@
         root.innerHTML = '';
         empty.classList.toggle('d-none', queue.length > 0);
 
+        var fragment = document.createDocumentFragment();
         queue.forEach(function(entry) {
             var locked = entry.target_type === 'action';
             var col = document.createElement('div');
             col.className = 'col-12';
             col.innerHTML = '<div class="card label-card"><button class="btn btn-sm btn-icon btn-outline-danger label-remove" type="button" title="Remove"><i class="ti ti-x"></i></button>' +
                 '<div class="card-body"><div class="row g-3 align-items-center">' +
-                '<div class="col-auto"><img class="label-code-preview rounded border bg-white p-1" style="width:112px;height:80px;object-fit:contain;cursor:zoom-in" alt="Code preview" src="' + esc(codeUrl(entry)) + '" data-bs-toggle="modal" data-bs-target="#code-preview-modal"></div>' +
+                '<div class="col-auto"><img loading="lazy" decoding="async" class="label-code-preview rounded border bg-white p-1" style="width:112px;height:80px;object-fit:contain;cursor:zoom-in" alt="Code preview" src="' + esc(codeUrl(entry)) + '" data-bs-toggle="modal" data-bs-target="#code-preview-modal"></div>' +
                 '<div class="col"><div class="row g-2">' +
                 '<div class="col-md-6"><label class="form-label small mb-1">Label</label><input class="form-control form-control-sm entry-label" value="' + esc(entry.label) + '"></div>' +
                 '<div class="col-md-6"><label class="form-label small mb-1">Code value</label><input class="form-control form-control-sm font-monospace entry-code" value="' + esc(entry.code) + '"' + (locked ? ' readonly' : '') + '></div>' +
@@ -173,8 +175,9 @@
                 $('code-preview-value').textContent = entry.code;
                 $('code-preview-large').src = codeUrl(entry);
             });
-            root.appendChild(col);
+            fragment.appendChild(col);
         });
+        root.appendChild(fragment);
 
         $('label-count').textContent = '(' + queue.reduce(function(sum, e) { return sum + e.qty; }, 0) + ')';
         $('label-clear').disabled = queue.length === 0;
@@ -217,6 +220,10 @@
         var cell = document.createElement('div');
         cell.className = (printMode ? 'label-cell' : 'label-preview-cell') + (values.landscape ? ' landscape' : '') + (values.border ? ' has-border' : '');
         var img = document.createElement('img');
+        if (!printMode) {
+            img.loading = 'lazy';
+            img.decoding = 'async';
+        }
         img.src = codeUrl(entry);
         img.alt = entry.code;
         img.style.objectFit = 'contain';
@@ -235,15 +242,24 @@
         var preview = $('preview-grid');
         preview.innerHTML = '';
         applyVars(preview, values, false);
-        var total = 0;
-        queue.forEach(function(entry) {
-            for (var n = 0; n < entry.qty; n++) {
-                preview.appendChild(createLabelCell(entry, values, false));
-                total++;
-            }
+        var total = queue.reduce(function(sum, entry) { return sum + entry.qty; }, 0);
+        var visibleEntries = queue.slice(0, MAX_PREVIEW_CODES);
+        var fragment = document.createDocumentFragment();
+        visibleEntries.forEach(function(entry) {
+            fragment.appendChild(createLabelCell(entry, values, false));
         });
+        preview.appendChild(fragment);
         if (!queue.length) preview.innerHTML = '<div class="label-preview-empty text-center text-secondary py-5">Add a code to preview it.</div>';
-        $('preview-summary').textContent = total ? total + ' label' + (total === 1 ? '' : 's') + ' · ' + values.width + '×' + Math.round(values.height * 10) / 10 + ' mm' : '';
+
+        var summary = total ? total + ' label' + (total === 1 ? '' : 's') : '';
+        if (total > queue.length) summary += ' across ' + queue.length + ' code' + (queue.length === 1 ? '' : 's');
+        if (queue.length > MAX_PREVIEW_CODES) {
+            summary += ' · showing ' + MAX_PREVIEW_CODES + ' of ' + queue.length + ' code previews; printing includes all labels';
+        } else if (total > queue.length) {
+            summary += ' · one preview per code';
+        }
+        if (total) summary += ' · ' + values.width + '×' + Math.round(values.height * 10) / 10 + ' mm';
+        $('preview-summary').textContent = summary;
     }
 
     function renderPrint() {
@@ -544,7 +560,7 @@
     if (prefillRaw && prefillRaw !== 'null') {
         try {
             var prefill = JSON.parse(prefillRaw);
-            if (prefill && !queue.some(function(e) { return e.code === prefill.code; })) addEntry(prefill);
+            if (prefill && !queue.some(function(e) { return e.code === prefill.code; })) addEntry(prefill, true);
         } catch (e) { console.warn('Invalid generator prefill', e); }
     }
     updateSettingLabels();
