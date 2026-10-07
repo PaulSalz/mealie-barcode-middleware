@@ -16,7 +16,7 @@ from app.services.barcode_lookup import perform_lookup
 from app.services.barcode_stats import barcode_scan_stats
 from app.services.fuzzy import fuzzy_match
 from app.services.homeassistant import dismiss_notification as ha_dismiss
-from app.services.mealie import create_food, find_food_by_name, reconcile_linked_barcode, search_foods, search_recipes
+from app.services.mealie import create_food, find_food_by_name, get_food, reconcile_linked_barcode, search_foods, search_recipes
 from app.services.mealie_extras import cached_labels, cached_units
 from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
 from app.services.targets import add_target, ensure_targets, list_ids, primary_targets_by_barcode, set_list_ids
@@ -302,8 +302,13 @@ def barcode_map(
     db: Session = Depends(get_db),
 ):
     item = db.get(Item, item_id)
-    # Existing targets use the local Mealie Food mirror. Refreshing one Food over
-    # HTTP for every barcode link made the form wait on an unnecessary API round-trip.
+    if not item:
+        # Search can return a Mealie Food that has not reached the local mirror yet.
+        # Import it once; already mirrored Foods need no blocking refresh per barcode.
+        fresh_food = get_food(item_id)
+        if fresh_food and str(fresh_food.get("id") or "") == item_id:
+            item = _cache_food(fresh_food, db)
+            db.commit()
     if not item or item.source != "mealie":
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
     effective_unit = item.default_unit_id if unit_id in {"", "__item_default__"} else unit_id
