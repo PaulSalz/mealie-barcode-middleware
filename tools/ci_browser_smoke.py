@@ -84,18 +84,18 @@ def main() -> None:
 
         # Keep several authenticated tabs open and verify the browser shares one
         # long-lived SSE connection instead of exhausting its per-origin slots.
-        active_event_requests = set()
-
-        def track_event_request(request):
-            if request.url.endswith("/events"):
-                active_event_requests.add(request)
-
-        def untrack_event_request(request):
-            active_event_requests.discard(request)
-
-        context.on("request", track_event_request)
-        context.on("requestfinished", untrack_event_request)
-        context.on("requestfailed", untrack_event_request)
+        context.add_init_script(script="""(() => {
+            const NativeEventSource = window.EventSource;
+            window.__b2mEventSourceCalls = 0;
+            if (typeof NativeEventSource === "function") {
+                window.EventSource = new Proxy(NativeEventSource, {
+                    construct(target, args, newTarget) {
+                        window.__b2mEventSourceCalls += 1;
+                        return Reflect.construct(target, args, newTarget);
+                    }
+                });
+            }
+        })();""")
         page.reload(wait_until="domcontentloaded", timeout=20_000)
         event_capabilities = page.evaluate("""() => ({
             secure_context: window.isSecureContext,
@@ -128,12 +128,11 @@ def main() -> None:
             event_tab.add_script_tag(url=f"{BASE_URL}/static/js/app.js?multitab-smoke={index}")
             event_tabs.append(event_tab)
         page.wait_for_timeout(500)
-        assert len(active_event_requests) == 1, sorted(request.url for request in active_event_requests)
+        event_source_calls = [page.evaluate("() => window.__b2mEventSourceCalls")]
+        event_source_calls.extend(tab.evaluate("() => window.__b2mEventSourceCalls") for tab in event_tabs)
+        assert event_source_calls == [1, 0, 0, 0], event_source_calls
         for event_tab in event_tabs:
             event_tab.close()
-        context.remove_listener("request", track_event_request)
-        context.remove_listener("requestfinished", untrack_event_request)
-        context.remove_listener("requestfailed", untrack_event_request)
 
         # Simulate a slow post-b21.css request. Navigation must already have
         # its final position from app.css before the late stylesheet loads.
