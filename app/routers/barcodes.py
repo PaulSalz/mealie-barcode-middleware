@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from collections import Counter
@@ -15,7 +16,7 @@ from app.services.barcode_lookup import perform_lookup
 from app.services.barcode_stats import barcode_scan_stats
 from app.services.fuzzy import fuzzy_match
 from app.services.homeassistant import dismiss_notification as ha_dismiss
-from app.services.mealie import create_food, find_food_by_name, get_food, reconcile_linked_barcode, search_foods, search_recipes
+from app.services.mealie import create_food, find_food_by_name, reconcile_linked_barcode, search_foods, search_recipes
 from app.services.mealie_extras import cached_labels, cached_units
 from app.services.shopping import get_default_shopping_list_id, get_shopping_lists
 from app.services.targets import add_target, ensure_targets, list_ids, primary_targets_by_barcode, set_list_ids
@@ -210,7 +211,7 @@ def barcode_create_manual(code: str = Form(...), title: str = Form(""), brand: s
 
 
 @router.get("/barcodes/{barcode:path}", response_class=HTMLResponse)
-def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)):
+async def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)):
     cached = db.get(BarcodeCache, barcode)
     targets = ensure_targets(barcode, db)
     mapping = next((target for target in targets if target.enabled), targets[0] if targets else None)
@@ -224,6 +225,11 @@ def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)
             raise
         logger.warning("Barcode %s rendered while SQLite was busy; notification read mark deferred", barcode)
 
+    shopping_lists, units, labels = await asyncio.gather(
+        asyncio.to_thread(get_shopping_lists),
+        asyncio.to_thread(cached_units),
+        asyncio.to_thread(cached_labels),
+    )
     candidates = fuzzy_match(cached.display_title, cached.display_brand, db)[:6] if cached and cached.display_title else []
     mapped_barcodes = _mapped_subquery(db)
     next_unmapped = (
@@ -232,7 +238,6 @@ def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)
         .filter(BarcodeCache.source != "action", BarcodeCache.barcode != barcode)
         .order_by(BarcodeCache.created_at.desc()).first()
     )
-    shopping_lists = get_shopping_lists()
     default_list_id = get_default_shopping_list_id(db)
     target_views = []
     for target in targets:
@@ -248,8 +253,8 @@ def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)
         "candidates": candidates,
         "next_unmapped": next_unmapped,
         "threshold": settings.fuzzy_match_threshold,
-        "units": cached_units(),
-        "labels": cached_labels(),
+        "units": units,
+        "labels": labels,
         "shopping_lists": shopping_lists,
         "default_shopping_list_id": default_list_id,
         "stats": _barcode_stats(db, barcode),
@@ -297,10 +302,8 @@ def barcode_map(
     db: Session = Depends(get_db),
 ):
     item = db.get(Item, item_id)
-    fresh_food = get_food(item_id)
-    if fresh_food and str(fresh_food.get("id") or "") == item_id:
-        item = _cache_food(fresh_food, db)
-        db.commit()
+    # Existing targets use the local Mealie Food mirror. Refreshing one Food over
+    # HTTP for every barcode link made the form wait on an unnecessary API round-trip.
     if not item or item.source != "mealie":
         return RedirectResponse(f"/barcodes/{quote(barcode, safe='')}", status_code=303)
     effective_unit = item.default_unit_id if unit_id in {"", "__item_default__"} else unit_id
@@ -469,7 +472,7 @@ def barcodes_search(q: str = Query(default=""), db: Session = Depends(get_db)):
         }
         results_by_id[str(result["id"])] = result
 
-    live_results = search_foods(q, limit=100)
+    live_results = search_foods(q, limit=25)
     for result in live_results or []:
         key = str(result["id"])
         local = results_by_id.get(key)
