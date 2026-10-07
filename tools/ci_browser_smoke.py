@@ -118,7 +118,7 @@ def main() -> None:
         event_tabs = []
         for _ in range(3):
             event_tab = context.new_page()
-            event_tab.goto(f"{BASE_URL}/items", wait_until="domcontentloaded", timeout=20_000)
+            event_tab.goto(f"{BASE_URL}/", wait_until="domcontentloaded", timeout=20_000)
             event_tab.wait_for_load_state("load", timeout=20_000)
             event_tabs.append(event_tab)
         wait_until(
