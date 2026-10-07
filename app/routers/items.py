@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from collections import defaultdict
@@ -132,7 +133,7 @@ def items_list(
 
 
 @router.get("/items/{item_id}", response_class=HTMLResponse)
-def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
+async def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
     item = db.get(Item, item_id)
     if not item:
         return templates.TemplateResponse(request, "404.html", {"message": "Item not found"}, status_code=404)
@@ -151,9 +152,16 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
     barcode_map = {bc.barcode: bc for bc in barcodes}
     mapped_items = [{"mapping": row, "barcode": barcode_map.get(barcode)} for barcode, row in by_barcode.items()]
 
-    mealie_food = get_food(item_id) if item.source == "mealie" else None
-    labels = cached_labels() if item.source == "mealie" else []
-    units = cached_units() if item.source == "mealie" else []
+    if item.source == "mealie":
+        mealie_food, labels, units, shopping_lists = await asyncio.gather(
+            asyncio.to_thread(get_food, item_id),
+            asyncio.to_thread(cached_labels),
+            asyncio.to_thread(cached_units),
+            asyncio.to_thread(get_shopping_lists),
+        )
+    else:
+        mealie_food, labels, units = None, [], []
+        shopping_lists = await asyncio.to_thread(get_shopping_lists)
     current_label_id = item.label_id
     current_unit_id = item.default_unit_id
     if mealie_food:
@@ -163,7 +171,6 @@ def item_detail(request: Request, item_id: str, db: Session = Depends(get_db)):
         food_unit = mealie_food.get("unit") if isinstance(mealie_food.get("unit"), dict) else {}
         current_unit_id = mealie_food.get("unitId") or food_unit.get("id") or item.default_unit_id
 
-    shopping_lists = get_shopping_lists()
     default_shopping_list_id = get_default_shopping_list_id(db)
     default_shopping_list_name = next(
         (row["name"] for row in shopping_lists if row["id"] == str(default_shopping_list_id)),
