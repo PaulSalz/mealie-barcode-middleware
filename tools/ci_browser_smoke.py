@@ -119,14 +119,14 @@ def main() -> None:
         for index in range(3):
             event_tab = context.new_page()
             event_tab.goto(f"{BASE_URL}/api/version", wait_until="load", timeout=20_000)
+            wait_until(
+                lambda tab=event_tab: event_lock_is_held(tab),
+                "A secondary tab could not see the active tab's event lock.",
+                timeout_ms=8_000,
+            )
             event_tab.evaluate("document.body.innerHTML = '<div id=scan-toasts></div>'")
             event_tab.add_script_tag(url=f"{BASE_URL}/static/js/app.js?multitab-smoke={index}")
             event_tabs.append(event_tab)
-            wait_until(
-                lambda tab=event_tab: event_lock_is_held(tab),
-                "A secondary B2M tab did not share the active event lock.",
-                timeout_ms=8_000,
-            )
         page.wait_for_timeout(500)
         assert len(active_event_requests) == 1, sorted(request.url for request in active_event_requests)
         for event_tab in event_tabs:
