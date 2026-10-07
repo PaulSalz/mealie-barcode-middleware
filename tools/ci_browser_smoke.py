@@ -641,6 +641,12 @@ def main() -> None:
         # Presets fit label text to the selected roll; copy/paste keeps each code's identity.
         page.locator("#b21-entry-select").select_option("0")
         page.evaluate("window.__b2mB21LabelEditor.prepareQueue()")
+        smallest_profile = page.evaluate("""async () => {
+          const data = await (await fetch('/labels/b21/profiles')).json();
+          return (data.profiles || []).slice().sort((a, b) => a.width_mm * a.height_mm - b.width_mm * b.height_mm)[0] || null;
+        }""")
+        assert smallest_profile is not None, "B21 profile list should include a selectable label size."
+        page.locator("#b21-profile-select").select_option(str(smallest_profile["id"]))
         page.locator('#b21-v4-presets [data-preset="stacked"]').click()
         short_font = page.evaluate("""() => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
