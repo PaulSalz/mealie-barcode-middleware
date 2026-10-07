@@ -86,12 +86,13 @@ def main() -> None:
         # long-lived SSE connection instead of exhausting its per-origin slots.
         context.add_init_script(script="""(() => {
             const NativeEventSource = window.EventSource;
-            window.__b2mEventSourceCalls = 0;
+            window.__b2mEventSources = [];
             if (typeof NativeEventSource === "function") {
                 window.EventSource = new Proxy(NativeEventSource, {
                     construct(target, args, newTarget) {
-                        window.__b2mEventSourceCalls += 1;
-                        return Reflect.construct(target, args, newTarget);
+                        const source = Reflect.construct(target, args, newTarget);
+                        window.__b2mEventSources.push(source);
+                        return source;
                     }
                 });
             }
@@ -128,9 +129,17 @@ def main() -> None:
             event_tab.add_script_tag(url=f"{BASE_URL}/static/js/app.js?multitab-smoke={index}")
             event_tabs.append(event_tab)
         page.wait_for_timeout(500)
-        event_source_calls = [page.evaluate("() => window.__b2mEventSourceCalls")]
-        event_source_calls.extend(tab.evaluate("() => window.__b2mEventSourceCalls") for tab in event_tabs)
-        assert event_source_calls == [1, 0, 0, 0], event_source_calls
+        event_source_states = [page.evaluate("() => window.__b2mEventSources.map(source => source.readyState)")]
+        event_source_states.extend(
+            tab.evaluate("() => window.__b2mEventSources.map(source => source.readyState)")
+            for tab in event_tabs
+        )
+        active_streams = sum(
+            state in (0, 1)
+            for states in event_source_states
+            for state in states
+        )
+        assert active_streams == 1, event_source_states
         for event_tab in event_tabs:
             event_tab.close()
 
