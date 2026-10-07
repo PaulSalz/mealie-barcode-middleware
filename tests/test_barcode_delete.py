@@ -1,9 +1,12 @@
+import asyncio
 import json
 from datetime import datetime
+from types import SimpleNamespace
 
 from app.database import SessionLocal, init_db
 from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, RetryQueue
 from app.models_scan_stats import BarcodeDailyStat, ScanDailyStat
+from app.routers import barcodes as barcode_router
 from app.routers.barcodes import barcode_delete
 from app.routers.dashboard import _recent_scans
 
@@ -76,5 +79,58 @@ def test_delete_food_barcode_removes_mapping_and_recent_scan_history():
         cached = db.get(BarcodeCache, barcode)
         if cached:
             db.delete(cached)
+        db.commit()
+        db.close()
+
+
+def test_orphaned_food_barcode_history_can_still_be_deleted_from_detail(monkeypatch):
+    init_db()
+    barcode = "FOOD:ci-orphaned-created-food"
+    db = SessionLocal()
+    try:
+        db.query(BarcodeMapping).filter(BarcodeMapping.barcode == barcode).delete(synchronize_session=False)
+        db.query(Activity).filter(Activity.barcode == barcode).delete(synchronize_session=False)
+        db.query(BarcodeDailyStat).filter(BarcodeDailyStat.barcode == barcode).delete(synchronize_session=False)
+        db.query(ScanDailyStat).filter(ScanDailyStat.barcode == barcode).delete(synchronize_session=False)
+        db.add(BarcodeMapping(
+            barcode=barcode,
+            target_type="food",
+            target_id="ci-orphaned-food-id",
+            target_name="Created food",
+        ))
+        db.add(Activity(
+            barcode=barcode,
+            title="Food scanned",
+            message="Created food",
+            result="added",
+            is_scan_event=True,
+        ))
+        db.commit()
+
+        monkeypatch.setattr(barcode_router, "get_shopping_lists", lambda: [])
+        monkeypatch.setattr(barcode_router, "cached_units", lambda: [])
+        monkeypatch.setattr(barcode_router, "cached_labels", lambda: [])
+        monkeypatch.setattr(barcode_router, "get_default_shopping_list_id", lambda _db: None)
+        monkeypatch.setattr(barcode_router, "_barcode_stats", lambda *_args: {"recent": []})
+        monkeypatch.setattr(
+            barcode_router,
+            "templates",
+            SimpleNamespace(TemplateResponse=lambda _request, _template, context: context),
+        )
+
+        context = asyncio.run(barcode_router.barcode_detail(
+            SimpleNamespace(query_params={}),
+            barcode,
+            db,
+        ))
+
+        assert context["cached"] is None
+        assert context["can_delete"] is True
+    finally:
+        db.rollback()
+        db.query(BarcodeMapping).filter(BarcodeMapping.barcode == barcode).delete(synchronize_session=False)
+        db.query(Activity).filter(Activity.barcode == barcode).delete(synchronize_session=False)
+        db.query(BarcodeDailyStat).filter(BarcodeDailyStat.barcode == barcode).delete(synchronize_session=False)
+        db.query(ScanDailyStat).filter(ScanDailyStat.barcode == barcode).delete(synchronize_session=False)
         db.commit()
         db.close()
