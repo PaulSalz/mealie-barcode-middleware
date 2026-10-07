@@ -65,6 +65,15 @@ def _is_database_locked(exc: OperationalError) -> bool:
 def _mark_notifications_read(barcode: str, db: Session):
     db.query(Activity).filter(Activity.barcode == barcode, Activity.is_read == False).update({"is_read": True}, synchronize_session=False)
 
+def _has_barcode_state(barcode: str, db: Session, cached: BarcodeCache | None, targets: list[BarcodeTarget]) -> bool:
+    if cached is not None or targets:
+        return True
+    for model in (BarcodeMapping, RetryQueue, Activity, BarcodeDailyStat, ScanDailyStat):
+        column = model.barcode
+        if db.query(column).filter(column == barcode).first() is not None:
+            return True
+    return False
+
 
 def _resolve_activity_state(barcode: str, target_name: str | None, db: Session) -> None:
     rows = db.query(Activity).filter(
@@ -215,6 +224,7 @@ def barcode_create_manual(code: str = Form(...), title: str = Form(""), brand: s
 async def barcode_detail(request: Request, barcode: str, db: Session = Depends(get_db)):
     cached = db.get(BarcodeCache, barcode)
     targets = ensure_targets(barcode, db)
+    can_delete = _has_barcode_state(barcode, db, cached, targets)
     mapping = next((target for target in targets if target.enabled), targets[0] if targets else None)
     mapped_item = db.get(Item, mapping.target_id) if mapping and mapping.target_type == "food" else None
     try:
@@ -246,6 +256,8 @@ async def barcode_detail(request: Request, barcode: str, db: Session = Depends(g
         target_views.append({"target": target, "item": item, "list_ids": list_ids(target)})
 
     return templates.TemplateResponse(request, "barcode_detail.html", {
+        "barcode": barcode,
+        "can_delete": can_delete,
         "cached": cached,
         "mapping": mapping,
         "targets": target_views,
