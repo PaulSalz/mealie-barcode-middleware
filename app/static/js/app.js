@@ -129,21 +129,24 @@
     var ssePageActive = true;
     var sseChannel = null;
     var sseLockName = 'b2m-live-events-v1';
-    var sseLockSupported = !!(navigator.locks && navigator.locks.request && window.BroadcastChannel);
+    var sseLockSupported = !!(navigator.locks && navigator.locks.request);
+    var sseStorageKey = 'b2m-live-event-v1';
     var sseLockPending = false, sseLockHeld = false, releaseSseLock = null, sseLockRetryTimer = null;
     var sseTabId = Date.now().toString(36) + Math.random().toString(36).slice(2);
-    if (sseLockSupported) {
-        try {
-            sseChannel = new BroadcastChannel(sseLockName);
-            sseChannel.addEventListener('message', function(event) {
-                var message = event.data;
-                if (!message || message.source === sseTabId || typeof message.data !== 'string') return;
-                deliverSSEEvent(message.event, message.data);
-            });
-        } catch (e) {
-            sseLockSupported = false;
-            sseChannel = null;
-        }
+    if (window.BroadcastChannel) {
+        try { sseChannel = new BroadcastChannel(sseLockName); } catch (e) { sseChannel = null; }
+    }
+    function receiveSSEMessage(message) {
+        if (!message || message.source === sseTabId || typeof message.data !== 'string') return;
+        deliverSSEEvent(message.event, message.data);
+    }
+    if (sseChannel) {
+        sseChannel.addEventListener('message', function(event) { receiveSSEMessage(event.data); });
+    } else if (sseLockSupported) {
+        window.addEventListener('storage', function(event) {
+            if (event.key !== sseStorageKey || !event.newValue) return;
+            try { receiveSSEMessage(JSON.parse(event.newValue)); } catch (e) {}
+        });
     }
 
     function deliverSSEEvent(type, data) {
@@ -151,8 +154,13 @@
         else if (type === 'pause') onPauseEvent({data: data});
     }
     function publishSSEEvent(type, event) {
-        if (sseChannel) {
-            try { sseChannel.postMessage({source: sseTabId, event: type, data: event.data}); } catch (e) {}
+        if (sseLockSupported) {
+            var message = {source: sseTabId, event: type, data: event.data, id: sseTabId + ':' + Date.now() + ':' + Math.random()};
+            if (sseChannel) {
+                try { sseChannel.postMessage(message); } catch (e) {}
+            } else {
+                try { localStorage.setItem(sseStorageKey, JSON.stringify(message)); } catch (e) {}
+            }
         }
         deliverSSEEvent(type, event.data);
     }
