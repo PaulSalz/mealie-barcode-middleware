@@ -92,7 +92,7 @@ def main() -> None:
                 window.EventSource = new Proxy(NativeEventSource, {
                     construct(target, args, newTarget) {
                         const source = Reflect.construct(target, args, newTarget);
-                        window.__b2mEventSources.push({source, url: String(args[0]), stack: new Error().stack});
+                        window.__b2mEventSources.push(source);
                         return source;
                     }
                 });
@@ -129,29 +129,34 @@ def main() -> None:
             )
             event_tab.evaluate("document.body.innerHTML = '<div id=scan-toasts></div>'")
             event_tab.add_script_tag(url=f"{BASE_URL}/static/js/app.js?multitab-smoke={index}")
+            event_tab.evaluate("""() => {
+                window.__b2mReceivedMessages = [];
+                window.addEventListener('b2m:sse', event => window.__b2mReceivedMessages.push(event.detail));
+            }""")
             event_tabs.append(event_tab)
         page.wait_for_timeout(500)
-        event_source_details = [page.evaluate("""() => ({
-            sources: window.__b2mEventSources.map(entry => ({state: entry.source.readyState, url: entry.url, stack: entry.stack})),
-            app_scripts: Array.from(document.scripts).filter(script => script.src.includes("/static/js/app.js")).map(script => script.src),
-            frames: window.frames.length,
-        })""")]
-        event_source_details.extend(
-            tab.evaluate("""() => ({
-                sources: window.__b2mEventSources.map(entry => ({state: entry.source.readyState, url: entry.url, stack: entry.stack})),
-                app_scripts: Array.from(document.scripts).filter(script => script.src.includes("/static/js/app.js")).map(script => script.src),
-                frames: window.frames.length,
-            })""")
+        event_source_states = [page.evaluate("() => window.__b2mEventSources.map(source => source.readyState)")]
+        event_source_states.extend(
+            tab.evaluate("() => window.__b2mEventSources.map(source => source.readyState)")
             for tab in event_tabs
         )
-        event_source_states = [[source["state"] for source in tab["sources"]] for tab in event_source_details]
         active_streams = sum(
             state in (0, 1)
             for states in event_source_states
             for state in states
         )
-        print("B2M live event diagnostics:", event_source_details)
-        assert active_streams == 1, {"event_sources": event_source_details}
+        print("B2M live event stream states:", event_source_states)
+        assert active_streams == 1, {"event_sources": event_source_states}
+        page.evaluate("""() => {
+            const source = window.__b2mEventSources.find(item => item.readyState === 1);
+            if (!source) throw new Error("No active B2M event stream");
+            source.dispatchEvent(new MessageEvent("received", {data: JSON.stringify({barcode: "ci-multitab"})}));
+        }""")
+        wait_until(
+            lambda: all(tab.evaluate("() => window.__b2mReceivedMessages.some(message => message.event === 'received' && message.data.includes('ci-multitab'))") for tab in event_tabs),
+            "The shared stream did not broadcast received events to every tab.",
+            timeout_ms=3_000,
+        )
         for event_tab in event_tabs:
             event_tab.close()
 
