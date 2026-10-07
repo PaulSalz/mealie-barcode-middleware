@@ -466,6 +466,10 @@ def main() -> None:
         )
         page.reload(wait_until="domcontentloaded")
         page.locator("#label-queue").wait_for(state="attached", timeout=5_000)
+        page.wait_for_function(
+            "() => document.querySelector('#label-count')?.textContent === '(2)'",
+            timeout=5_000,
+        )
 
         # Printer diagnostics follow the global Basic/Advanced preference.
         tools = page.locator('.d-none.d-md-flex a[data-bs-toggle="dropdown"]').first
