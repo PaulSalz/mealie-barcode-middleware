@@ -73,6 +73,10 @@
     var targets = Array.isArray(item.targets) ? item.targets.filter(function (target) {
       return target && target.id && target.type;
     }) : [];
+    var targetCount = Number(item.target_count || targets.length || 0);
+    if (targetCount > 1) {
+      return '<span class="badge bg-azure-lt me-1">' + targetCount + ' targets</span>';
+    }
     if (!targets.length && item.target_type && item.target_id) {
       targets = [{type: item.target_type, id: item.target_id, name: item.target_name}];
     }
@@ -104,9 +108,6 @@
     }).join('');
     if (!html && item.target_name) html = esc(item.target_name);
     if (!html) html = '<span class="text-secondary">—</span>';
-    if (Number(item.target_count || targets.length) > 1) {
-      html = '<span class="badge bg-azure-lt me-1">' + Number(item.target_count || targets.length) + ' targets</span>' + html;
-    }
     return html;
   }
 
