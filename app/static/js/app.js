@@ -125,15 +125,127 @@
         }
     }
 
-    var esRetryDelay = 1000, es;
+    var esRetryDelay = 1000, es, esRetryTimer = null;
+    var sseChannel = null;
+    var sseLockName = 'b2m-live-events-v1';
+    var sseLockSupported = !!(navigator.locks && navigator.locks.request && window.BroadcastChannel);
+    var sseLockPending = false, sseLockHeld = false, releaseSseLock = null, sseLockRetryTimer = null;
+    var sseTabId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    if (sseLockSupported) {
+        try {
+            sseChannel = new BroadcastChannel(sseLockName);
+            sseChannel.addEventListener('message', function(event) {
+                var message = event.data;
+                if (!message || message.source === sseTabId || typeof message.data !== 'string') return;
+                deliverSSEEvent(message.event, message.data);
+            });
+        } catch (e) {
+            sseLockSupported = false;
+            sseChannel = null;
+        }
+    }
+
+    function deliverSSEEvent(type, data) {
+        if (type === 'scan') onScanEvent({data: data});
+        else if (type === 'pause') onPauseEvent({data: data});
+    }
+    function publishSSEEvent(type, event) {
+        if (sseChannel) {
+            try { sseChannel.postMessage({source: sseTabId, event: type, data: event.data}); } catch (e) {}
+        }
+        deliverSSEEvent(type, event.data);
+    }
+    function canConnectSSE() {
+        return sseLockSupported || document.visibilityState !== 'hidden';
+    }
     function connectSSE() {
+        if (es || !canConnectSSE()) return;
         es = new EventSource('/events');
         es.addEventListener('open', function() { esRetryDelay = 1000; });
-        es.onerror = function() { es.close(); setTimeout(connectSSE, esRetryDelay); esRetryDelay = Math.min(esRetryDelay * 2, 30000); };
-        es.addEventListener('scan', onScanEvent);
-        es.addEventListener('pause', onPauseEvent);
+        es.onerror = function() {
+            if (es) es.close();
+            es = null;
+            if (esRetryTimer) clearTimeout(esRetryTimer);
+            var delay = esRetryDelay;
+            esRetryDelay = Math.min(esRetryDelay * 2, 30000);
+            esRetryTimer = setTimeout(function() {
+                esRetryTimer = null;
+                connectSSE();
+            }, delay);
+        };
+        es.addEventListener('scan', function(event) { publishSSEEvent('scan', event); });
+        es.addEventListener('pause', function(event) { publishSSEEvent('pause', event); });
     }
-    window.addEventListener('beforeunload', function() { if (es) es.close(); });
+    function stopSSE() {
+        if (esRetryTimer) {
+            clearTimeout(esRetryTimer);
+            esRetryTimer = null;
+        }
+        if (es) {
+            es.close();
+            es = null;
+        }
+    }
+    function scheduleSSELockRetry() {
+        if (!sseLockSupported || sseLockHeld || sseLockPending || sseLockRetryTimer) return;
+        sseLockRetryTimer = setTimeout(function() {
+            sseLockRetryTimer = null;
+            requestSSELock();
+        }, 1500 + Math.floor(Math.random() * 1000));
+    }
+    function requestSSELock() {
+        if (!sseLockSupported) {
+            if (document.visibilityState !== 'hidden') connectSSE();
+            return;
+        }
+        if (sseLockPending || sseLockHeld) return;
+        sseLockPending = true;
+        navigator.locks.request(sseLockName, {mode: 'exclusive', ifAvailable: true}, function(lock) {
+            if (!lock) return;
+            sseLockHeld = true;
+            connectSSE();
+            return new Promise(function(resolve) {
+                releaseSseLock = resolve;
+            }).finally(function() {
+                releaseSseLock = null;
+                sseLockHeld = false;
+            });
+        }).catch(function() {
+            sseLockSupported = false;
+            if (sseChannel) {
+                sseChannel.close();
+                sseChannel = null;
+            }
+            if (document.visibilityState !== 'hidden') connectSSE();
+        }).finally(function() {
+            sseLockPending = false;
+            scheduleSSELockRetry();
+        });
+    }
+    function releaseSSEOwnership() {
+        stopSSE();
+        if (sseLockRetryTimer) {
+            clearTimeout(sseLockRetryTimer);
+            sseLockRetryTimer = null;
+        }
+        if (releaseSseLock) releaseSseLock();
+    }
+    if (sseLockSupported) {
+        requestSSELock();
+    } else if (document.visibilityState !== 'hidden') {
+        connectSSE();
+    }
+    document.addEventListener('visibilitychange', function() {
+        if (sseLockSupported) return;
+        if (document.visibilityState === 'hidden') stopSSE();
+        else connectSSE();
+    });
+    window.addEventListener('pagehide', releaseSSEOwnership);
+    window.addEventListener('pageshow', function() {
+        if (sseLockSupported) requestSSELock();
+        else if (document.visibilityState !== 'hidden') connectSSE();
+    });
+    window.addEventListener('beforeunload', releaseSSEOwnership);
 
     function onScanEvent(event) {
         var data; try { data = JSON.parse(event.data); } catch (e) { return; }
