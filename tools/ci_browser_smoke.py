@@ -430,6 +430,41 @@ def main() -> None:
         page.reload(wait_until="domcontentloaded")
         page.locator("#label-queue").wait_for(state="attached", timeout=5_000)
 
+        # Large saved quantities must not create thousands of interactive preview cells.
+        large_queue_payload = {
+            "queue": [
+                {
+                    "_id": index + 100,
+                    "code": "CI" + str(index).zfill(6),
+                    "label": "CI Preview " + str(index),
+                    "kind": "code128",
+                    "qty": 99,
+                }
+                for index in range(35)
+            ]
+        }
+        page.evaluate(
+            "payload => localStorage.setItem('b2m-label-generator-v2', JSON.stringify(payload))",
+            large_queue_payload,
+        )
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_function(
+            "() => document.querySelector('#label-count')?.textContent === '(3465)'",
+            timeout=5_000,
+        )
+        assert page.locator("#label-queue .label-card").count() == 35
+        assert page.locator("#preview-grid .label-preview-cell").count() == 24
+        preview_summary = page.locator("#preview-summary").inner_text()
+        assert "showing 24 of 35 code previews" in preview_summary, preview_summary
+        assert "printing includes all labels" in preview_summary, preview_summary
+
+        page.evaluate(
+            "payload => localStorage.setItem('b2m-label-generator-v2', JSON.stringify(payload))",
+            queue_payload,
+        )
+        page.reload(wait_until="domcontentloaded")
+        page.locator("#label-queue").wait_for(state="attached", timeout=5_000)
+
         # Printer diagnostics follow the global Basic/Advanced preference.
         tools = page.locator('.d-none.d-md-flex a[data-bs-toggle="dropdown"]').first
         tools.wait_for(state="visible", timeout=5_000)
