@@ -90,6 +90,8 @@ def test_orphaned_food_barcode_history_can_still_be_deleted_from_detail(monkeypa
     try:
         db.query(BarcodeMapping).filter(BarcodeMapping.barcode == barcode).delete(synchronize_session=False)
         db.query(Activity).filter(Activity.barcode == barcode).delete(synchronize_session=False)
+        db.query(BarcodeDailyStat).filter(BarcodeDailyStat.barcode == barcode).delete(synchronize_session=False)
+        db.query(ScanDailyStat).filter(ScanDailyStat.barcode == barcode).delete(synchronize_session=False)
         db.add(BarcodeMapping(
             barcode=barcode,
             target_type="food",
@@ -128,5 +130,7 @@ def test_orphaned_food_barcode_history_can_still_be_deleted_from_detail(monkeypa
         db.rollback()
         db.query(BarcodeMapping).filter(BarcodeMapping.barcode == barcode).delete(synchronize_session=False)
         db.query(Activity).filter(Activity.barcode == barcode).delete(synchronize_session=False)
+        db.query(BarcodeDailyStat).filter(BarcodeDailyStat.barcode == barcode).delete(synchronize_session=False)
+        db.query(ScanDailyStat).filter(ScanDailyStat.barcode == barcode).delete(synchronize_session=False)
         db.commit()
         db.close()
