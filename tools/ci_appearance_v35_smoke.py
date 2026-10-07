@@ -417,19 +417,6 @@ def main() -> None:
                     const rowBox = row.getBoundingClientRect();
                     return {topDelta: Math.abs(box.top - barcode.top), rightInset: rowBox.right - box.right, size: box.width};
                 })() : null,
-                bulkStyle: row && row.querySelector('.b2m-bulk-row') ? (() => {
-                    const input = row.querySelector('.b2m-bulk-row');
-                    const cell = input.parentElement;
-                    const rowStyle = getComputedStyle(row);
-                    const cellStyle = getComputedStyle(cell);
-                    const inputStyle = getComputedStyle(input);
-                    return {
-                        disabled: input.disabled,
-                        row: {display: rowStyle.display, position: rowStyle.position, width: rowStyle.width},
-                        cell: {display: cellStyle.display, position: cellStyle.position, width: cellStyle.width, right: cellStyle.right},
-                        input: {display: inputStyle.display, position: inputStyle.position, width: inputStyle.width, height: inputStyle.height, margin: inputStyle.margin, right: inputStyle.right}
-                    };
-                })() : null,
                 compactGap: parseFloat(getComputedStyle(rows).rowGap),
                 scrollWidth: document.documentElement.scrollWidth,
                 viewport: document.documentElement.clientWidth
