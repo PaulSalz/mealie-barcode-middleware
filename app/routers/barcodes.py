@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Activity, BarcodeCache, BarcodeTarget, Item, RetryQueue
+from app.models import Activity, BarcodeCache, BarcodeMapping, BarcodeTarget, Item, RetryQueue
+from app.models_scan_stats import BarcodeDailyStat, ScanDailyStat
 from app.services.barcode_lookup import perform_lookup
 from app.services.barcode_stats import barcode_scan_stats
 from app.services.fuzzy import fuzzy_match
@@ -451,8 +452,15 @@ def barcode_retry_lookup(barcode: str, db: Session = Depends(get_db)):
 
 @router.post("/barcodes/{barcode:path}/delete")
 def barcode_delete(barcode: str, db: Session = Depends(get_db)):
-    db.query(RetryQueue).filter(RetryQueue.barcode == barcode).delete()
-    db.query(BarcodeTarget).filter(BarcodeTarget.barcode == barcode).delete()
+    # Remove all barcode-owned state. FOOD:<id> codes created in the label
+    # generator may still have a legacy BarcodeMapping row, and scan history
+    # is stored independently from the barcode cache.
+    db.query(RetryQueue).filter(RetryQueue.barcode == barcode).delete(synchronize_session=False)
+    db.query(BarcodeTarget).filter(BarcodeTarget.barcode == barcode).delete(synchronize_session=False)
+    db.query(BarcodeMapping).filter(BarcodeMapping.barcode == barcode).delete(synchronize_session=False)
+    db.query(Activity).filter(Activity.barcode == barcode).delete(synchronize_session=False)
+    db.query(BarcodeDailyStat).filter(BarcodeDailyStat.barcode == barcode).delete(synchronize_session=False)
+    db.query(ScanDailyStat).filter(ScanDailyStat.barcode == barcode).delete(synchronize_session=False)
     cached = db.get(BarcodeCache, barcode)
     if cached:
         db.delete(cached)
