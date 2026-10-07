@@ -7,7 +7,6 @@
   let flashTimer = null;
   let lastBarcode = '';
   let lastReceivedAt = 0;
-  let receivedSource = null;
 
   function createStableBell() {
     const icon = document.createElement('span');
@@ -91,16 +90,14 @@
   }
 
   function onReceived(event) {
+    const detail = (event && event.detail) || {};
+    if (detail.event !== 'received') return;
     let data = {};
-    try { data = JSON.parse(event.data || '{}'); } catch (e) {}
+    try { data = JSON.parse(detail.data || '{}'); } catch (e) {}
     handleReceivedData(data);
   }
 
-  function connectReceivedSource() {
-    if (!window.EventSource || receivedSource) return;
-    receivedSource = new EventSource('/events');
-    receivedSource.addEventListener('received', onReceived);
-  }
+  window.addEventListener('b2m:sse', onReceived);
 
   // Final scan is only a fallback for a short SSE reconnect race. It must not
   // create a second flash after a normal early `received` event.
@@ -109,13 +106,8 @@
     handleReceivedData((event && event.detail) || {});
   });
 
-  window.addEventListener('beforeunload', function () {
-    if (receivedSource) receivedSource.close();
-  });
-
   function init() {
     ensureBell();
-    connectReceivedSource();
   }
 
   if (document.readyState === 'loading') {
