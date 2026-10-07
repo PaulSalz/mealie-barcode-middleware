@@ -135,7 +135,7 @@
             col.className = 'col-12';
             col.innerHTML = '<div class="card label-card"><button class="btn btn-sm btn-icon btn-outline-danger label-remove" type="button" title="Remove"><i class="ti ti-x"></i></button>' +
                 '<div class="card-body"><div class="row g-3 align-items-center">' +
-                '<div class="col-auto"><img class="label-code-preview rounded border bg-white p-1" style="width:112px;height:80px;object-fit:contain;cursor:zoom-in" alt="Code preview" src="' + esc(codeUrl(entry)) + '" data-bs-toggle="modal" data-bs-target="#code-preview-modal"></div>' +
+                '<div class="col-auto"><img loading="lazy" decoding="async" class="label-code-preview rounded border bg-white p-1" style="width:112px;height:80px;object-fit:contain;cursor:zoom-in" alt="Code preview" src="' + esc(codeUrl(entry)) + '" data-bs-toggle="modal" data-bs-target="#code-preview-modal"></div>' +
                 '<div class="col"><div class="row g-2">' +
                 '<div class="col-md-6"><label class="form-label small mb-1">Label</label><input class="form-control form-control-sm entry-label" value="' + esc(entry.label) + '"></div>' +
                 '<div class="col-md-6"><label class="form-label small mb-1">Code value</label><input class="form-control form-control-sm font-monospace entry-code" value="' + esc(entry.code) + '"' + (locked ? ' readonly' : '') + '></div>' +
@@ -145,9 +145,6 @@
                 '</div><div class="form-hint entry-hint mt-1">' + (entry.kind === 'auto' ? 'Auto uses Code 128 for short ASCII IDs and QR for longer/Unicode values.' : '') + '</div></div>' +
                 '</div></div></div>';
 
-            var thumbnail = col.querySelector('.label-code-preview');
-            thumbnail.loading = 'lazy';
-            thumbnail.decoding = 'async';
             col.querySelector('.label-remove').addEventListener('click', function() { removeEntry(entry._id); });
             col.querySelectorAll('[data-delta]').forEach(function(button) {
                 button.addEventListener('click', function() { updateQty(entry._id, Number(button.dataset.delta)); });
@@ -223,13 +220,13 @@
         var cell = document.createElement('div');
         cell.className = (printMode ? 'label-cell' : 'label-preview-cell') + (values.landscape ? ' landscape' : '') + (values.border ? ' has-border' : '');
         var img = document.createElement('img');
-        img.src = codeUrl(entry);
-        img.alt = entry.code;
-        img.style.objectFit = 'contain';
         if (!printMode) {
             img.loading = 'lazy';
             img.decoding = 'async';
         }
+        img.src = codeUrl(entry);
+        img.alt = entry.code;
+        img.style.objectFit = 'contain';
         cell.appendChild(img);
         if (values.showText) {
             var text = document.createElement('div');
