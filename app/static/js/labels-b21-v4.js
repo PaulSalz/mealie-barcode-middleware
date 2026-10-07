@@ -14,22 +14,136 @@
   function context(){const q=queue(),i=currentIndex(),entry=q[i]||q[0];if(!entry)return null;const states=readJson(ENTRY_KEY,{}),key=entryKey(entry,i),state=states[key];return state?{q,i,entry,states,key,state}:null;}
   function refreshDesigner(){const select=$('b21-entry-select');if(select)select.dispatchEvent(new Event('change',{bubbles:true}));}
 
+
+  const DESIGN_CLIPBOARD_KEY='b2m-b21-design-clipboard-v1';
+  const TEXT_STYLE_KEY='b2m-b21-text-style-v22';
+
+  function clone(value){return JSON.parse(JSON.stringify(value));}
+  function dimensions(){
+    const ratio=String(($('b21-label-stage')||{}).style?.aspectRatio||'').match(/([\d.]+)\s*\/\s*([\d.]+)/);
+    const widthMm=ratio?Number(ratio[1]):50,heightMm=ratio?Number(ratio[2]):30;
+    return {widthMm:widthMm>0?widthMm:50,heightMm:heightMm>0?heightMm:30};
+  }
+  function fontSizeFor(text,box,size,element){
+    const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+    const maxPt=Math.max(5,Number(size)||14);
+    const widthPx=Math.max(1,dimensions().widthMm*box.w/100*96/25.4);
+    const heightPt=Math.max(1,dimensions().heightMm*box.h/100*72/25.4);
+    const words=String(text||'').trim().split(/\s+/).filter(Boolean);
+    if(!ctx)return Math.max(5,Math.min(maxPt,Math.floor(heightPt/1.2)));
+    for(let pt=Math.floor(maxPt);pt>=5;pt--){
+      ctx.font=(element&&element.mono?'500 ':'600 ')+(pt*96/72)+'px '+(element&&element.mono?'monospace':'sans-serif');
+      const lines=[];let line='';
+      words.forEach((word)=>{
+        const candidate=line?line+' '+word:word;
+        if(!line||ctx.measureText(candidate).width<=widthPx)line=candidate;
+        else{lines.push(line);line=word;}
+      });
+      if(line)lines.push(line);
+      if(lines.length<=4&&lines.length*pt*1.08<=heightPt*.9)return pt;
+    }
+    return 5;
+  }
+  function elementText(element,c){
+    if(element.source==='label')return c.entry.label||c.entry.code||'';
+    if(element.source==='value')return c.state.codeValue||c.entry.code||'';
+    return element.text||'';
+  }
+  function presetElements(name,c){
+    const size=dimensions(),narrow=size.widthMm<38,portrait=size.heightMm>size.widthMm*1.08;
+    const stack=name==='stacked'||((name==='left'||name==='right')&&(narrow||portrait));
+    const presets={
+      stacked:{
+        code:{visible:true,x:50,y:34,w:92,h:50,rotation:0},
+        label:{visible:true,x:50,y:81,w:92,h:34,rotation:0}
+      },
+      left:{
+        code:{visible:true,x:27,y:50,w:48,h:80,rotation:0},
+        label:{visible:true,x:76,y:50,w:44,h:64,rotation:0}
+      },
+      right:{
+        code:{visible:true,x:73,y:50,w:48,h:80,rotation:0},
+        label:{visible:true,x:24,y:50,w:44,h:64,rotation:0}
+      },
+      code:{
+        code:{visible:true,x:50,y:50,w:92,h:86,rotation:0},
+        label:{visible:false}
+      },
+      text:{
+        code:{visible:false},
+        label:{visible:true,x:50,y:50,w:92,h:84,rotation:0}
+      }
+    };
+    const selected=presets[name];if(!selected)return null;
+    const layout=clone(selected);
+    if(stack&&(name==='left'||name==='right')){
+      layout.code={visible:true,x:50,y:34,w:92,h:50,rotation:0};
+      layout.label={visible:true,x:50,y:81,w:92,h:34,rotation:0};
+    }
+    if(layout.label.visible){
+      const label=c.state.elements.find((element)=>element.id==='label');
+      if(label)layout.label.fontSizePt=fontSizeFor(elementText(label,c),layout.label,name==='text'?20:14,label);
+    }
+    if(name==='code'||name==='text')layout.value={visible:false};
+    else layout.value={visible:false};
+    return layout;
+  }
+  function setDesignStatus(message){
+    const status=$('b21-v4-design-status');if(status)status.textContent=message||'';
+  }
+  function clipboard(){
+    const value=readJson(DESIGN_CLIPBOARD_KEY,null);
+    return value&&Array.isArray(value.elements)?value:null;
+  }
+  function syncDesignControls(){
+    const paste=$('b21-v4-paste-design');if(paste)paste.disabled=!clipboard();
+  }
+  function copyDesign(){
+    const c=context();if(!c||!Array.isArray(c.state.elements))return;
+    const styles=readJson(TEXT_STYLE_KEY,{});
+    const design={
+      version:1,
+      sourceKey:c.key,
+      sourceLabel:String(c.entry.label||c.entry.code||''),
+      elements:clone(c.state.elements),
+      frame:c.state.frame!==false,
+      frameInsetMm:Number(c.state.frameInsetMm??1),
+      frameWidthMm:Number(c.state.frameWidthMm??.35),
+      threshold:Number(c.state.threshold||128),
+      textStyles:clone(styles[c.key]||{})
+    };
+    writeJson(DESIGN_CLIPBOARD_KEY,design);
+    syncDesignControls();
+    setDesignStatus('Design copied. Select another code and paste it.');
+  }
+  function pasteDesign(){
+    const c=context(),design=clipboard();if(!c||!design)return;
+    c.state.elements=clone(design.elements);
+    c.state.frame=design.frame!==false;
+    c.state.frameInsetMm=Number(design.frameInsetMm??1);
+    c.state.frameWidthMm=Number(design.frameWidthMm??.35);
+    c.state.threshold=Number(design.threshold||128);
+    writeJson(ENTRY_KEY,c.states);
+    const styles=readJson(TEXT_STYLE_KEY,{});
+    if(Object.keys(design.textStyles||{}).length)styles[c.key]=clone(design.textStyles);
+    else delete styles[c.key];
+    writeJson(TEXT_STYLE_KEY,styles);
+    refreshDesigner();
+    setDesignStatus('Design applied to this code.');
+  }
+
+
   function applyPreset(name){
     const c=context();if(!c)return;
     const code=c.state.elements.find((e)=>e.id==='code');
     const label=c.state.elements.find((e)=>e.id==='label');
     const value=c.state.elements.find((e)=>e.id==='value');
-    const presets={
-      stacked:{code:{visible:true,x:50,y:40,w:86,h:55,rotation:0},label:{visible:true,x:50,y:82,w:88,h:20,rotation:0,fontSizePt:14},value:{visible:false}},
-      left:{code:{visible:true,x:28,y:50,w:50,h:80,rotation:0},label:{visible:true,x:75,y:50,w:42,h:42,rotation:0,fontSizePt:14},value:{visible:false}},
-      right:{code:{visible:true,x:72,y:50,w:50,h:80,rotation:0},label:{visible:true,x:25,y:50,w:42,h:42,rotation:0,fontSizePt:14},value:{visible:false}},
-      code:{code:{visible:true,x:50,y:50,w:92,h:86,rotation:0},label:{visible:false},value:{visible:false}},
-      text:{code:{visible:false},label:{visible:true,x:50,y:50,w:90,h:70,rotation:0,fontSizePt:20},value:{visible:false}}
-    };
-    const p=presets[name];if(!p)return;
-    if(code)Object.assign(code,p.code);if(label)Object.assign(label,p.label);if(value)Object.assign(value,p.value);
+    const preset=presetElements(name,c);if(!preset)return;
+    if(code&&preset.code)Object.assign(code,preset.code);
+    if(label&&preset.label)Object.assign(label,preset.label);
+    if(value&&preset.value)Object.assign(value,preset.value);
     writeJson(ENTRY_KEY,c.states);refreshDesigner();
-    document.querySelectorAll('#b21-v4-presets .btn').forEach((b)=>b.classList.toggle('active',b.dataset.preset===name));
+    document.querySelectorAll('#b21-v4-presets .btn[data-preset]').forEach((b)=>b.classList.toggle('active',b.dataset.preset===name));
   }
 
   function installPresets(){
@@ -37,8 +151,13 @@
     const section=document.createElement('div');section.id='b21-v4-presets';section.className='b21-section';
     section.innerHTML='<div class="fw-semibold mb-2">Layout presets</div><div class="btn-group w-100 flex-wrap" role="group">'+
       [['stacked','Stacked'],['left','Code left'],['right','Code right'],['code','Code only'],['text','Text only']].map((p)=>'<button class="btn btn-outline-secondary" type="button" data-preset="'+p[0]+'">'+p[1]+'</button>').join('')+'</div>';
+    section.insertAdjacentHTML('beforeend','<div class="form-hint mt-2">Text size adapts to the selected roll and label. Narrow or portrait rolls stack side layouts to keep the code readable.</div><div class="btn-group w-100 mt-3" role="group"><button class="btn btn-outline-primary" type="button" id="b21-v4-copy-design">Copy design</button><button class="btn btn-outline-primary" type="button" id="b21-v4-paste-design" disabled>Paste design</button></div><div class="small text-secondary mt-2" id="b21-v4-design-status" role="status" aria-live="polite"></div>');
     inspector.insertAdjacentElement('afterbegin',section);
     section.querySelectorAll('[data-preset]').forEach((button)=>button.addEventListener('click',()=>applyPreset(button.dataset.preset)));
+    $('b21-v4-copy-design').addEventListener('click',copyDesign);
+    $('b21-v4-paste-design').addEventListener('click',pasteDesign);
+    const selector=$('b21-entry-select');if(selector)selector.addEventListener('change',syncDesignControls);
+    syncDesignControls();
     return true;
   }
 

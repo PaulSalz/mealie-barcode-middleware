@@ -638,6 +638,92 @@ def main() -> None:
         assert saved_order == reloaded_order
         assert saved_order.index("label") > saved_order.index("code")
 
+        # Presets fit label text to the selected roll; copy/paste keeps each code's identity.
+        page.locator("#b21-entry-select").select_option("0")
+        page.evaluate("window.__b2mB21LabelEditor.prepareQueue()")
+        smallest_profile = page.evaluate("""async () => {
+          const data = await (await fetch('/labels/b21/profiles')).json();
+          return (data.profiles || []).slice().sort((a, b) => a.width_mm * a.height_mm - b.width_mm * b.height_mm)[0] || null;
+        }""")
+        assert smallest_profile is not None, "B21 profile list should include a selectable label size."
+        page.locator("#b21-profile-select").select_option(str(smallest_profile["id"]))
+        entry_keys = page.evaluate("""() => {
+          const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          const key = (entry, index) => String(entry && entry._id != null ? entry._id : ((entry && entry.code) || 'entry-' + index));
+          return {source:key(data.queue[0],0),target:key(data.queue[1],1)};
+        }""")
+        source_key, target_key = entry_keys["source"], entry_keys["target"]
+        page.locator('#b21-v4-presets [data-preset="stacked"]').click()
+        short_font = page.evaluate("""key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return all[key].elements.find(row => row.id === 'label').fontSizePt;
+        }""", source_key)
+        page.evaluate("""() => {
+          const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          data.queue[0].label = 'Canned tomatoes with basil and oregano for homemade pasta sauce and hearty vegetable soup all winter long';
+          localStorage.setItem('b2m-label-generator-v2', JSON.stringify(data));
+        }""")
+        page.locator('#b21-v4-presets [data-preset="stacked"]').click()
+        long_font = page.evaluate("""key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return all[key].elements.find(row => row.id === 'label').fontSizePt;
+        }""", source_key)
+        font_debug = page.evaluate("""async key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          const bundle = await (await fetch('/static/generated/labels-ui.js')).text();
+          return {
+            key,queueLabel:data.queue[0].label,stageAspect:document.querySelector('#b21-label-stage')?.style.aspectRatio,
+            savedLabel:all[key]?.elements.find(row => row.id === 'label'),
+            adaptiveCode:bundle.includes('function fontSizeFor'),newPreset:bundle.includes('h:34')
+          };
+        }""", source_key)
+        assert long_font < short_font, (short_font, long_font, smallest_profile, font_debug)
+        page.evaluate("""key => {
+          const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          data.queue[0].label = 'CI Label One';
+          localStorage.setItem('b2m-label-generator-v2', JSON.stringify(data));
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const source = all[key];
+          source.elements.find(row => row.id === 'label').x = 36;
+          source.elements.push({id:'text-smoke',type:'text',name:'Free text',text:'Copied note',visible:true,x:50,y:10,w:50,h:10,rotation:0,fontSizePt:8});
+          source.frame = false;
+          source.frameInsetMm = 0.8;
+          source.threshold = 102;
+          localStorage.setItem('b2m-b21-entry-settings-v3', JSON.stringify(all));
+          const styles = JSON.parse(localStorage.getItem('b2m-b21-text-style-v22') || '{}');
+          styles[key] = {label: {fontFamily:'mono',bold:false}};
+          localStorage.setItem('b2m-b21-text-style-v22', JSON.stringify(styles));
+        }""", source_key)
+        page.locator("#b21-entry-select").dispatch_event("change")
+        page.locator("#b21-v4-copy-design").click()
+        page.locator("#b21-entry-select").select_option("1")
+        target_before = page.evaluate("""key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const row = all[key];
+          return {codeValue:row.codeValue,profileId:row.profileId,copies:row.copies};
+        }""", target_key)
+        page.locator("#b21-v4-paste-design").click()
+        target_after = page.evaluate("""key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const row = all[key];
+          const styles = JSON.parse(localStorage.getItem('b2m-b21-text-style-v22') || '{}');
+          return {
+            codeValue:row.codeValue,profileId:row.profileId,copies:row.copies,frame:row.frame,
+            labelX:row.elements.find(element => element.id === 'label').x,
+            note:row.elements.find(element => element.id === 'text-smoke')?.text,
+            labelText:document.querySelector('#b21-label-stage [data-element-id="label"]')?.textContent,
+            textStyle:styles[key]?.label
+          };
+        }""", target_key)
+        assert target_after["codeValue"] == target_before["codeValue"] == "87654321", target_after
+        assert target_after["profileId"] == target_before["profileId"], target_after
+        assert target_after["copies"] == target_before["copies"], target_after
+        assert target_after["frame"] is False and target_after["labelX"] == 36, target_after
+        assert target_after["note"] == "Copied note", target_after
+        assert target_after["labelText"] == "CI Label Two", target_after
+        assert target_after["textStyle"] == {"fontFamily": "mono", "bold": False}, target_after
+
         # Current label only must use the canonical job endpoint, never v30 batch queue.
         label_hits = {"batch": 0, "jobs_post": 0}
 
