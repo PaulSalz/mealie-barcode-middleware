@@ -8,6 +8,8 @@
     var quantityInput = document.getElementById('food-default-quantity');
     var unitSelect = document.getElementById('food-default-unit');
     var timeout = null;
+    var activeController = null;
+    var requestId = 0;
     if (!searchInput || !tbody || !table) return;
 
     var barcode = table.dataset.barcode;
@@ -79,18 +81,27 @@
 
     searchInput.addEventListener('input', function() {
         clearTimeout(timeout);
+        requestId += 1;
+        var currentRequest = requestId;
+        if (activeController) {
+            activeController.abort();
+            activeController = null;
+        }
         var q = this.value.trim();
         if (q.length < 2) {
             tbody.innerHTML = originalRows;
             return;
         }
         timeout = setTimeout(function() {
-            fetch('/barcodes-search?q=' + encodeURIComponent(q))
+            activeController = new AbortController();
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-secondary"><span class="spinner-border spinner-border-sm me-2" role="status"></span>Searching Mealie Foods…</td></tr>';
+            fetch('/barcodes-search?q=' + encodeURIComponent(q), {signal: activeController.signal})
                 .then(function(response) {
                     if (!response.ok) throw new Error('Food search failed');
                     return response.json();
                 })
                 .then(function(data) {
+                    if (currentRequest !== requestId) return;
                     tbody.innerHTML = '';
                     if (!data.length) {
                         tbody.innerHTML = '<tr><td colspan="3" class="text-center text-secondary">No matching Mealie Foods</td></tr>';
@@ -98,9 +109,10 @@
                     }
                     data.forEach(function(item) { tbody.appendChild(buildRow(item)); });
                 })
-                .catch(function() {
+                .catch(function(error) {
+                    if (error.name === 'AbortError' || currentRequest !== requestId) return;
                     tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Food search failed</td></tr>';
                 });
-        }, 180);
+        }, 500);
     });
 })();
