@@ -85,7 +85,6 @@ def main() -> None:
         # Keep several authenticated tabs open and verify the browser shares one
         # long-lived SSE connection instead of exhausting its per-origin slots.
         context.add_init_script(script="""(() => {
-            window.__B2M_DEBUG_SSE = true;
             const NativeEventSource = window.EventSource;
             window.__b2mEventSources = [];
             if (typeof NativeEventSource === "function") {
@@ -140,10 +139,8 @@ def main() -> None:
             for states in event_source_states
             for state in states
         )
-        sse_debug = [page.evaluate("() => window.__b2mSseDebug")]
-        sse_debug.extend(tab.evaluate("() => window.__b2mSseDebug") for tab in event_tabs)
-        print("B2M SSE per-tab diagnostics:", sse_debug)
-        assert active_streams == 1, {"event_sources": event_source_states, "debug": sse_debug}
+        print("B2M live event stream states:", event_source_states)
+        assert active_streams == 1, {"event_sources": event_source_states}
         for event_tab in event_tabs:
             event_tab.close()
 
