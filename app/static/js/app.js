@@ -126,6 +126,7 @@
     }
 
     var esRetryDelay = 1000, es, esRetryTimer = null;
+    var ssePageActive = true;
     var sseChannel = null;
     var sseLockName = 'b2m-live-events-v1';
     var sseLockSupported = !!(navigator.locks && navigator.locks.request && window.BroadcastChannel);
@@ -156,7 +157,7 @@
         deliverSSEEvent(type, event.data);
     }
     function canConnectSSE() {
-        return sseLockSupported || document.visibilityState !== 'hidden';
+        return ssePageActive && (sseLockSupported || document.visibilityState !== 'hidden');
     }
     function connectSSE() {
         if (es || !canConnectSSE()) return;
@@ -187,13 +188,14 @@
         }
     }
     function scheduleSSELockRetry() {
-        if (!sseLockSupported || sseLockHeld || sseLockPending || sseLockRetryTimer) return;
+        if (!ssePageActive || !sseLockSupported || sseLockHeld || sseLockPending || sseLockRetryTimer) return;
         sseLockRetryTimer = setTimeout(function() {
             sseLockRetryTimer = null;
             requestSSELock();
         }, 1500 + Math.floor(Math.random() * 1000));
     }
     function requestSSELock() {
+        if (!ssePageActive) return;
         if (!sseLockSupported) {
             if (document.visibilityState !== 'hidden') connectSSE();
             return;
@@ -223,6 +225,7 @@
         });
     }
     function releaseSSEOwnership() {
+        ssePageActive = false;
         stopSSE();
         if (sseLockRetryTimer) {
             clearTimeout(sseLockRetryTimer);
@@ -242,6 +245,7 @@
     });
     window.addEventListener('pagehide', releaseSSEOwnership);
     window.addEventListener('pageshow', function() {
+        ssePageActive = true;
         if (sseLockSupported) requestSSELock();
         else if (document.visibilityState !== 'hidden') connectSSE();
     });
