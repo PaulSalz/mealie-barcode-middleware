@@ -97,6 +97,24 @@ def main() -> None:
         context.on("requestfinished", untrack_event_request)
         context.on("requestfailed", untrack_event_request)
         page.reload(wait_until="domcontentloaded", timeout=20_000)
+        event_capabilities = page.evaluate("""() => ({
+            secure_context: window.isSecureContext,
+            web_locks: Boolean(navigator.locks && navigator.locks.request),
+            broadcast_channel: typeof BroadcastChannel === "function",
+        })""")
+        print("B2M multi-tab event capabilities:", event_capabilities)
+        assert event_capabilities["web_locks"] and event_capabilities["broadcast_channel"], event_capabilities
+
+        def event_lock_is_held():
+            return page.evaluate("""async () => {
+                let available = false;
+                await navigator.locks.request("b2m-live-events-v1", {mode: "exclusive", ifAvailable: true}, lock => {
+                    available = Boolean(lock);
+                });
+                return !available;
+            }""")
+
+        wait_until(event_lock_is_held, "The active B2M tab did not acquire the shared event lock.", timeout_ms=8_000)
         event_tabs = []
         for _ in range(3):
             event_tab = context.new_page()
