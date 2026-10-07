@@ -647,70 +647,65 @@ def main() -> None:
         }""")
         assert smallest_profile is not None, "B21 profile list should include a selectable label size."
         page.locator("#b21-profile-select").select_option(str(smallest_profile["id"]))
-        page.locator('#b21-v4-presets [data-preset="stacked"]').click()
-        short_font = page.evaluate("""() => {
-          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          return all['ci-label-1'].elements.find(row => row.id === 'label').fontSizePt;
+        entry_keys = page.evaluate("""() => {
+          const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          const key = (entry, index) => String(entry && entry._id != null ? entry._id : ((entry && entry.code) || 'entry-' + index));
+          return {source:key(data.queue[0],0),target:key(data.queue[1],1)};
         }""")
+        source_key, target_key = entry_keys["source"], entry_keys["target"]
+        page.locator('#b21-v4-presets [data-preset="stacked"]').click()
+        short_font = page.evaluate("""key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return all[key].elements.find(row => row.id === 'label').fontSizePt;
+        }""", source_key)
         page.evaluate("""() => {
           const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
           data.queue[0].label = 'Canned tomatoes with basil and oregano for homemade pasta sauce and hearty vegetable soup all winter long';
           localStorage.setItem('b2m-label-generator-v2', JSON.stringify(data));
         }""")
         page.locator('#b21-v4-presets [data-preset="stacked"]').click()
-        long_font = page.evaluate("""() => {
+        long_font = page.evaluate("""key => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          return all['ci-label-1'].elements.find(row => row.id === 'label').fontSizePt;
-        }""")
-        font_debug = page.evaluate("""() => {
-          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const queue = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
-          return {
-            queueLabel: queue.queue?.[0]?.label,
-            selectedIndex: document.querySelector('#b21-entry-select')?.value,
-            stageAspect: document.querySelector('#b21-label-stage')?.style.aspectRatio,
-            presetActive: document.querySelector('#b21-v4-presets [data-preset="stacked"]')?.classList.contains('active'),
-            savedLabel: all['ci-label-1']?.elements.find(row => row.id === 'label')
-          };
-        }""")
-        assert long_font < short_font, (short_font, long_font, smallest_profile, font_debug)
-        page.evaluate("""() => {
+          return all[key].elements.find(row => row.id === 'label').fontSizePt;
+        }""", source_key)
+        assert long_font < short_font, (short_font, long_font, smallest_profile)
+        page.evaluate("""key => {
           const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
           data.queue[0].label = 'CI Label One';
           localStorage.setItem('b2m-label-generator-v2', JSON.stringify(data));
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const source = all['ci-label-1'];
+          const source = all[key];
           source.elements.find(row => row.id === 'label').x = 36;
           source.elements.push({id:'text-smoke',type:'text',name:'Free text',text:'Copied note',visible:true,x:50,y:10,w:50,h:10,rotation:0,fontSizePt:8});
           source.frame = false;
           source.frameInsetMm = 0.8;
           source.threshold = 102;
           localStorage.setItem('b2m-b21-entry-settings-v3', JSON.stringify(all));
-          localStorage.setItem('b2m-b21-text-style-v22', JSON.stringify({
-            'ci-label-1': {label: {fontFamily:'mono',bold:false}}
-          }));
-        }""")
+          const styles = JSON.parse(localStorage.getItem('b2m-b21-text-style-v22') || '{}');
+          styles[key] = {label: {fontFamily:'mono',bold:false}};
+          localStorage.setItem('b2m-b21-text-style-v22', JSON.stringify(styles));
+        }""", source_key)
         page.locator("#b21-entry-select").dispatch_event("change")
         page.locator("#b21-v4-copy-design").click()
         page.locator("#b21-entry-select").select_option("1")
-        target_before = page.evaluate("""() => {
+        target_before = page.evaluate("""key => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const row = all['ci-label-2'];
+          const row = all[key];
           return {codeValue:row.codeValue,profileId:row.profileId,copies:row.copies};
-        }""")
+        }""", target_key)
         page.locator("#b21-v4-paste-design").click()
-        target_after = page.evaluate("""() => {
+        target_after = page.evaluate("""key => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const row = all['ci-label-2'];
+          const row = all[key];
           const styles = JSON.parse(localStorage.getItem('b2m-b21-text-style-v22') || '{}');
           return {
             codeValue:row.codeValue,profileId:row.profileId,copies:row.copies,frame:row.frame,
             labelX:row.elements.find(element => element.id === 'label').x,
             note:row.elements.find(element => element.id === 'text-smoke')?.text,
             labelText:document.querySelector('#b21-label-stage [data-element-id="label"]')?.textContent,
-            textStyle:styles['ci-label-2']?.label
+            textStyle:styles[key]?.label
           };
-        }""")
+        }""", target_key)
         assert target_after["codeValue"] == target_before["codeValue"] == "87654321", target_after
         assert target_after["profileId"] == target_before["profileId"], target_after
         assert target_after["copies"] == target_before["copies"], target_after
