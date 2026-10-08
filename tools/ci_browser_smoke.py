@@ -567,6 +567,49 @@ def main() -> None:
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
 
+        # The B21 selector belongs in the preview heading; redundant printer data stays in Settings.
+        label_ui = page.evaluate("""() => {
+          const preview = document.querySelector('.b21-sticky-preview-card');
+          const header = preview && preview.querySelector('.card-header');
+          const selector = document.getElementById('b21-preview-selector');
+          const layers = document.getElementById('b21-v2-layers-header');
+          const presetHeader = document.getElementById('b21-v13-preset-header');
+          const reset = document.getElementById('b21-v2-reset-all');
+          const content = document.getElementById('b21-v2-content-row');
+          const align = document.getElementById('b21-v22-element-align');
+          const divider = document.querySelector('.b21-v22-align-divider');
+          const typography = document.getElementById('b21-v22-typography');
+          const printerInfo = ['b21-status-dot','b21-status-title','b21-status-detail','b21-v2-printer-data','b21-v4-output-status']
+            .filter(id => document.getElementById(id)).length;
+          return {
+            title: preview?.querySelector('.card-title')?.textContent.trim(),
+            selectorInHeader: !!selector && selector.parentElement === header,
+            selectorVisible: !!selector && getComputedStyle(selector).display !== 'none',
+            previewMeta: !!document.getElementById('b21-preview-meta'),
+            printerInfo, connectVisible: !!document.querySelector('#b21-connect-button'),
+            layersTitle: layers?.querySelector('.fw-semibold')?.textContent.trim(),
+            layersMargin: parseFloat(getComputedStyle(layers).marginTop),
+            resetInPresets: !!reset && reset.parentElement === presetHeader,
+            resetInLayers: !!layers?.contains(reset),
+            contentBorder: parseFloat(getComputedStyle(content).borderLeftWidth),
+            alignTitle: align?.querySelector('.fw-semibold')?.textContent.trim(),
+            alignHintCount: align?.querySelectorAll('.form-hint').length,
+            duplicateAlignLabel: align?.querySelector('label.form-label')?.textContent.trim() || '',
+            dividerWidth: parseFloat(getComputedStyle(divider).borderTopWidth),
+            dividerBeforeTypography: !!divider && divider.nextElementSibling === typography
+          };
+        }""")
+        assert label_ui["title"] == "B21 label preview", label_ui
+        assert label_ui["selectorInHeader"] and label_ui["selectorVisible"], label_ui
+        assert not label_ui["previewMeta"], label_ui
+        assert label_ui["printerInfo"] == 0 and label_ui["connectVisible"], label_ui
+        assert label_ui["layersTitle"] == "Layers" and label_ui["layersMargin"] >= 16, label_ui
+        assert label_ui["resetInPresets"] and not label_ui["resetInLayers"], label_ui
+        assert label_ui["contentBorder"] >= 1, label_ui
+        assert label_ui["alignTitle"] == "Align" and label_ui["alignHintCount"] == 0, label_ui
+        assert label_ui["duplicateAlignLabel"] == "", label_ui
+        assert label_ui["dividerWidth"] == 1 and label_ui["dividerBeforeTypography"], label_ui
+
         sticky_result = page.evaluate("""() => {
             const preview = document.querySelector('.b21-sticky-preview-card');
             const position = getComputedStyle(preview).position;
@@ -676,11 +719,18 @@ def main() -> None:
             return {width:value.width,height:value.height};
           };
           const style = image && getComputedStyle(image);
+          const activeOutlines = [box,visual,image].filter(element => {
+            const value = getComputedStyle(element);
+            return value.outlineStyle !== 'none' && value.outlineWidth !== '0px';
+          }).length;
           return {
             box:rect(box),visual:rect(visual),image:rect(image),
             imageRatio:image.naturalWidth/image.naturalHeight,
             visualRatio:visual.getBoundingClientRect().width/visual.getBoundingClientRect().height,
             outline:style.outlineWidth,outlineOffset:style.outlineOffset,
+            boxOutline:getComputedStyle(box).outlineStyle,
+            visualOutline:getComputedStyle(visual).outlineStyle,
+            activeOutlines,
             selected:image.classList.contains('b21-v2-element-selected')
           };
         }""")
@@ -689,8 +739,85 @@ def main() -> None:
         assert abs(code_frame["visualRatio"] - code_frame["imageRatio"]) < .03, code_frame
         assert code_frame["outline"] == "2px" and code_frame["outlineOffset"] == "0px", code_frame
         assert code_frame["selected"], code_frame
+        assert code_frame["activeOutlines"] == 1, code_frame
+        assert code_frame["boxOutline"] == "none" and code_frame["visualOutline"] == "none", code_frame
+        assert code_frame["imageRatio"] > 1.05, code_frame
+
+        # QR selection follows the square rendered SVG, while a barcode follows its rectangle.
+        page.evaluate("""kind => {
+          const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          data.queue[0].kind = kind;
+          localStorage.setItem('b2m-label-generator-v2', JSON.stringify(data));
+          document.getElementById('b21-entry-select').dispatchEvent(new Event('change', {bubbles:true}));
+        }""", "qr")
+        page.wait_for_function("""() => {
+          const image = document.querySelector('#b21-label-stage .b21-code-box .b21-code');
+          return !!image && image.src.includes('kind=qr') && image.complete && image.naturalWidth > 0;
+        }""", timeout=5_000)
+        qr_frame = page.evaluate("""() => {
+          const box = document.querySelector('#b21-label-stage .b21-code-box');
+          const visual = box?.querySelector('.b21-code-content');
+          const image = visual?.querySelector('img');
+          return {
+            svgRatio:image.naturalWidth/image.naturalHeight,
+            renderedRatio:visual.getBoundingClientRect().width/visual.getBoundingClientRect().height,
+            outline:getComputedStyle(image).outlineWidth,
+            boxOutline:getComputedStyle(box).outlineStyle,
+            visualOutline:getComputedStyle(visual).outlineStyle
+          };
+        }""")
+        assert abs(qr_frame["svgRatio"] - 1) < .01, qr_frame
+        assert abs(qr_frame["renderedRatio"] - 1) < .03, qr_frame
+        assert qr_frame["outline"] == "2px", qr_frame
+        assert qr_frame["boxOutline"] == "none" and qr_frame["visualOutline"] == "none", qr_frame
+        page.evaluate("""kind => {
+          const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
+          data.queue[0].kind = kind;
+          localStorage.setItem('b2m-label-generator-v2', JSON.stringify(data));
+          document.getElementById('b21-entry-select').dispatchEvent(new Event('change', {bubbles:true}));
+        }""", "code128")
+        page.wait_for_function("""() => {
+          const image = document.querySelector('#b21-label-stage .b21-code-box .b21-code');
+          return !!image && image.src.includes('kind=code128') && image.complete && image.naturalWidth > 0;
+        }""", timeout=5_000)
 
         page.locator('.b21-v24-layer-select[data-layer-select="label"]').click()
+        text_frame = page.evaluate("""() => {
+          const box = document.querySelector('#b21-label-stage [data-element-id="label"]');
+          const content = box && box.querySelector('.b21-v2-text-content');
+          const rect = element => {
+            const value = element.getBoundingClientRect();
+            return {width:value.width,height:value.height,top:value.top};
+          };
+          const activeOutlines = [box,content].filter(element => {
+            const value = getComputedStyle(element);
+            return value.outlineStyle !== 'none' && value.outlineWidth !== '0px';
+          }).length;
+          return {
+            box:rect(box),content:rect(content),
+            contentOutline:getComputedStyle(content).outlineWidth,
+            contentSelected:content.classList.contains('b21-v2-element-selected'),
+            outerOutline:getComputedStyle(box).outlineStyle,
+            activeOutlines
+          };
+        }""")
+        assert text_frame["content"]["width"] < text_frame["box"]["width"] * .8, text_frame
+        assert text_frame["content"]["height"] < text_frame["box"]["height"] * .8, text_frame
+        assert text_frame["contentOutline"] == "2px" and text_frame["contentSelected"], text_frame
+        assert text_frame["outerOutline"] == "none" and text_frame["activeOutlines"] == 1, text_frame
+
+        steppers = page.evaluate("""() => {
+          const up = document.querySelector('#b21-v2-fontSizePt-step-up');
+          const down = document.querySelector('#b21-v2-fontSizePt-step-down');
+          const a = up.getBoundingClientRect(), b = down.getBoundingClientRect();
+          return {upTop:a.top,downTop:b.top,upWidth:a.width,upHeight:a.height,downWidth:b.width,downHeight:b.height,
+            upLabel:up.getAttribute('aria-label'),downLabel:down.getAttribute('aria-label')};
+        }""")
+        assert steppers["upTop"] < steppers["downTop"], steppers
+        assert max(steppers["upWidth"],steppers["downWidth"]) <= 20, steppers
+        assert max(steppers["upHeight"],steppers["downHeight"]) <= 15, steppers
+        assert steppers["upLabel"].startswith("Increase") and steppers["downLabel"].startswith("Decrease"), steppers
+
         font_before = page.evaluate("""key => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
           return all[key].elements.find(row => row.id === 'label').fontSizePt;

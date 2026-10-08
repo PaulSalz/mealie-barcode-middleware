@@ -128,14 +128,13 @@
     const header = document.createElement('div');
     header.id = 'b21-v2-header';
     const browserOutput = $('b21-output-grid') && $('b21-output-grid').querySelector('input[value="browser"]');
-    header.className = 'mt-3' + (browserOutput && browserOutput.checked ? ' d-none' : '');
+    header.className = 'mt-3 b21-v2-header' + (browserOutput && browserOutput.checked ? ' d-none' : '');
     header.innerHTML =
       '<div class="b21-v2-toolbar">' +
         '<select class="form-select w-auto" id="b21-v2-print-scope" title="Print scope"><option value="queue">Print queue</option><option value="current">Current label only</option></select>' +
         '<div class="input-group input-group-sm w-auto"><span class="input-group-text">Copies</span><input class="form-control" id="b21-v2-copies" type="number" min="1" max="99" value="1" style="width:5rem"></div>' +
         '<span class="small text-secondary b21-v2-job-state" id="b21-v2-job-state"></span>' +
-      '</div>' +
-      '<div class="b21-v2-printer-data" id="b21-v2-printer-data"></div>';
+      '</div>';
     bar.appendChild(header);
     window.addEventListener('b2m:advanced-change', syncHeaderVisibility);
     document.querySelectorAll('input[name="label-output"]').forEach((input) => {
@@ -162,30 +161,6 @@
     return true;
   }
 
-  async function refreshPrinterHeader() {
-    const root = $('b21-v2-printer-data');
-    if (!root) return;
-    try {
-      const data = await fetchJson('/labels/b21/status');
-      const info = data.info || {};
-      const meta = info.modelMetadata || {};
-      const firmware = info.firmwareVersion || info.firmware || info.softwareVersion || '—';
-      const hardware = info.hardwareVersion || info.hardware || '—';
-      root.innerHTML = [
-        ['Printer', meta.model || info.model || 'B21 Pro'],
-        ['Address', data.address || '—'],
-        ['Transport', data.transport || '—'],
-        ['DPI', meta.dpi || data.dpi || '—'],
-        ['Print task', info.detectedPrintTask || data.detected_print_task || data.print_task || '—'],
-        ['Firmware', firmware],
-        ['Hardware', hardware],
-        ['State', data.connected ? 'Connected' : 'Disconnected']
-      ].map(([k,v]) => '<div><small>'+esc(k)+'</small><strong title="'+esc(v)+'">'+esc(v)+'</strong></div>').join('');
-    } catch (e) {
-      root.innerHTML = '<div><small>Printer</small><strong class="text-danger">'+esc(e.message)+'</strong></div>';
-    }
-  }
-
   function installInspector() {
     const body = $('b21-layout-body');
     if (!body || $('b21-v2-inspector')) return false;
@@ -196,14 +171,14 @@
     inspector.id = 'b21-v2-inspector';
     inspector.className = 'b21-section b21-v2-inspector';
     inspector.innerHTML =
-      '<div class="d-flex align-items-center justify-content-between gap-2 mb-2"><div><div class="fw-semibold">Element inspector</div><div class="text-secondary small">Click an element on the label to edit it.</div></div><button class="btn btn-sm btn-outline-secondary" id="b21-v2-reset-all" type="button"><i class="ti ti-restore"></i> Reset all</button></div>' +
+      '<div id="b21-v2-layers-header" class="d-flex align-items-center justify-content-between gap-2 mb-2 b21-v2-layers-header"><div><div class="fw-semibold">Element inspector</div><div class="text-secondary small">Click an element on the label to edit it.</div></div><button class="btn btn-sm btn-outline-secondary" id="b21-v2-reset-all" type="button"><i class="ti ti-restore"></i> Reset all</button></div>' +
       '<select class="form-select mb-2" id="b21-v2-element-select"></select>' +
-      '<div class="mb-2 d-none" id="b21-v2-content-row"><label class="form-label">Content / encoded value</label><input class="form-control" id="b21-v2-content"></div>' +
+      '<div class="b21-v2-content-panel mb-2 d-none" id="b21-v2-content-row"><label class="form-label">Content / encoded value</label><input class="form-control" id="b21-v2-content"></div>' +
       '<div class="d-flex justify-content-end mb-2"><button class="btn btn-sm btn-outline-danger" type="button" id="b21-v2-delete-element"><i class="ti ti-trash"></i> Delete</button></div>' +
       '<div class="row g-2" id="b21-v2-ranges">' +
         rangeHtml('X','x',0,100,1) + rangeHtml('Y','y',0,100,1) + rangeHtml('Width','w',2,100,1) + rangeHtml('Height','h',1,100,1) + rangeHtml('Rotation','rotation',0,359,1) + rangeHtml('Font size','fontSizePt',5,48,.5) + rangeHtml('Line width','lineWidthMm',.1,3,.05) +
       '</div>' +
-      '<div class="mt-3"><label class="form-label">Align selected element</label><div class="btn-group w-100" id="b21-v2-align">' +
+      '<div class="mt-3"><div class="btn-group w-100" id="b21-v2-align">' +
         '<button class="btn btn-outline-secondary" data-align="left" title="Left"><i class="ti ti-align-left"></i></button>' +
         '<button class="btn btn-outline-secondary" data-align="hcenter" title="Horizontal center"><i class="ti ti-layout-align-center"></i></button>' +
         '<button class="btn btn-outline-secondary" data-align="right" title="Right"><i class="ti ti-align-right"></i></button>' +
@@ -261,7 +236,7 @@
       const controls = document.createElement('div');
       controls.className = 'b21-range-stepper';
       const label = input.closest('.b21-v2-range-wrap')?.querySelector('.form-label')?.textContent?.split(':')[0] || input.id;
-      [['-1','▼','Decrease '],['1','▲','Increase ']].forEach(([direction, icon, prefix]) => {
+      [['1','▲','Increase '],['-1','▼','Decrease ']].forEach(([direction, icon, prefix]) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.id = input.id + (Number(direction) < 0 ? '-step-down' : '-step-up');
@@ -369,7 +344,7 @@
     const stage=$('b21-label-stage'), entry=currentEntry(), s=currentState(); if(!stage||!entry||!s)return;
     const p=profileById(s.profileId), cal=getCalibration(p.id);
     stage.style.aspectRatio=p.width_mm+' / '+p.height_mm; stage.innerHTML='';
-    if($('b21-preview-meta')) $('b21-preview-meta').innerHTML='<span class="badge bg-blue-lt">'+esc(p.name)+'</span><span class="badge bg-secondary-lt">'+p.width_mm+'×'+p.height_mm+' mm</span><span class="badge bg-secondary-lt">'+p.dpi+' dpi</span><span class="badge bg-secondary-lt b21-v2-calibration-note">offset '+Number(cal.xMm||0).toFixed(1)+' / '+Number(cal.yMm||0).toFixed(1)+' mm</span>';
+
     if(s.frame!==false){const frame=document.createElement('div');frame.className='b21-label-frame';stage.appendChild(frame);requestAnimationFrame(()=>{const scale=stage.clientWidth/p.width_mm;frame.style.inset=(Number(s.frameInsetMm||1)*scale)+'px';frame.style.borderWidth=Math.max(1,Number(s.frameWidthMm||.35)*scale)+'px';});}
     s.elements.filter((el)=>el.visible!==false).forEach((el)=>stage.appendChild(buildStageElement(el,entry,s,p,cal)));
   }
@@ -386,9 +361,13 @@
       codeImage.addEventListener('load',()=>fitCodeContent(codeVisual,codeImage,el,p));
       codeImage.src='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(s.codeValue||entry.code||'');
     } else {
-      node=document.createElement('div');node.textContent=displayText(el,entry,s);node.className=el.type==='line'?'b21-v2-line':'b21-v2-free-text';
+      node=document.createElement('div');node.className=el.type==='line'?'b21-v2-line':'b21-v2-free-text';
       if(el.type==='line')node.style.borderTopWidth=Math.max(1,(Number(el.lineWidthMm||.35)*(stageScale(p))))+'px';
-      else requestAnimationFrame(()=>{node.style.fontSize=physicalFontPx(p,Number(el.fontSizePt||14))+'px';});
+      else {
+        selectionNode=document.createElement('span');selectionNode.className='b21-v2-text-content';
+        selectionNode.textContent=displayText(el,entry,s);node.appendChild(selectionNode);
+        requestAnimationFrame(()=>{selectionNode.style.fontSize=physicalFontPx(p,Number(el.fontSizePt||14))+'px';});
+      }
     }
     if(!selectionNode)selectionNode=node;
     node.dataset.elementId=el.id;
@@ -398,7 +377,7 @@
     if(codeImage)fitCodeContent(codeVisual,codeImage,el,p);
     node.addEventListener('pointerdown',(event)=>startRelativeDrag(event,node,el,p));
     node.addEventListener('click',(event)=>{event.stopPropagation();selectedElementId=el.id;syncInspector();renderStage();});
-    if(el.id===selectedElementId&&!codeImage){const handle=document.createElement('span');handle.className='b21-v2-resize-handle';handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));selectionNode.appendChild(handle);}
+    if(el.id===selectedElementId&&!codeImage){const handle=document.createElement('span');handle.className='b21-v2-resize-handle';handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));node.appendChild(handle);}
     return node;
   }
   function fitCodeContent(visual,image,el,p){
@@ -483,7 +462,7 @@
           if(job.status==='unknown'&&status)status.textContent='Print result unknown · check printer output before retrying'+(job.error?' · '+job.error:'');
           else if(job.error&&status)status.textContent='Failed · '+job.error;
           if(button)button.disabled=false;
-          refreshPrinterHeader();
+
         }
       }catch(e){clearInterval(jobPoll);if(button)button.disabled=false;}
     },600);
@@ -493,7 +472,6 @@
   function bindExistingControls(){
     const entrySelect=$('b21-entry-select');if(entrySelect)entrySelect.addEventListener('change',()=>{selectedElementId='code';syncEntryControls();});
     const profileSelect=$('b21-profile-select');if(profileSelect)profileSelect.addEventListener('change',function(){const s=currentState();if(!s)return;s.profileId=this.value;saveEntryStates();localStorage.setItem(PROFILE_KEY,this.value);syncCalibration();renderStage();});
-    const connect=$('b21-connect-button');if(connect)connect.addEventListener('click',()=>setTimeout(()=>{refreshPrinterHeader();},500));
     const queue=$('label-queue');if(queue)new MutationObserver(()=>setTimeout(()=>{syncEntryControls();},0)).observe(queue,{childList:true,subtree:true});
   }
 
@@ -531,7 +509,7 @@
     try{const data=await fetchJson('/labels/b21/profiles');profiles=data.profiles||[];}catch(e){profiles=[];}
     replaceLabelTypeInput();installHeader();installInspector();bindExistingControls();
     const entry=currentEntry();if(entry){const s=getEntryState(entry,currentIndex());const psel=$('b21-profile-select');if(psel&&profiles.some((p)=>String(p.id)===String(s.profileId)))psel.value=s.profileId;}
-    syncEntryControls();refreshPrinterHeader();setInterval(refreshPrinterHeader,5000);
+    syncEntryControls();
   }
 
   init();

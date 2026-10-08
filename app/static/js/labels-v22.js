@@ -175,9 +175,12 @@
       const section = document.createElement('div');
       section.id = 'b21-v22-element-align';
       section.className = 'b21-section';
-      section.innerHTML = '<div class="fw-semibold mb-1">Element alignment</div><div class="form-hint mb-2">Align the selected object on the physical label. Text alignment inside a text box is configured separately below.</div>';
+      section.innerHTML = '<div class="fw-semibold mb-2">Align</div>';
       alignWrap.parentNode.insertBefore(section, alignWrap);
       section.appendChild(alignWrap);
+      const divider = document.createElement('hr');
+      divider.className = 'b21-v22-align-divider';
+      section.insertAdjacentElement('afterend', divider);
       const centerBoth = document.createElement('button');
       centerBoth.type = 'button';
       centerBoth.className = 'btn btn-outline-secondary';

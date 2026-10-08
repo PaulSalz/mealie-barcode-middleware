@@ -1,5 +1,4 @@
 .b21-output-card .b2m-choice-card { min-height: 68px; }
-.b21-connection-bar { border-top: 1px solid var(--tblr-border-color); margin-top: 1rem; padding-top: 1rem; }
 .b21-status-dot { width: .65rem; height: .65rem; border-radius: 50%; display: inline-block; background: var(--tblr-secondary); box-shadow: 0 0 0 .2rem rgba(98,105,118,.12); }
 .b21-status-dot.connected { background: var(--tblr-success); box-shadow: 0 0 0 .2rem rgba(var(--tblr-success-rgb),.12); }
 .b21-status-dot.error { background: var(--tblr-danger); box-shadow: 0 0 0 .2rem rgba(var(--tblr-danger-rgb),.12); }
@@ -15,10 +14,90 @@
 .b21-control-grid .form-range { min-width: 0; }
 .b21-section { border-top: 1px solid var(--tblr-border-color); padding-top: 1rem; margin-top: 1rem; }
 .b21-rfid-badge { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.b21-preview-meta { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
 .b21-profile-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
 .b21-profile-editor { background: var(--tblr-bg-surface-secondary); border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); padding: .75rem; }
 @media (max-width: 767.98px) {
   .b21-control-grid { grid-template-columns: 1fr; }
   .b21-label-shell { min-height: 230px; padding: .75rem; }
+}
+
+
+/* The legacy hover frame surrounds the editable box, which can be larger than
+   its visible text. Show interaction and selection bounds around the content. */
+#b21-label-stage .b21-element:hover {
+  outline: none !important;
+  box-shadow: none !important;
+}
+#b21-label-stage .b21-v2-free-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.08;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: Inter, "DejaVu Sans", sans-serif;
+}
+#b21-label-stage .b21-v2-text-content {
+  display: inline-block;
+  max-width: 100%;
+  max-height: 100%;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+#b21-label-stage .b21-v2-free-text:hover .b21-v2-text-content:not(.b21-v2-element-selected) {
+  outline: 1px dashed rgba(var(--tblr-primary-rgb), .65);
+  outline-offset: 0;
+}
+#b21-label-stage .b21-v2-text-content.b21-v2-element-selected {
+  outline-offset: 0 !important;
+}
+
+/* Only the visible code/text receives a colored hover or selection outline. */
+#b21-label-stage .b21-code-box,
+#b21-label-stage .b21-code-content {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Preview selection shares the card header with the B21 title. */
+.b21-preview-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+#b21-preview-selector { flex: 0 1 auto; margin-left: auto; }
+#b21-preview-selector .form-select { min-width: 12rem; }
+
+/* Make the editable Content field distinct below the layers. */
+.b21-v2-content-panel {
+  border: 1px solid var(--tblr-border-color);
+  border-radius: var(--tblr-border-radius);
+  padding: .65rem .75rem;
+  background: var(--tblr-bg-surface-secondary);
+}
+.b21-v2-content-panel .form-label { font-weight: 600; }
+
+/* Keep Layout presets actions and the Layers heading from crowding each other. */
+.b21-v13-preset-header { gap: .75rem; }
+.b21-v13-preset-header > div { min-width: 0; }
+.b21-v13-reset-all { flex: 0 0 auto; white-space: nowrap; }
+#b21-v2-layers-header {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--tblr-border-color);
+}
+.b21-v2-header { flex: 1 1 100%; min-width: 0; }
+#b21-connection-bar { gap: .5rem; }
+
+/* One thin divider follows the selected element's alignment controls. */
+.b21-v22-align-divider {
+  border: 0;
+  border-top: 1px solid var(--tblr-border-color);
+  opacity: 1;
+  margin: .75rem 0 1rem;
+}
+#b21-v22-typography { border-top: 0; margin-top: 0; padding-top: 0; }
+
+@media (max-width: 767.98px) {
+  #b21-preview-selector { width: 100%; margin-left: 0; }
+  #b21-preview-selector .form-select { width: 100%; min-width: 0; }
 }
