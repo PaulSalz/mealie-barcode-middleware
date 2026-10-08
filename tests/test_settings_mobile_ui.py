@@ -93,8 +93,8 @@ def test_printer_tab_renders_connection_stats_and_niimblue_runtime_options():
     assert 'json(\'/labels/b21/stats\'' in page
     assert 'id="v9-printer-config"' in page
     assert 'json(\'/api/settings/niim\'' in page
-    assert 'name="print_task"' in page
-    assert 'name="max_label_width_mm"' in page
+    assert 'name="print_task"' in script
+    assert 'name="max_label_width_mm"' in script
 
 def test_user_permission_controls_use_existing_access_api_and_server_checks():
     template = read("app/templates/settings.html")
