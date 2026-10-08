@@ -654,10 +654,15 @@ def main() -> None:
         }""")
         source_key, target_key = entry_keys["source"], entry_keys["target"]
         page.locator('#b21-v4-presets [data-preset="stacked"]').click()
-        short_font = page.evaluate("""key => {
+        preset_geometry = page.evaluate("""key => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          return all[key].elements.find(row => row.id === 'label').fontSizePt;
+          const elements = all[key].elements;
+          const label = elements.find(row => row.id === 'label');
+          const code = elements.find(row => row.id === 'code');
+          return {labelWidth:label.w,labelHeight:label.h,codeWidth:code.w,codeHeight:code.h,fontSize:label.fontSizePt};
         }""", source_key)
+        assert preset_geometry == {"labelWidth": 92, "labelHeight": 34, "codeWidth": 92, "codeHeight": 50, "fontSize": preset_geometry["fontSize"]}, preset_geometry
+        short_font = preset_geometry["fontSize"]
         page.evaluate("""() => {
           const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
           data.queue[0].label = 'Canned tomatoes with basil and oregano for homemade pasta sauce and hearty vegetable soup all winter long';
