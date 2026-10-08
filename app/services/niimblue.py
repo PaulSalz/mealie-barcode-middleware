@@ -236,6 +236,26 @@ def _connect_once(payload: dict, *, timeout: float = 8.0) -> Exception | None:
         return exc
 
 
+def scan_printer_devices(*, transport: str | None = None, timeout_ms: int = 5000) -> dict:
+    """Ask niimblue-node to discover printers on the selected transport."""
+    cfg = config()
+    if not cfg["url"]:
+        raise ValueError("NIIMBLUE_URL is not configured")
+    resolved_transport = (transport or cfg["transport"]).strip().lower()
+    if resolved_transport not in {"ble", "serial"}:
+        raise ValueError("Transport must be ble or serial")
+    resolved_timeout_ms = max(1000, min(int(timeout_ms), 15000))
+    try:
+        return _request(
+            "POST",
+            "/scan",
+            json={"transport": resolved_transport, "timeout": resolved_timeout_ms},
+            timeout=(resolved_timeout_ms / 1000) + 5,
+        ).json()
+    except Exception as exc:
+        raise RuntimeError(_http_error_message(exc, action="device scan")) from exc
+
+
 def connect_printer() -> dict:
     cfg = config()
     if not is_configured():

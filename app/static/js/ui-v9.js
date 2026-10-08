@@ -125,10 +125,10 @@
     const c = config || {};
     const selected = (value, expected) => String(value || '') === expected ? ' selected' : '';
     return '<form id="v9-printer-config-form"><div class="row g-3">' +
-      '<div class="col-12"><label class="form-label">niimblue-node URL</label><input class="form-control" name="url" value="' + esc(c.url || '') + '" placeholder="http://niimblue-node:3010"></div>' +
-      '<div class="col-12"><div class="form-hint">Use an address reachable from B2M. In Docker, localhost refers to the B2M container unless niimblue-node runs in that same container.</div></div>' +
+      '<div class="col-12"><label class="form-label">niimblue-node URL</label><input class="form-control" name="url" value="' + esc(c.url || '') + '" placeholder="http://host-or-ip:5000"></div>' +
+      '<div class="col-12"><div class="form-hint">Enter the host and port where niimblue-node listens. In Docker, localhost refers to the B2M container unless niimblue-node runs in that same container.</div></div>' +
       '<div class="col-md-4"><label class="form-label">Transport</label><select class="form-select" name="transport"><option value="ble"' + selected(c.transport, 'ble') + '>BLE</option><option value="serial"' + selected(c.transport, 'serial') + '>Serial</option></select></div>' +
-      '<div class="col-md-8"><label class="form-label">Printer address</label><input class="form-control font-monospace" name="address" value="' + esc(c.address || '') + '"></div>' +
+      '<div class="col-md-8"><label class="form-label">Printer address</label><div class="input-group"><input class="form-control font-monospace" id="v9-printer-address" name="address" value="' + esc(c.address || '') + '"><button class="btn btn-outline-secondary" id="v9-printer-scan" type="button"><i class="ti ti-radar icon"></i> Find</button></div><div class="form-hint mt-1" id="v9-printer-scan-message">If the saved address is not found, scan and select the printer here.</div><select class="form-select mt-2" id="v9-printer-scan-results" hidden></select></div>' +
       '<div class="col-md-6"><label class="form-label">Print task</label><input class="form-control font-monospace" name="print_task" value="' + esc(c.print_task || 'D110M_V4') + '"></div>' +
       '<div class="col-md-6"><label class="form-label">Direction</label><select class="form-select" name="print_direction">' + ['top','left','right','bottom'].map((value) => '<option value="' + value + '"' + selected(c.print_direction, value) + '>' + value + '</option>').join('') + '</select></div>' +
       '<div class="col-md-3"><label class="form-label">Density</label><input class="form-control" type="number" min="1" max="5" name="density" value="' + esc(c.density || 3) + '"></div>' +
@@ -149,9 +149,17 @@
       '<div class="card"><div class="card-header"><div><h3 class="card-title">Runtime configuration</h3><p class="card-subtitle">Changes apply to the next printer request without restarting B2M.</p></div></div><div class="card-body" id="v9-printer-config"><div class="text-secondary">Loading…</div></div></div></div>';
 
     let lastActionError = '';
+    let printerScanInProgress = false;
     async function refreshStats(preserveError) {
       try {
         const data = await json('/labels/b21/stats', {cache: 'no-store'}, 8000);
+        if (!printerScanInProgress) {
+          try {
+            data.status = await json('/labels/b21/status', {cache: 'no-store'}, 8000);
+          } catch (statusError) {
+            data.status = Object.assign({}, data.status || {}, {error: statusError.message});
+          }
+        }
         const status = data.status || {};
         const connected = !!status.connected;
         const configured = status.configured !== false;
@@ -161,6 +169,8 @@
         $('v9-printer-data').innerHTML = printerDataHtml(data);
         const connectButton = $('v9-printer-connect');
         connectButton.disabled = connected;
+        const scanButton = $('v9-printer-scan');
+        if (scanButton && !printerScanInProgress) scanButton.disabled = connected;
         connectButton.className = 'btn btn-sm btn-outline-primary';
         connectButton.innerHTML = connected ? '<i class="ti ti-bluetooth-connected icon"></i> Connected' : '<i class="ti ti-bluetooth icon"></i> Connect';
         const hasError = !!(lastActionError || data.last_error || status.reconnect_error || status.error) || !configured || status.service_reachable === false;
@@ -198,6 +208,78 @@
             result.className = 'form-hint me-auto text-danger'; result.textContent = error.message;
           }
         });
+
+        const scanButton = $('v9-printer-scan');
+        const scanMessage = $('v9-printer-scan-message');
+        const scanResults = $('v9-printer-scan-results');
+        scanButton.disabled = $('v9-printer-state').textContent === 'Connected';
+        scanResults.addEventListener('change', async () => {
+          const address = scanResults.value;
+          if (!address) return;
+          $('v9-printer-address').value = address;
+          scanMessage.className = 'form-hint mt-1 text-secondary';
+          scanMessage.textContent = 'Saving the discovered printer address…';
+          try {
+            await json('/api/settings/niim', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({address})
+            }, 12000);
+            scanMessage.className = 'form-hint mt-1 text-success';
+            scanMessage.textContent = 'Address saved. Try Connect now.';
+          } catch (error) {
+            scanMessage.className = 'form-hint mt-1 text-danger';
+            scanMessage.textContent = error.message;
+          }
+        });
+        scanButton.addEventListener('click', async () => {
+          printerScanInProgress = true;
+          scanButton.disabled = true;
+          scanResults.hidden = true;
+          scanResults.replaceChildren();
+          scanMessage.className = 'form-hint mt-1 text-secondary';
+          scanMessage.textContent = 'Scanning for printers…';
+          try {
+            const transport = $('v9-printer-config-form').elements.transport.value;
+            const data = await json('/labels/b21/scan', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({transport, timeout: 8000})
+            }, 15000);
+            const devices = Array.isArray(data.devices) ? data.devices : [];
+            const options = devices.filter((device) => device && device.address).map((device) => ({
+              address: String(device.address),
+              name: String(device.name || device.address)
+            }));
+            if (!options.length) {
+              scanMessage.className = 'form-hint mt-1 text-warning';
+              scanMessage.textContent = 'No devices found. Turn on the printer, keep it nearby, and make sure another app is not connected.';
+              return;
+            }
+            const prompt = document.createElement('option');
+            prompt.value = '';
+            prompt.textContent = 'Select a discovered printer…';
+            prompt.disabled = true;
+            prompt.selected = true;
+            scanResults.appendChild(prompt);
+            options.forEach((device) => {
+              const option = document.createElement('option');
+              option.value = device.address;
+              option.textContent = device.name + ' (' + device.address + ')';
+              scanResults.appendChild(option);
+            });
+            scanResults.hidden = false;
+            scanMessage.className = 'form-hint mt-1 text-success';
+            scanMessage.textContent = options.length + ' device(s) found. Select the printer to save its address.';
+          } catch (error) {
+            scanMessage.className = 'form-hint mt-1 text-danger';
+            scanMessage.textContent = error.message;
+          } finally {
+            printerScanInProgress = false;
+            scanButton.disabled = $('v9-printer-state').textContent === 'Connected';
+            await refreshStats(false);
+          }
+        });
       } catch (error) {
         $('v9-printer-config').innerHTML = '<div class="alert alert-danger mb-0">' + esc(error.message) + '</div>';
       }
@@ -229,6 +311,10 @@
     $('v9-printer-disconnect').addEventListener('click', () => runConnectionAction('/labels/b21/disconnect', 'Disconnecting…'));
 
     await Promise.allSettled([refreshStats(false), loadConfig()]);
+    const printerRefreshTimer = window.setInterval(() => {
+      if (!printerScanInProgress) refreshStats(false);
+    }, 8000);
+    window.addEventListener('pagehide', () => window.clearInterval(printerRefreshTimer), {once: true});
   }
 
   function init() {

@@ -5,7 +5,7 @@ import re
 import time
 from copy import deepcopy
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,7 @@ from app.models import SystemState
 from app.services.niimblue import (
     connect_printer,
     disconnect_printer,
+    scan_printer_devices,
     is_configured as niim_is_configured,
     print_image_base64,
     printer_rfid,
@@ -150,6 +151,27 @@ def b21_status(db: Session = Depends(get_db)):
     status = dict(status)
     status["desired_connected"] = desired
     return status
+
+
+@router.post("/labels/b21/scan")
+async def b21_scan(request: Request, db: Session = Depends(get_db)):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "JSON object required"}, status_code=400)
+    transport = str(body.get("transport") or "").strip().lower() or None
+    if transport is not None and transport not in {"ble", "serial"}:
+        return JSONResponse({"error": "Transport must be ble or serial"}, status_code=400)
+    try:
+        timeout_ms = int(body.get("timeout") or 5000)
+        _save_state(db, _CONNECTION_DESIRED_KEY, False)
+        return scan_printer_devices(transport=transport, timeout_ms=timeout_ms)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
 
 
 @router.post("/labels/b21/connect")

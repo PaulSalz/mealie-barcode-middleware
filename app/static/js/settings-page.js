@@ -281,6 +281,7 @@
 (function settingsPrinterDisconnect() {
     'use strict';
     if (window.location.pathname !== '/settings') return;
+    if (new URLSearchParams(window.location.search).get('tab') === 'printer') return;
 
     var status = document.getElementById('b2m-printer-connection-status');
     var button = document.getElementById('b2m-printer-force-disconnect');
