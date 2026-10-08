@@ -80,6 +80,13 @@ def test_user_permission_controls_use_existing_access_api_and_server_checks():
     assert 'if not _allowed(request, db, "database")' in routes
 
 
+def test_legacy_settings_tabs_remain_available_with_matching_permissions():
+    routes = read("app/routers/settings.py")
+
+    assert '"printing": "printer"' in routes
+    assert '"notifications": "configuration"' in routes
+
+
 def test_admin_role_changes_are_password_confirmed_and_cannot_self_lock_out():
     template = read("app/templates/settings.html")
     client = read("app/static/js/settings-page.js")
