@@ -628,7 +628,16 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     background: transparent !important;
   }
   #barcodes-table > tbody > tr:not(.barcodes-empty-row) > td.b2m-bulk-col::before { content: none; }
-  #barcodes-table .b2m-bulk-row { display: block; width: .95rem; height: .95rem; margin: 0; }
+  #barcodes-table .b2m-bulk-row {
+    display: block !important;
+    width: .95rem !important;
+    min-width: .95rem !important;
+    height: .95rem !important;
+    min-height: .95rem !important;
+    margin: 0 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
   #barcodes-table td[data-field="barcode"] { padding-right: 1.35rem; }
   #barcodes-table > tbody > tr:not(.barcodes-empty-row) > td {
     display: flex;
