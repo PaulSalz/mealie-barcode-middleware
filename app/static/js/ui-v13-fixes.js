@@ -125,6 +125,11 @@
   }
 
   function applyPreset(name) {
+    const editor = window.__b2mB21LabelEditor;
+    if (editor && typeof editor.applyPreset === 'function') {
+      editor.applyPreset(name);
+      return;
+    }
     const preset = PRESETS[name];
     if (!preset) return;
     patchDesignerElement('code', preset.code);
@@ -167,11 +172,19 @@
       presetCard('right','ti-layout-sidebar-right','Code right','Text on the left') +
       presetCard('code','ti-barcode','Code only','Maximum code area') +
       presetCard('text','ti-letter-t','Text only','No barcode / QR') +
-      '</div>';
+      '</div><div class="form-hint mt-2">Text size adapts to the selected roll and label. Narrow or portrait rolls stack side layouts to preserve code area.</div>' +
+      '<div class="btn-group w-100 mt-3" role="group"><button class="btn btn-outline-primary" type="button" id="b21-v4-copy-design">Copy design</button><button class="btn btn-outline-primary" type="button" id="b21-v4-paste-design" disabled>Paste design</button></div>' +
+      '<div class="small text-secondary mt-2" id="b21-v4-design-status" role="status" aria-live="polite"></div>';
 
     section.querySelectorAll('[data-preset]').forEach(function (button) {
       button.addEventListener('click', function () { applyPreset(button.dataset.preset); });
     });
+    const editor = window.__b2mB21LabelEditor;
+    const copyButton = $('b21-v4-copy-design');
+    const pasteButton = $('b21-v4-paste-design');
+    if (copyButton && editor && typeof editor.copyDesign === 'function') copyButton.addEventListener('click', editor.copyDesign);
+    if (pasteButton && editor && typeof editor.pasteDesign === 'function') pasteButton.addEventListener('click', editor.pasteDesign);
+    if (editor && typeof editor.syncDesignControls === 'function') editor.syncDesignControls();
     return true;
   }
 

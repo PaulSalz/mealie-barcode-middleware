@@ -133,6 +133,10 @@
   }
 
 
+  if(window.__b2mB21LabelEditor){
+    Object.assign(window.__b2mB21LabelEditor,{applyPreset,copyDesign,pasteDesign,syncDesignControls});
+  }
+
   function applyPreset(name){
     const c=context();if(!c)return;
     const code=c.state.elements.find((e)=>e.id==='code');

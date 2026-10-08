@@ -396,10 +396,14 @@ def main() -> None:
 
         page.goto(f"{BASE_URL}/barcodes", wait_until="domcontentloaded", timeout=20_000)
         page.locator("#barcodes-table").wait_for(state="visible", timeout=5_000)
+        # The first row can be hidden by the current barcode list filter.
         mobile_barcodes = page.evaluate("""() => {
             const table = document.getElementById('barcodes-table');
             const rows = table.querySelector('tbody');
-            const row = table.querySelector('tbody tr:not(.barcodes-empty-row)');
+            const row = Array.from(table.querySelectorAll('tbody tr:not(.barcodes-empty-row)')).find(candidate => {
+                const rect = candidate.getBoundingClientRect();
+                return getComputedStyle(candidate).display !== 'none' && rect.width > 0 && rect.height > 0;
+            }) || null;
             return {
                 header: getComputedStyle(table.tHead).display,
                 body: getComputedStyle(rows).display,
