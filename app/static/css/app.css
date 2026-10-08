@@ -616,13 +616,14 @@ tr.b2m-selected > td { background: rgba(var(--tblr-primary-rgb), .075) !importan
     overflow: hidden;
   }
   #barcodes-table > tbody > tr:not(.barcodes-empty-row) > td.b2m-bulk-col {
-    position: absolute;
-    top: .28rem;
-    right: .32rem;
+    position: absolute !important;
+    top: .28rem !important;
+    right: .32rem !important;
     z-index: 2;
-    display: block;
-    width: .95rem;
-    min-width: .95rem;
+    display: block !important;
+    width: .95rem !important;
+    min-width: .95rem !important;
+    height: .95rem !important;
     padding: 0 !important;
     border: 0 !important;
     background: transparent !important;
