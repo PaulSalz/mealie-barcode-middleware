@@ -81,6 +81,21 @@ def test_legacy_settings_cleanup_keeps_the_canonical_printer_link():
 
     assert 'a[href="/settings?tab=printer"]' not in script
 
+
+
+def test_printer_tab_renders_connection_stats_and_niimblue_runtime_options():
+    script = read("app/static/js/ui-v9.js")
+    page = script[script.index("async function renderPrinterPage()"):script.index("  function init()")]
+
+    assert "settingsTab() !== 'printer'" in page
+    assert 'id="v9-printer-stats"' in page
+    assert 'id="v9-printer-data"' in page
+    assert 'json(\'/labels/b21/stats\'' in page
+    assert 'id="v9-printer-config"' in page
+    assert 'json(\'/api/settings/niim\'' in page
+    assert 'name="print_task"' in script
+    assert 'name="max_label_width_mm"' in script
+
 def test_user_permission_controls_use_existing_access_api_and_server_checks():
     template = read("app/templates/settings.html")
     script = read("app/static/js/settings-page.js")
