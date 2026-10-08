@@ -22,3 +22,35 @@
   .b21-control-grid { grid-template-columns: 1fr; }
   .b21-label-shell { min-height: 230px; padding: .75rem; }
 }
+
+
+/* The legacy hover frame surrounds the editable box, which can be larger than
+   its visible text. Show interaction and selection bounds around the content. */
+#b21-label-stage .b21-element:hover {
+  outline: none !important;
+  box-shadow: none !important;
+}
+#b21-label-stage .b21-v2-free-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.08;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: Inter, "DejaVu Sans", sans-serif;
+}
+#b21-label-stage .b21-v2-text-content {
+  display: inline;
+  max-width: 100%;
+  max-height: 100%;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+#b21-label-stage .b21-v2-free-text:hover .b21-v2-text-content:not(.b21-v2-element-selected) {
+  outline: 1px dashed rgba(var(--tblr-primary-rgb), .65);
+  outline-offset: 0;
+}
+#b21-label-stage .b21-v2-text-content.b21-v2-element-selected {
+  outline-offset: 0 !important;
+}
