@@ -94,12 +94,11 @@
   margin-top: .35rem;
 }
 
-/* B21: selected object gets the same accent language as the resize handle. */
-#b21-label-stage [data-element-id].b21-v22-selected,
-#b21-label-stage [data-element-id].b21-v2-element-selected {
-  outline: 2px solid var(--tblr-primary) !important;
-  outline-offset: 2px !important;
-  box-shadow: 0 0 0 2px rgba(var(--tblr-primary-rgb), .10);
+/* The editable element box remains a hit area; outline only its rendered content. */
+#b21-label-stage [data-element-id].b21-v22-selected:not(.b21-v2-line) {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
 }
 #b21-label-stage .b21-v2-resize-handle {
   border-color: var(--tblr-primary) !important;
