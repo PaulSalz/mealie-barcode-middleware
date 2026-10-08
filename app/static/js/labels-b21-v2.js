@@ -382,6 +382,7 @@
       selectionNode=document.createElement('div');selectionNode.className='b21-code-content';node.appendChild(selectionNode);
       codeImage=document.createElement('img');codeImage.className='b21-code';codeImage.alt=entry.code||'';
       selectionNode.appendChild(codeImage);
+      selectionNode=codeImage;
       codeImage.addEventListener('load',()=>fitCodeContent(selectionNode,codeImage,el,p));
       codeImage.src='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(s.codeValue||entry.code||'');
     } else {
@@ -397,7 +398,7 @@
     if(codeImage)fitCodeContent(selectionNode,codeImage,el,p);
     node.addEventListener('pointerdown',(event)=>startRelativeDrag(event,node,el,p));
     node.addEventListener('click',(event)=>{event.stopPropagation();selectedElementId=el.id;syncInspector();renderStage();});
-    if(el.id===selectedElementId){const handle=document.createElement('span');handle.className='b21-v2-resize-handle';handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));selectionNode.appendChild(handle);}
+    if(el.id===selectedElementId&&!codeImage){const handle=document.createElement('span');handle.className='b21-v2-resize-handle';handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));selectionNode.appendChild(handle);}
     return node;
   }
   function fitCodeContent(visual,image,el,p){
