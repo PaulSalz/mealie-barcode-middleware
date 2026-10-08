@@ -376,14 +376,14 @@
 
   function displayText(el,entry,s){ if(el.type==='code')return ''; if(el.source==='label')return entry.label||entry.code||''; if(el.source==='value')return s.codeValue||entry.code||''; return el.text||''; }
   function buildStageElement(el,entry,s,p,cal){
-    let node, selectionNode, codeImage=null;
+    let node, selectionNode, codeVisual=null, codeImage=null;
     if(el.type==='code'){
       node=document.createElement('div');node.className='b21-element b21-code-box';
-      selectionNode=document.createElement('div');selectionNode.className='b21-code-content';node.appendChild(selectionNode);
+      codeVisual=document.createElement('div');codeVisual.className='b21-code-content';node.appendChild(codeVisual);
       codeImage=document.createElement('img');codeImage.className='b21-code';codeImage.alt=entry.code||'';
-      selectionNode.appendChild(codeImage);
+      codeVisual.appendChild(codeImage);
       selectionNode=codeImage;
-      codeImage.addEventListener('load',()=>fitCodeContent(selectionNode,codeImage,el,p));
+      codeImage.addEventListener('load',()=>fitCodeContent(codeVisual,codeImage,el,p));
       codeImage.src='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(s.codeValue||entry.code||'');
     } else {
       node=document.createElement('div');node.textContent=displayText(el,entry,s);node.className=el.type==='line'?'b21-v2-line':'b21-v2-free-text';
@@ -395,7 +395,7 @@
     if(el.id===selectedElementId)selectionNode.classList.add('b21-v2-element-selected');
     const ox=(Number(cal.xMm||0)/p.width_mm)*100, oy=(Number(cal.yMm||0)/p.height_mm)*100;
     applyBox(node,Number(el.x||0)+ox,Number(el.y||0)+oy,Number(el.w||10),Number(el.h||10),Number(el.rotation||0));
-    if(codeImage)fitCodeContent(selectionNode,codeImage,el,p);
+    if(codeImage)fitCodeContent(codeVisual,codeImage,el,p);
     node.addEventListener('pointerdown',(event)=>startRelativeDrag(event,node,el,p));
     node.addEventListener('click',(event)=>{event.stopPropagation();selectedElementId=el.id;syncInspector();renderStage();});
     if(el.id===selectedElementId&&!codeImage){const handle=document.createElement('span');handle.className='b21-v2-resize-handle';handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));selectionNode.appendChild(handle);}
