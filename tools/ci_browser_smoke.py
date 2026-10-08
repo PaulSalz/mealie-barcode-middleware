@@ -663,6 +663,51 @@ def main() -> None:
         }""", source_key)
         assert preset_geometry == {"labelWidth": 92, "labelHeight": 34, "codeWidth": 92, "codeHeight": 50, "fontSize": preset_geometry["fontSize"]}, preset_geometry
         short_font = preset_geometry["fontSize"]
+        page.wait_for_function("""() => {
+          const img = document.querySelector('#b21-label-stage .b21-code-box .b21-code');
+          return !!img && img.complete && img.naturalWidth > 0;
+        }""", timeout=5_000)
+        code_frame = page.evaluate("""() => {
+          const box = document.querySelector('#b21-label-stage .b21-code-box');
+          const visual = box && box.querySelector('.b21-code-content');
+          const image = visual && visual.querySelector('img');
+          const rect = element => {
+            const value = element.getBoundingClientRect();
+            return {width:value.width,height:value.height};
+          };
+          const style = visual && getComputedStyle(visual);
+          return {
+            box:rect(box),visual:rect(visual),image:rect(image),
+            imageRatio:image.naturalWidth/image.naturalHeight,
+            visualRatio:visual.getBoundingClientRect().width/visual.getBoundingClientRect().height,
+            outline:style.outlineWidth,outlineOffset:style.outlineOffset,
+            selected:visual.classList.contains('b21-v2-element-selected')
+          };
+        }""")
+        assert code_frame["visual"]["width"] <= code_frame["box"]["width"] + 1, code_frame
+        assert code_frame["visual"]["height"] <= code_frame["box"]["height"] + 1, code_frame
+        assert abs(code_frame["visualRatio"] - code_frame["imageRatio"]) < .03, code_frame
+        assert code_frame["outline"] == "2px" and code_frame["outlineOffset"] == "0px", code_frame
+        assert code_frame["selected"], code_frame
+
+        page.locator("#b21-v2-element-select").select_option("label")
+        font_before = page.evaluate("""key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return all[key].elements.find(row => row.id === 'label').fontSizePt;
+        }""", source_key)
+        page.locator("#b21-v2-fontSizePt-step-up").click()
+        font_up = page.evaluate("""key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return all[key].elements.find(row => row.id === 'label').fontSizePt;
+        }""", source_key)
+        assert font_up == font_before + .5, {"before":font_before,"after":font_up}
+        page.locator("#b21-v2-fontSizePt-step-down").click()
+        font_down = page.evaluate("""key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return all[key].elements.find(row => row.id === 'label').fontSizePt;
+        }""", source_key)
+        assert font_down == font_before, {"before":font_before,"after":font_down}
+
         page.evaluate("""() => {
           const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
           data.queue[0].label = 'Canned tomatoes with basil and oregano for homemade pasta sauce and hearty vegetable soup all winter long';
