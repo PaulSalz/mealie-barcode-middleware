@@ -100,8 +100,8 @@
   max-height: none;
   object-fit: fill;
 }
-#b21-label-stage .b21-code-content.b21-v2-element-selected { outline-offset: 0 !important; }
-#b21-label-stage .b21-code-box:hover .b21-code-content:not(.b21-v2-element-selected) {
+#b21-label-stage .b21-code-content .b21-code.b21-v2-element-selected { outline-offset: 0 !important; }
+#b21-label-stage .b21-code-box:hover .b21-code:not(.b21-v2-element-selected) {
   outline: 1px dashed rgba(var(--tblr-primary-rgb), .65);
   outline-offset: 0;
 }
