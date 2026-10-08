@@ -152,9 +152,12 @@ _TAB_PERMISSIONS = {
     "tokens": "tokens",
     "users": "users",
     "admin": "database",
-    # Legacy links still injected by enhancements.js use these tab IDs.
+}
+
+
+_LEGACY_TAB_REDIRECTS = {
     "printing": "printer",
-    "notifications": "configuration",
+    "notifications": "homeassistant",
 }
 
 
@@ -190,6 +193,8 @@ def _require_admin(request: Request, db: Session) -> RedirectResponse | None:
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, tab: str = Query("mealie"), db: Session = Depends(get_db)):
+    if canonical_tab := _LEGACY_TAB_REDIRECTS.get(tab):
+        return RedirectResponse(f"/settings?tab={canonical_tab}", status_code=303)
     tabs, sidebar_groups = _visible_settings_tabs(request, db)
     permission = _TAB_PERMISSIONS.get(tab)
     if not permission or not _allowed(request, db, permission):
