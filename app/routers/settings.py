@@ -155,6 +155,12 @@ _TAB_PERMISSIONS = {
 }
 
 
+_LEGACY_TAB_REDIRECTS = {
+    "printing": "printer",
+    "notifications": "homeassistant",
+}
+
+
 def _allowed(request: Request, db: Session, permission: str) -> bool:
     return has_permission(db, request.session.get("user_id"), permission)
 
@@ -187,6 +193,8 @@ def _require_admin(request: Request, db: Session) -> RedirectResponse | None:
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, tab: str = Query("mealie"), db: Session = Depends(get_db)):
+    if canonical_tab := _LEGACY_TAB_REDIRECTS.get(tab):
+        return RedirectResponse(f"/settings?tab={canonical_tab}", status_code=303)
     tabs, sidebar_groups = _visible_settings_tabs(request, db)
     permission = _TAB_PERMISSIONS.get(tab)
     if not permission or not _allowed(request, db, permission):

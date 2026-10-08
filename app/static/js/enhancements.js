@@ -216,10 +216,6 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        addSettingsLink('a.list-group-item[href="/settings?tab=mealie"]', 'printing', 'Printing', 'ti-printer');
-        addSettingsLink('a.list-group-item[href="/settings?tab=scanning"]', 'notifications', 'Notifications', 'ti-bell-cog');
-        renderPrintingSettings();
-        renderNotificationSettings();
         addShoppingListsCard();
         addHaWebhookTestButton();
         addScannerHealth();
