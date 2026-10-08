@@ -264,6 +264,7 @@
       [['-1','▼','Decrease '],['1','▲','Increase ']].forEach(([direction, icon, prefix]) => {
         const button = document.createElement('button');
         button.type = 'button';
+        button.id = input.id + (Number(direction) < 0 ? '-step-down' : '-step-up');
         button.className = 'btn btn-outline-secondary b21-range-stepper-button';
         button.textContent = icon;
         button.title = prefix + label;
