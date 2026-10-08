@@ -201,7 +201,7 @@
       '<div class="mb-2 d-none" id="b21-v2-content-row"><label class="form-label">Content / encoded value</label><input class="form-control" id="b21-v2-content"></div>' +
       '<div class="d-flex justify-content-end mb-2"><button class="btn btn-sm btn-outline-danger" type="button" id="b21-v2-delete-element"><i class="ti ti-trash"></i> Delete</button></div>' +
       '<div class="row g-2" id="b21-v2-ranges">' +
-        rangeHtml('X','x',0,100,1) + rangeHtml('Y','y',0,100,1) + rangeHtml('Width','w',2,100,1) + rangeHtml('Height','h',1,100,1) + rangeHtml('Rotation','rotation',0,359,1) + rangeHtml('Font size','fontSizePt',5,48,1) + rangeHtml('Line width','lineWidthMm',.1,3,.05) +
+        rangeHtml('X','x',0,100,1) + rangeHtml('Y','y',0,100,1) + rangeHtml('Width','w',2,100,1) + rangeHtml('Height','h',1,100,1) + rangeHtml('Rotation','rotation',0,359,1) + rangeHtml('Font size','fontSizePt',5,48,.5) + rangeHtml('Line width','lineWidthMm',.1,3,.05) +
       '</div>' +
       '<div class="mt-3"><label class="form-label">Align selected element</label><div class="btn-group w-100" id="b21-v2-align">' +
         '<button class="btn btn-outline-secondary" data-align="left" title="Left"><i class="ti ti-align-left"></i></button>' +
@@ -219,6 +219,7 @@
         '<div class="d-flex gap-2 mt-2"><button class="btn btn-sm btn-outline-secondary" id="b21-v2-reset-cal" type="button"><i class="ti ti-crosshair"></i> Reset calibration</button><button class="btn btn-sm btn-outline-primary" id="b21-v2-test-cal" type="button"><i class="ti ti-printer"></i> Calibration test</button></div>' +
       '</div>';
     body.appendChild(inspector);
+    installRangeSteppers(inspector);
 
     $('b21-v2-element-select').addEventListener('change', function(){ selectedElementId=this.value; renderStage(); syncInspector(); });
     $('b21-v2-content').addEventListener('input', updateSelectedFromInspector);
@@ -247,6 +248,42 @@
 
   function rangeHtml(label, key, min, max, step) {
     return '<div class="col-6 b21-v2-range-wrap" data-range-key="'+key+'"><label class="form-label">'+label+': <strong id="b21-v2-'+key+'-value"></strong></label><input class="form-range b21-v2-range" id="b21-v2-'+key+'" data-key="'+key+'" data-default="0" type="range" min="'+min+'" max="'+max+'" step="'+step+'"></div>';
+  }
+
+  function installRangeSteppers(root) {
+    root.querySelectorAll('input[type="range"]').forEach((input) => {
+      if (input.dataset.stepper === '1') return;
+      input.dataset.stepper = '1';
+      const row = document.createElement('div');
+      row.className = 'b21-range-stepper-row';
+      input.parentNode.insertBefore(row, input);
+      row.appendChild(input);
+      const controls = document.createElement('div');
+      controls.className = 'b21-range-stepper';
+      const label = input.closest('.b21-v2-range-wrap')?.querySelector('.form-label')?.textContent?.split(':')[0] || input.id;
+      [['-1','▼','Decrease '],['1','▲','Increase ']].forEach(([direction, icon, prefix]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-outline-secondary b21-range-stepper-button';
+        button.textContent = icon;
+        button.title = prefix + label;
+        button.setAttribute('aria-label', prefix + label);
+        button.addEventListener('click', () => {
+          const step = Number(input.step) || 1;
+          const precision = Math.min(5, (String(input.step).split('.')[1] || '').length);
+          const factor = Math.pow(10, precision);
+          const current = Number(input.value) || 0;
+          const minimum = input.min === '' ? -Infinity : Number(input.min);
+          const maximum = input.max === '' ? Infinity : Number(input.max);
+          const next = Math.max(minimum, Math.min(maximum, current + Number(direction) * step));
+          input.value = String(Math.round(next * factor) / factor);
+          input.dispatchEvent(new Event('input', {bubbles:true}));
+          input.focus();
+        });
+        controls.appendChild(button);
+      });
+      row.appendChild(controls);
+    });
   }
 
   function currentState() { const e=currentEntry(); return e ? getEntryState(e,currentIndex()) : null; }
@@ -338,16 +375,38 @@
 
   function displayText(el,entry,s){ if(el.type==='code')return ''; if(el.source==='label')return entry.label||entry.code||''; if(el.source==='value')return s.codeValue||entry.code||''; return el.text||''; }
   function buildStageElement(el,entry,s,p,cal){
-    let node;
-    if(el.type==='code'){node=document.createElement('img');node.src='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(s.codeValue||entry.code||'');node.className='b21-element b21-code';}
-    else {node=document.createElement('div');node.textContent=displayText(el,entry,s);node.className=el.type==='line'?'b21-v2-line':'b21-v2-free-text';if(el.type==='line')node.style.borderTopWidth=Math.max(1,(Number(el.lineWidthMm||.35)*(stageScale(p))))+'px';else requestAnimationFrame(()=>{node.style.fontSize=physicalFontPx(p,Number(el.fontSizePt||14))+'px';});}
-    node.dataset.elementId=el.id; if(el.id===selectedElementId)node.classList.add('b21-v2-element-selected');
+    let node, selectionNode=node, codeImage=null;
+    if(el.type==='code'){
+      node=document.createElement('div');node.className='b21-element b21-code-box';
+      selectionNode=document.createElement('div');selectionNode.className='b21-code-content';node.appendChild(selectionNode);
+      codeImage=document.createElement('img');codeImage.className='b21-code';codeImage.alt=entry.code||'';
+      selectionNode.appendChild(codeImage);
+      codeImage.addEventListener('load',()=>fitCodeContent(selectionNode,codeImage,el,p));
+      codeImage.src='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(s.codeValue||entry.code||'');
+    } else {
+      node=document.createElement('div');node.textContent=displayText(el,entry,s);node.className=el.type==='line'?'b21-v2-line':'b21-v2-free-text';
+      if(el.type==='line')node.style.borderTopWidth=Math.max(1,(Number(el.lineWidthMm||.35)*(stageScale(p))))+'px';
+      else requestAnimationFrame(()=>{node.style.fontSize=physicalFontPx(p,Number(el.fontSizePt||14))+'px';});
+    }
+    node.dataset.elementId=el.id;
+    if(el.id===selectedElementId)selectionNode.classList.add('b21-v2-element-selected');
     const ox=(Number(cal.xMm||0)/p.width_mm)*100, oy=(Number(cal.yMm||0)/p.height_mm)*100;
     applyBox(node,Number(el.x||0)+ox,Number(el.y||0)+oy,Number(el.w||10),Number(el.h||10),Number(el.rotation||0));
+    if(codeImage)fitCodeContent(selectionNode,codeImage,el,p);
     node.addEventListener('pointerdown',(event)=>startRelativeDrag(event,node,el,p));
     node.addEventListener('click',(event)=>{event.stopPropagation();selectedElementId=el.id;syncInspector();renderStage();});
-    if(el.id===selectedElementId){const handle=document.createElement('span');handle.className='b21-v2-resize-handle';handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));node.appendChild(handle);}
+    if(el.id===selectedElementId){const handle=document.createElement('span');handle.className='b21-v2-resize-handle';handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));selectionNode.appendChild(handle);}
     return node;
+  }
+  function fitCodeContent(visual,image,el,p){
+    if(!image.naturalWidth||!image.naturalHeight)return;
+    const maxWidthMm=Math.max(.01,Number(el.w||10)*p.width_mm/100);
+    const maxHeightMm=Math.max(.01,Number(el.h||10)*p.height_mm/100);
+    const ratio=image.naturalWidth/image.naturalHeight;
+    const widthMm=Math.min(maxWidthMm,maxHeightMm*ratio);
+    const heightMm=widthMm/ratio;
+    visual.style.width=(widthMm/maxWidthMm*100)+'%';
+    visual.style.height=(heightMm/maxHeightMm*100)+'%';
   }
   function stageScale(p){const stage=$('b21-label-stage');return stage?stage.clientWidth/p.width_mm:1;}
   function physicalFontPx(p,pt){return Math.max(7,(pt*25.4/72)*stageScale(p));}
@@ -370,7 +429,13 @@
   function startResize(event,node,el){
     event.preventDefault();event.stopPropagation();const startX=event.clientX,startY=event.clientY,origW=Number(el.w||10),origH=Number(el.h||10),rect=$('b21-label-stage').getBoundingClientRect();event.target.setPointerCapture(event.pointerId);
     const handle=event.target;
-    const move=(e)=>{el.w=Math.max(2,Math.min(100,origW+(e.clientX-startX)/rect.width*100));el.h=Math.max(1,Math.min(100,origH+(e.clientY-startY)/rect.height*100));node.style.width=el.w+'%';node.style.height=el.h+'%';};
+    const move=(e)=>{
+      el.w=Math.max(2,Math.min(100,origW+(e.clientX-startX)/rect.width*100));
+      el.h=Math.max(1,Math.min(100,origH+(e.clientY-startY)/rect.height*100));
+      node.style.width=el.w+'%';node.style.height=el.h+'%';
+      const visual=node.querySelector('.b21-code-content'),image=node.querySelector('.b21-code');
+      if(visual&&image)fitCodeContent(visual,image,el,p);
+    };
     const end=(e)=>{try{handle.releasePointerCapture(e.pointerId);}catch(ignore){}handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',end);handle.removeEventListener('pointercancel',end);saveEntryStates();syncInspector();renderStage();};
     handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
   }
