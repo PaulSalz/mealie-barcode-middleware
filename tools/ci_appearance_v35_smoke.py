@@ -396,6 +396,12 @@ def main() -> None:
 
         page.goto(f"{BASE_URL}/barcodes", wait_until="domcontentloaded", timeout=20_000)
         page.locator("#barcodes-table").wait_for(state="visible", timeout=5_000)
+        # Bulk controls are injected by the shared UI script after page markup
+        # loads. Wait for the checkbox to acquire its mobile layout before
+        # measuring it, as we already do for the Items table above.
+        barcode_bulk_checkbox = page.locator("#barcodes-table .b2m-bulk-row").first
+        if barcode_bulk_checkbox.count():
+            barcode_bulk_checkbox.wait_for(state="visible", timeout=5_000)
         mobile_barcodes = page.evaluate("""() => {
             const table = document.getElementById('barcodes-table');
             const rows = table.querySelector('tbody');
