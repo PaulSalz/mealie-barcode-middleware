@@ -134,5 +134,27 @@ def test_printer_settings_keep_disconnect_visible_and_explain_connectivity():
     source = read("app/static/js/ui-v9.js")
     assert 'id="v9-printer-disconnect"' in source
     assert "runConnectionAction('/labels/b21/disconnect'" in source
-    assert "http://niimblue-node:3010" in source
+    assert "host-or-ip:5000" in source
     assert "status.service_reachable === false" in source
+
+
+
+def test_printer_configuration_can_scan_and_select_a_device():
+    source = read("app/static/js/ui-v9.js")
+    router = read("app/routers/label_printer.py")
+    service = read("app/services/niimblue.py")
+    assert 'id="v9-printer-scan"' in source
+    assert "'/labels/b21/scan'" in source
+    assert "JSON.stringify({address})" in source
+    assert '@router.post(\"/labels/b21/scan\")' in router
+    scan_route = router.split('@router.post("/labels/b21/scan")', 1)[1].split('@router.post("/labels/b21/connect")', 1)[0]
+    assert "_save_state(db, _CONNECTION_DESIRED_KEY, False)" in scan_route
+    assert '"/scan"' in service
+
+
+def test_printer_page_uses_one_connection_poll_and_pauses_for_scanning():
+    source = read("app/static/js/ui-v9.js")
+    settings = read("app/static/js/settings-page.js")
+    assert "json('/labels/b21/status'" in source
+    assert "printerScanInProgress" in source
+    assert "get('tab') === 'printer') return" in settings
