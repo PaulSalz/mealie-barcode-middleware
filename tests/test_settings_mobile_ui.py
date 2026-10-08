@@ -74,6 +74,13 @@ def test_legacy_ui_does_not_redirect_printer_tab_back_to_removed_alias():
     assert 'link.href = \'/settings?tab=printer\'' in read("app/static/js/ui-v6.js")
     assert 'link.href = \'/settings?tab=printer\'' in read("app/static/js/ui-v9.js")
 
+
+
+def test_legacy_settings_cleanup_keeps_the_canonical_printer_link():
+    script = read("app/static/js/ui-v4.js")
+
+    assert 'a[href="/settings?tab=printer"]' not in script
+
 def test_user_permission_controls_use_existing_access_api_and_server_checks():
     template = read("app/templates/settings.html")
     script = read("app/static/js/settings-page.js")
