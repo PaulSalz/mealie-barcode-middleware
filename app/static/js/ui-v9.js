@@ -31,19 +31,16 @@
   function normalizePrinterNav() {
     if (window.location.pathname !== '/settings') return;
     const tab = settingsTab();
-    if (tab === 'printer') {
-      window.location.replace('/settings?tab=printing');
-      return;
-    }
     const sidebar = document.querySelector('.col-12.col-md-3 .card-body');
     if (!sidebar) return;
-    sidebar.querySelectorAll('a[href="/settings?tab=printing"],a[href="/settings?tab=printer"]').forEach((link) => link.remove());
+    sidebar.querySelectorAll('a[href="/settings?tab=printing"]').forEach((link) => link.remove());
+    if (sidebar.querySelector('a[href="/settings?tab=printer"]')) return;
     const heading = Array.from(sidebar.querySelectorAll('h4.subheader')).find((node) => node.textContent.trim() === 'Integrations');
     const list = heading && heading.nextElementSibling;
     if (!list || !list.classList.contains('list-group')) return;
     const link = document.createElement('a');
-    link.href = '/settings?tab=printing';
-    link.className = 'list-group-item list-group-item-action d-flex align-items-center' + (tab === 'printing' ? ' active' : '');
+    link.href = '/settings?tab=printer';
+    link.className = 'list-group-item list-group-item-action d-flex align-items-center' + (tab === 'printer' ? ' active' : '');
     link.innerHTML = '<span class="me-2"><i class="ti ti-printer icon"></i></span>Printer';
     list.appendChild(link);
   }

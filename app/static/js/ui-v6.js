@@ -82,16 +82,12 @@
 
   function installPrinterTabLink() {
     if (window.location.pathname !== '/settings') return;
-    if (settingsTab() === 'printer') {
-      window.location.replace('/settings?tab=printing');
-      return;
-    }
-    if (document.querySelector('a[href="/settings?tab=printing"]')) return;
+    if (document.querySelector('a[href="/settings?tab=printer"],a[href="/settings?tab=printing"]')) return;
     const system = document.querySelector('a[href="/settings?tab=system"]');
     if (!system) return;
     const link = document.createElement('a');
-    link.href = '/settings?tab=printing';
-    link.className = 'list-group-item list-group-item-action d-flex align-items-center' + (settingsTab() === 'printing' ? ' active' : '');
+    link.href = '/settings?tab=printer';
+    link.className = 'list-group-item list-group-item-action d-flex align-items-center' + (settingsTab() === 'printer' ? ' active' : '');
     link.innerHTML = '<span class="me-2"><i class="ti ti-printer icon"></i></span>Printer';
     system.insertAdjacentElement('beforebegin', link);
   }
