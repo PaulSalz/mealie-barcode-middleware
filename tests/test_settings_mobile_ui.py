@@ -63,6 +63,17 @@ def test_settings_dropdown_and_printer_panel_are_scoped_to_printer_tab():
     assert 'user_access.printer' in base
 
 
+
+
+def test_legacy_ui_does_not_redirect_printer_tab_back_to_removed_alias():
+    assets = read("app/frontend_assets.py")
+    for name in ("ui-v4.js", "ui-v6.js", "ui-v9.js"):
+        script = read(f"app/static/js/{name}")
+        assert "window.location.replace('/settings?tab=printing')" not in script
+        assert f'"js/{name}"' in assets
+    assert 'link.href = \'/settings?tab=printer\'' in read("app/static/js/ui-v6.js")
+    assert 'link.href = \'/settings?tab=printer\'' in read("app/static/js/ui-v9.js")
+
 def test_user_permission_controls_use_existing_access_api_and_server_checks():
     template = read("app/templates/settings.html")
     script = read("app/static/js/settings-page.js")

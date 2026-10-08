@@ -208,7 +208,6 @@
 
   function normalizeSettingsNav() {
     if (window.location.pathname !== '/settings') return;
-    if (settingsTab() === 'printer') { window.location.replace('/settings?tab=printing'); return; }
     const printing = document.querySelector('a[href="/settings?tab=printing"]');
     if (printing) printing.childNodes[printing.childNodes.length-1].textContent=' Printer';
     document.querySelectorAll('a[href="/settings?tab=printer"]').forEach((a)=>a.remove());
