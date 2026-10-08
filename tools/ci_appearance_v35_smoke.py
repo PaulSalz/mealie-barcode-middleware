@@ -396,12 +396,14 @@ def main() -> None:
 
         page.goto(f"{BASE_URL}/barcodes", wait_until="domcontentloaded", timeout=20_000)
         page.locator("#barcodes-table").wait_for(state="visible", timeout=5_000)
-        # Include computed styles in the assertion below because bulk controls
-        # are injected after markup and can be affected by table-cell CSS.
+        # The first row can be hidden by the current barcode list filter.
         mobile_barcodes = page.evaluate("""() => {
             const table = document.getElementById('barcodes-table');
             const rows = table.querySelector('tbody');
-            const row = table.querySelector('tbody tr:not(.barcodes-empty-row)');
+            const row = Array.from(table.querySelectorAll('tbody tr:not(.barcodes-empty-row)')).find(candidate => {
+                const rect = candidate.getBoundingClientRect();
+                return getComputedStyle(candidate).display !== 'none' && rect.width > 0 && rect.height > 0;
+            }) || null;
             return {
                 header: getComputedStyle(table.tHead).display,
                 body: getComputedStyle(rows).display,
@@ -414,26 +416,10 @@ def main() -> None:
                 footerBottomRadius: getComputedStyle(document.querySelector('#barcodes-table-container > .card-footer')).borderBottomLeftRadius,
                 listContainerOverflow: getComputedStyle(document.getElementById('barcodes-table-container')).overflow,
                 bulkLayout: row && row.querySelector('.b2m-bulk-row') ? (() => {
-                    const input = row.querySelector('.b2m-bulk-row');
-                    const cell = input.closest('td');
-                    const box = input.getBoundingClientRect();
-                    const cellBox = cell.getBoundingClientRect();
+                    const box = row.querySelector('.b2m-bulk-row').getBoundingClientRect();
                     const barcode = row.querySelector('[data-field="barcode"]').getBoundingClientRect();
                     const rowBox = row.getBoundingClientRect();
-                    const metrics = element => {
-                        const style = getComputedStyle(element);
-                        const rect = element.getBoundingClientRect();
-                        return {display: style.display, position: style.position, width: style.width, height: style.height, visibility: style.visibility, opacity: style.opacity, rect: {x: rect.x, y: rect.y, width: rect.width, height: rect.height}};
-                    };
-                    return {
-                        topDelta: Math.abs(box.top - barcode.top),
-                        rightInset: rowBox.right - box.right,
-                        size: box.width,
-                        input: metrics(input),
-                        cell: metrics(cell),
-                        row: metrics(row),
-                        viewport: {width: innerWidth, scrollWidth: document.documentElement.scrollWidth}
-                    };
+                    return {topDelta: Math.abs(box.top - barcode.top), rightInset: rowBox.right - box.right, size: box.width};
                 })() : null,
                 compactGap: parseFloat(getComputedStyle(rows).rowGap),
                 scrollWidth: document.documentElement.scrollWidth,
