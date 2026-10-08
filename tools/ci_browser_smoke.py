@@ -691,6 +691,37 @@ def main() -> None:
         assert code_frame["selected"], code_frame
 
         page.locator('.b21-v24-layer-select[data-layer-select="label"]').click()
+        text_frame = page.evaluate("""() => {
+          const box = document.querySelector('#b21-label-stage [data-element-id="label"]');
+          const content = box && box.querySelector('.b21-v2-text-content');
+          const rect = element => {
+            const value = element.getBoundingClientRect();
+            return {width:value.width,height:value.height,top:value.top};
+          };
+          return {
+            box:rect(box),content:rect(content),
+            contentOutline:getComputedStyle(content).outlineWidth,
+            contentSelected:content.classList.contains('b21-v2-element-selected'),
+            outerOutline:getComputedStyle(box).outlineStyle
+          };
+        }""")
+        assert text_frame["content"]["width"] < text_frame["box"]["width"] * .8, text_frame
+        assert text_frame["content"]["height"] < text_frame["box"]["height"] * .8, text_frame
+        assert text_frame["contentOutline"] == "2px" and text_frame["contentSelected"], text_frame
+        assert text_frame["outerOutline"] == "none", text_frame
+
+        steppers = page.evaluate("""() => {
+          const up = document.querySelector('#b21-v2-fontSizePt-step-up');
+          const down = document.querySelector('#b21-v2-fontSizePt-step-down');
+          const a = up.getBoundingClientRect(), b = down.getBoundingClientRect();
+          return {upTop:a.top,downTop:b.top,upWidth:a.width,upHeight:a.height,downWidth:b.width,downHeight:b.height,
+            upLabel:up.getAttribute('aria-label'),downLabel:down.getAttribute('aria-label')};
+        }""")
+        assert steppers["upTop"] < steppers["downTop"], steppers
+        assert max(steppers["upWidth"],steppers["downWidth"]) <= 20, steppers
+        assert max(steppers["upHeight"],steppers["downHeight"]) <= 15, steppers
+        assert steppers["upLabel"].startswith("Increase") and steppers["downLabel"].startswith("Decrease"), steppers
+
         font_before = page.evaluate("""key => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
           return all[key].elements.find(row => row.id === 'label').fontSizePt;
