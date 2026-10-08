@@ -186,7 +186,7 @@ def test_mobile_barcode_bulk_checkbox_is_right_aligned_and_page_is_compact():
     assert ".barcodes-list-card > .card-header {\n    margin: .35rem .35rem 0;" in css
     assert "#barcodes-table-container {\n    margin: .35rem;\n    overflow: hidden;" in css
     assert '#barcodes-table > tbody > tr:not(.barcodes-empty-row) > td.b2m-bulk-col {' in css
-    assert "top: .28rem !important;" in css and "right: .32rem !important;" in css
+    assert "top: .28rem;" in css and "right: .32rem;" in css
     assert "background: var(--tblr-bg-surface);\n    overflow: hidden;" in css
     assert "#barcodes-table > tbody { display: grid; gap: .22rem;" in css
     assert "font-size: .67rem;" in css
