@@ -261,7 +261,7 @@
       const controls = document.createElement('div');
       controls.className = 'b21-range-stepper';
       const label = input.closest('.b21-v2-range-wrap')?.querySelector('.form-label')?.textContent?.split(':')[0] || input.id;
-      [['-1','▼','Decrease '],['1','▲','Increase ']].forEach(([direction, icon, prefix]) => {
+      [['1','▲','Increase '],['-1','▼','Decrease ']].forEach(([direction, icon, prefix]) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.id = input.id + (Number(direction) < 0 ? '-step-down' : '-step-up');
