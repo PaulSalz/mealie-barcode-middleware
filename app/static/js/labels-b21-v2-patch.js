@@ -33,11 +33,18 @@
         if(!active)return;
         event.preventDefault();event.stopPropagation();
         const sr=stage.getBoundingClientRect(),sx=event.clientX,sy=event.clientY,ow=Number(w.value),oh=Number(h.value);
+        const box=active.closest('.b21-code-box')||active;
+        const visual=active.closest('.b21-code-content');
         handle.setPointerCapture(event.pointerId);
         function move(e){
           const nw=Math.max(2,Math.min(100,ow+(e.clientX-sx)/sr.width*100));
           const nh=Math.max(1,Math.min(100,oh+(e.clientY-sy)/sr.height*100));
-          w.value=nw;h.value=nh;active.style.width=nw+'%';active.style.height=nh+'%';
+          w.value=nw;h.value=nh;box.style.width=nw+'%';box.style.height=nh+'%';
+          if(visual&&active.naturalWidth&&active.naturalHeight){
+            const maxWidth=box.clientWidth,maxHeight=box.clientHeight,ratio=active.naturalWidth/active.naturalHeight;
+            const width=Math.min(maxWidth,maxHeight*ratio),height=width/ratio;
+            visual.style.width=(width/maxWidth*100)+'%';visual.style.height=(height/maxHeight*100)+'%';
+          }else if(box===active){active.style.width=nw+'%';active.style.height=nh+'%';}
           const r=active.getBoundingClientRect();handle.style.left=(r.right-sr.left)+'px';handle.style.top=(r.bottom-sr.top)+'px';
         }
         function end(e){
