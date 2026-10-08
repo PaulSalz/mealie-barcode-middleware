@@ -243,27 +243,9 @@
     },true);
   }
 
-  function installOutputStatus(){
-    const choice=document.querySelector('#b21-output-grid input[value="b21"]')?.closest('.b2m-choice-card');
-    if(choice&&!$('b21-v4-output-status')){
-      const span=choice.querySelector('span');const status=document.createElement('small');status.id='b21-v4-output-status';status.textContent='Not connected';span?.appendChild(status);
-    }
-    async function sync(){
-      try{
-        const response=await fetch('/labels/b21/status',{headers:{Accept:'application/json'},cache:'no-store'});const data=await response.json();const connected=!!data.connected;
-        const title=$('b21-status-title'),detail=$('b21-status-detail'),out=$('b21-v4-output-status');
-        if(title){title.classList.remove('text-success','text-danger');title.classList.add(connected?'text-success':'text-danger');}
-        if(detail){detail.classList.toggle('text-success',connected);detail.classList.toggle('text-danger',!connected&&!data.error);}
-        if(out){out.textContent=connected?'Connected':'Not connected';out.className=connected?'text-success':'text-danger';}
-      }catch(e){}
-    }
-    sync();setInterval(sync,2500);
-    const connect=$('b21-connect-button');if(connect)connect.addEventListener('click',()=>setTimeout(sync,500));
-  }
-
   function wait(){
     if(!$('b21-v2-inspector')||!$('b21-label-stage')){setTimeout(wait,120);return;}
-    installPresets();installAppearanceSection();guardCalibrationTest();installOutputStatus();
+    installPresets();installAppearanceSection();guardCalibrationTest();
   }
   wait();
 })();

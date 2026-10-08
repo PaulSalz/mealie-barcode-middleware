@@ -164,7 +164,7 @@
 
     section.dataset.b2mV13 = '1';
     /* Replacing the contents also removes the old localStorage-only handlers. */
-    section.innerHTML = '<div class="d-flex align-items-center justify-content-between gap-2 mb-2">' +
+    section.innerHTML = '<div class="d-flex align-items-center justify-content-between gap-2 mb-2 b21-v13-preset-header" id="b21-v13-preset-header">' +
       '<div><div class="fw-semibold">Layout presets</div><div class="text-secondary small">Apply a starting layout, then fine-tune it below.</div></div>' +
       '</div><div class="b21-v13-preset-grid">' +
       presetCard('stacked','ti-layout-rows','Stacked','Code above text') +
@@ -175,6 +175,13 @@
       '</div><div class="form-hint mt-2">Text size adapts to the selected roll and label. Narrow or portrait rolls stack side layouts to preserve code area.</div>' +
       '<div class="btn-group w-100 mt-3" role="group"><button class="btn btn-outline-primary" type="button" id="b21-v4-copy-design">Copy design</button><button class="btn btn-outline-primary" type="button" id="b21-v4-paste-design" disabled>Paste design</button><button class="btn btn-outline-primary" type="button" id="b21-v4-apply-all-design">Apply to all</button></div>' +
       '<div class="small text-secondary mt-2" id="b21-v4-design-status" role="status" aria-live="polite"></div>';
+
+    const presetHeader = section.querySelector('#b21-v13-preset-header');
+    const resetAll = $('b21-v2-reset-all');
+    if (presetHeader && resetAll) {
+      resetAll.classList.add('btn-sm', 'b21-v13-reset-all');
+      presetHeader.appendChild(resetAll);
+    }
 
     section.querySelectorAll('[data-preset]').forEach(function (button) {
       button.addEventListener('click', function () { applyPreset(button.dataset.preset); });

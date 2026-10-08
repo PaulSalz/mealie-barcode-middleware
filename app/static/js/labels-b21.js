@@ -112,7 +112,6 @@
             .b21-control-grid .form-range { min-width:0; }
             .b21-section { border-top:1px solid var(--tblr-border-color);padding-top:1rem;margin-top:1rem; }
             .b21-rfid-badge { max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-            .b21-preview-meta { display:flex;gap:.5rem;flex-wrap:wrap;align-items:center; }
             .b21-profile-actions { display:flex;gap:.4rem;flex-wrap:wrap; }
             .b21-profile-editor { background:var(--tblr-bg-surface-secondary);border:1px solid var(--tblr-border-color);border-radius:var(--tblr-border-radius);padding:.75rem; }
             @media (max-width: 767.98px) { .b21-control-grid { grid-template-columns:1fr; } .b21-label-shell{min-height:230px;padding:.75rem;} }
@@ -148,16 +147,10 @@
             <div class="card-body">
                 <div class="b2m-choice-grid" id="b21-output-grid">
                     <label class="b2m-choice-card"><input class="form-check-input me-2" type="radio" name="label-output" value="browser"><span><strong>Browser print</strong><small>Sheet/page layout</small></span></label>
-                    <label class="b2m-choice-card${configured ? '' : ' b2m-choice-disabled'}"><input class="form-check-input me-2" type="radio" name="label-output" value="b21"${configured ? '' : ' disabled'}><span><strong>B21 Pro</strong><small>niimblue-node · physical label preview</small></span></label>
+                    <label class="b2m-choice-card${configured ? '' : ' b2m-choice-disabled'}"><input class="form-check-input me-2" type="radio" name="label-output" value="b21"${configured ? '' : ' disabled'}><span><strong>B21 Pro</strong></span></label>
                 </div>
                 <div class="mt-3 pt-3 border-top" id="b21-printer-card">
-                    <div class="d-flex align-items-center gap-3 flex-wrap" id="b21-connection-bar">
-                        <span class="b21-status-dot" id="b21-status-dot"></span>
-                        <div class="flex-fill min-w-0">
-                            <div class="small fw-semibold">Printer</div>
-                            <div class="fw-semibold" id="b21-status-title">Not connected</div>
-                            <div class="text-secondary small" id="b21-status-detail">Connection is manual.</div>
-                        </div>
+                    <div class="d-flex align-items-center justify-content-end gap-2 flex-wrap" id="b21-connection-bar">
                         <button class="btn btn-outline-primary" type="button" id="b21-connect-button"><i class="ti ti-bluetooth icon"></i> Connect</button>
                     </div>
                 </div>
@@ -168,12 +161,19 @@
         b21Preview.id = 'b21-preview-body';
         b21Preview.className = 'card-body p-3 d-none';
         b21Preview.innerHTML = `
-            <div class="d-flex gap-2 align-items-center flex-wrap mb-3">
-                <div class="flex-fill"><label class="form-label mb-1">Preview label</label><select class="form-select" id="b21-entry-select"></select></div>
-                <div class="b21-preview-meta pt-3" id="b21-preview-meta"></div>
-            </div>
             <div class="b21-label-shell"><div class="b21-label-stage" id="b21-label-stage"></div></div>
             <div class="text-secondary small mt-2">Drag code/text directly on the label or use the precise position controls.</div>`;
+        var previewHeader = previewCard.querySelector('.card-header');
+        var previewSelector = document.createElement('div');
+        previewSelector.id = 'b21-preview-selector';
+        previewSelector.className = 'd-flex align-items-center gap-2 d-none';
+        previewSelector.innerHTML = '<label class="form-label small mb-0" for="b21-entry-select">Preview label</label><select class="form-select form-select-sm" id="b21-entry-select"></select>';
+        if (previewHeader) {
+            previewHeader.classList.add('b21-preview-header');
+            previewHeader.appendChild(previewSelector);
+        } else {
+            b21Preview.insertAdjacentElement('afterbegin', previewSelector);
+        }
         browserPreviewBody.parentNode.appendChild(b21Preview);
 
         var b21Controls = document.createElement('div');
@@ -323,6 +323,7 @@
         $('browser-preview-body').classList.toggle('d-none', !browser);
         $('browser-layout-body').classList.toggle('d-none', !browser);
         $('b21-preview-body').classList.toggle('d-none', browser);
+        $('b21-preview-selector')?.classList.toggle('d-none', browser);
         $('b21-layout-body').classList.toggle('d-none', browser);
         var b21Header = $('b21-v2-header');
         if (b21Header) b21Header.classList.toggle('d-none', browser);
@@ -366,17 +367,17 @@
         var title = $('b21-status-title');
         var detail = $('b21-status-detail');
         var button = $('b21-connect-button');
-        if (!dot || !button) return;
-        dot.className = 'b21-status-dot' + (state.status.connected ? ' connected' : (state.status.error ? ' error' : ''));
+        if (!button) return;
+        if (dot) dot.className = 'b21-status-dot' + (state.status.connected ? ' connected' : (state.status.error ? ' error' : ''));
         if (state.status.connected) {
             var meta = state.status.info && state.status.info.modelMetadata || {};
-            title.textContent = 'Connected';
-            detail.textContent = (meta.model || 'B21 Pro') + ' · ' + (meta.dpi || state.status.dpi || 300) + ' dpi · manual connection';
+            if (title) title.textContent = 'Connected';
+            if (detail) detail.textContent = (meta.model || 'B21 Pro') + ' · ' + (meta.dpi || state.status.dpi || 300) + ' dpi · manual connection';
             button.className = 'btn btn-outline-danger';
             button.innerHTML = '<i class="ti ti-bluetooth-off icon"></i> Disconnect';
         } else {
-            title.textContent = state.status.error ? 'Printer unavailable' : 'Not connected';
-            detail.textContent = state.status.error || 'Connection is manual. B2M will not auto-connect before printing.';
+            if (title) title.textContent = state.status.error ? 'Printer unavailable' : 'Not connected';
+            if (detail) detail.textContent = state.status.error || 'Connection is manual. B2M will not auto-connect before printing.';
             button.className = 'btn btn-outline-primary';
             button.innerHTML = '<i class="ti ti-bluetooth icon"></i> Connect';
         }
@@ -558,7 +559,6 @@
         var stage = $('b21-label-stage');
         stage.style.aspectRatio = p.width_mm + ' / ' + p.height_mm;
         stage.innerHTML = '';
-        $('b21-preview-meta').innerHTML = '<span class="badge bg-blue-lt">' + esc(p.name) + '</span><span class="badge bg-secondary-lt">' + p.width_mm + '×' + p.height_mm + ' mm</span><span class="badge bg-secondary-lt">' + (p.dpi || 300) + ' dpi</span>';
         if (!queue.length) {
             stage.innerHTML = '<div class="position-absolute top-50 start-50 translate-middle text-secondary">Add a code to the queue.</div>';
             return;

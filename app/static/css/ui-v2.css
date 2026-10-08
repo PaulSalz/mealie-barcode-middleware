@@ -50,10 +50,6 @@
 
 /* B21 v2 header / inspector. */
 .b21-v2-toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
-.b21-v2-printer-data { display: grid; grid-template-columns: repeat(auto-fit,minmax(120px,1fr)); gap: .45rem .8rem; margin-top: .75rem; }
-.b21-v2-printer-data > div { min-width: 0; padding: .45rem .55rem; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); }
-.b21-v2-printer-data small { display: block; color: var(--tblr-secondary); }
-.b21-v2-printer-data strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .b21-v2-inspector .form-range { cursor: pointer; }
 .b21-v2-inspector .btn-group .btn { min-width: 2.2rem; }
 .b21-v2-element-selected { outline: 2px solid var(--tblr-primary) !important; outline-offset: 0; }
@@ -78,7 +74,6 @@
 
 @media (max-width: 767.98px) {
   .b21-v2-toolbar > .btn, .b21-v2-toolbar > .form-select, .b21-v2-toolbar > .input-group { width: 100%; }
-  .b21-v2-printer-data { grid-template-columns: 1fr 1fr; }
 }
 
 
