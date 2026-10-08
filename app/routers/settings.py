@@ -152,6 +152,9 @@ _TAB_PERMISSIONS = {
     "tokens": "tokens",
     "users": "users",
     "admin": "database",
+    # Legacy links still injected by enhancements.js use these tab IDs.
+    "printing": "printer",
+    "notifications": "configuration",
 }
 
 
