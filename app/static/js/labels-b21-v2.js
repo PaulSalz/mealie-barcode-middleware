@@ -388,6 +388,7 @@
       if(el.type==='line')node.style.borderTopWidth=Math.max(1,(Number(el.lineWidthMm||.35)*(stageScale(p))))+'px';
       else requestAnimationFrame(()=>{node.style.fontSize=physicalFontPx(p,Number(el.fontSizePt||14))+'px';});
     }
+    if(!selectionNode)selectionNode=node;
     node.dataset.elementId=el.id;
     if(el.id===selectedElementId)selectionNode.classList.add('b21-v2-element-selected');
     const ox=(Number(cal.xMm||0)/p.width_mm)*100, oy=(Number(cal.yMm||0)/p.height_mm)*100;
