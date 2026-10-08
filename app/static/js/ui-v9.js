@@ -140,7 +140,7 @@
   }
 
   async function renderPrinterPage() {
-    if (window.location.pathname !== '/settings' || settingsTab() !== 'printing') return;
+    if (window.location.pathname !== '/settings' || settingsTab() !== 'printer') return;
     const pane = document.querySelector('.col-12.col-md-9.d-flex.flex-column');
     if (!pane) return;
     pane.innerHTML = '<div class="card-body"><h2 class="mb-2">Printer</h2><p class="card-subtitle mb-4">Connection, print statistics and runtime configuration for niimblue-node and the NIIMBOT B21 Pro.</p>' +
