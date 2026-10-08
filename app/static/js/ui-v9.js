@@ -125,7 +125,8 @@
     const c = config || {};
     const selected = (value, expected) => String(value || '') === expected ? ' selected' : '';
     return '<form id="v9-printer-config-form"><div class="row g-3">' +
-      '<div class="col-12"><label class="form-label">niimblue-node URL</label><input class="form-control" name="url" value="' + esc(c.url || '') + '" placeholder="http://127.0.0.1:5000"></div>' +
+      '<div class="col-12"><label class="form-label">niimblue-node URL</label><input class="form-control" name="url" value="' + esc(c.url || '') + '" placeholder="http://niimblue-node:3010"></div>' +
+      '<div class="col-12"><div class="form-hint">Use an address reachable from B2M. In Docker, localhost refers to the B2M container unless niimblue-node runs in that same container.</div></div>' +
       '<div class="col-md-4"><label class="form-label">Transport</label><select class="form-select" name="transport"><option value="ble"' + selected(c.transport, 'ble') + '>BLE</option><option value="serial"' + selected(c.transport, 'serial') + '>Serial</option></select></div>' +
       '<div class="col-md-8"><label class="form-label">Printer address</label><input class="form-control font-monospace" name="address" value="' + esc(c.address || '') + '"></div>' +
       '<div class="col-md-6"><label class="form-label">Print task</label><input class="form-control font-monospace" name="print_task" value="' + esc(c.print_task || 'D110M_V4') + '"></div>' +
@@ -144,7 +145,7 @@
     const pane = document.querySelector('.col-12.col-md-9.d-flex.flex-column');
     if (!pane) return;
     pane.innerHTML = '<div class="card-body"><h2 class="mb-2">Printer</h2><p class="card-subtitle mb-4">Connection, print statistics and runtime configuration for niimblue-node and the NIIMBOT B21 Pro.</p>' +
-      '<div class="card mb-3" id="v9-printer-runtime"><div class="card-header"><div><h3 class="card-title">Printer connection</h3><p class="card-subtitle">BLE connection is manual.</p></div><div class="card-actions d-flex align-items-center gap-2"><span class="badge bg-secondary-lt" id="v9-printer-state">Loading…</span><button class="btn btn-outline-secondary btn-sm" id="v9-printer-refresh" type="button"><i class="ti ti-refresh icon"></i> Refresh</button><button class="btn btn-outline-primary btn-sm" id="v9-printer-connect" type="button"><i class="ti ti-bluetooth icon"></i> Connect</button></div></div><div class="card-body"><div class="row row-cards mb-3" id="v9-printer-stats"></div><div class="datagrid" id="v9-printer-data"></div><div class="form-hint mt-3" id="v9-printer-error"></div></div></div>' +
+      '<div class="card mb-3" id="v9-printer-runtime"><div class="card-header"><div><h3 class="card-title">Printer connection</h3><p class="card-subtitle">BLE connection is manual.</p></div><div class="card-actions d-flex align-items-center gap-2"><span class="badge bg-secondary-lt" id="v9-printer-state">Loading…</span><button class="btn btn-outline-secondary btn-sm" id="v9-printer-refresh" type="button"><i class="ti ti-refresh icon"></i> Refresh</button><button class="btn btn-outline-primary btn-sm" id="v9-printer-connect" type="button"><i class="ti ti-bluetooth icon"></i> Connect</button><button class="btn btn-outline-danger btn-sm" id="v9-printer-disconnect" type="button" aria-label="Disconnect printer"><i class="ti ti-bluetooth-off icon"></i> Disconnect</button></div></div><div class="card-body"><div class="row row-cards mb-3" id="v9-printer-stats"></div><div class="datagrid" id="v9-printer-data"></div><div class="form-hint mt-3" id="v9-printer-error"></div></div></div>' +
       '<div class="card"><div class="card-header"><div><h3 class="card-title">Runtime configuration</h3><p class="card-subtitle">Changes apply to the next printer request without restarting B2M.</p></div></div><div class="card-body" id="v9-printer-config"><div class="text-secondary">Loading…</div></div></div></div>';
 
     let lastActionError = '';
@@ -153,18 +154,23 @@
         const data = await json('/labels/b21/stats', {cache: 'no-store'}, 8000);
         const status = data.status || {};
         const connected = !!status.connected;
-        $('v9-printer-state').className = 'badge ' + (connected ? 'bg-green text-green-fg' : 'bg-red-lt text-red');
-        $('v9-printer-state').textContent = connected ? 'Connected' : 'Not connected';
+        const configured = status.configured !== false;
+        $('v9-printer-state').className = 'badge ' + (connected ? 'bg-green text-green-fg' : configured ? 'bg-red-lt text-red' : 'bg-yellow-lt text-yellow');
+        $('v9-printer-state').textContent = connected ? 'Connected' : configured ? 'Not connected' : 'Not configured';
         $('v9-printer-stats').innerHTML = printerStatsHtml(data);
         $('v9-printer-data').innerHTML = printerDataHtml(data);
-        const button = $('v9-printer-connect');
-        button.dataset.connected = connected ? '1' : '0';
-        button.className = 'btn btn-sm ' + (connected ? 'btn-outline-danger' : 'btn-outline-primary');
-        button.innerHTML = connected ? '<i class="ti ti-bluetooth-off icon"></i> Disconnect' : '<i class="ti ti-bluetooth icon"></i> Connect';
-        const message = lastActionError || data.last_error || status.error || '';
+        const connectButton = $('v9-printer-connect');
+        connectButton.disabled = connected;
+        connectButton.className = 'btn btn-sm btn-outline-primary';
+        connectButton.innerHTML = connected ? '<i class="ti ti-bluetooth-connected icon"></i> Connected' : '<i class="ti ti-bluetooth icon"></i> Connect';
+        const hasError = !!(lastActionError || data.last_error || status.reconnect_error || status.error) || !configured || status.service_reachable === false;
+        const message = lastActionError || data.last_error || status.reconnect_error || status.error ||
+          (!configured ? 'Set the niimblue-node URL and printer address in Runtime configuration.' :
+            status.service_reachable === false ? 'niimblue-node is not reachable from B2M.' :
+              connected ? 'Printer connected.' : 'niimblue-node is reachable; the printer is not connected.');
         const error = $('v9-printer-error');
-        error.className = 'form-hint mt-3' + (message ? ' text-danger' : ' text-secondary');
-        error.textContent = message || 'Printer service reachable.';
+        error.className = 'form-hint mt-3' + (hasError ? ' text-danger' : connected ? ' text-success' : ' text-warning');
+        error.textContent = message;
         if (!preserveError) lastActionError = '';
       } catch (error) {
         $('v9-printer-state').className = 'badge bg-red-lt text-red';
@@ -198,21 +204,29 @@
     }
 
     $('v9-printer-refresh').addEventListener('click', () => { lastActionError = ''; refreshStats(false); });
-    $('v9-printer-connect').addEventListener('click', async function () {
-      const button = this;
-      const disconnecting = button.dataset.connected === '1';
+    async function runConnectionAction(path, label) {
+      const connectButton = $('v9-printer-connect');
+      const disconnectButton = $('v9-printer-disconnect');
       lastActionError = '';
-      button.disabled = true;
-      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (disconnecting ? 'Disconnecting…' : 'Connecting…');
+      connectButton.disabled = true;
+      disconnectButton.disabled = true;
+      const activeButton = path.endsWith('/disconnect') ? disconnectButton : connectButton;
+      activeButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + label;
       try {
-        await json(disconnecting ? '/labels/b21/disconnect' : '/labels/b21/connect', {method: 'POST'}, 24000);
+        await json(path, {method: 'POST'}, 24000);
       } catch (error) {
         lastActionError = error.message;
       } finally {
-        button.disabled = false;
+        connectButton.disabled = false;
+        disconnectButton.disabled = false;
+        connectButton.innerHTML = '<i class="ti ti-bluetooth icon"></i> Connect';
+        disconnectButton.innerHTML = '<i class="ti ti-bluetooth-off icon"></i> Disconnect';
         await refreshStats(!!lastActionError);
       }
-    });
+    }
+
+    $('v9-printer-connect').addEventListener('click', () => runConnectionAction('/labels/b21/connect', 'Connecting…'));
+    $('v9-printer-disconnect').addEventListener('click', () => runConnectionAction('/labels/b21/disconnect', 'Disconnecting…'));
 
     await Promise.allSettled([refreshStats(false), loadConfig()]);
   }

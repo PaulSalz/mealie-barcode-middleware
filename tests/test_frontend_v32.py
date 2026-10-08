@@ -127,3 +127,12 @@ def test_generated_ha_settings_automation_has_a_copyable_textarea():
     assert 'id="ha-scan-automation-yaml"' in template
     assert "build_scan_notification_automation(settings.ha_webhook_url)" in router
     assert "copy-ha-scan-automation" in client
+
+
+
+def test_printer_settings_keep_disconnect_visible_and_explain_connectivity():
+    source = read("app/static/js/ui-v9.js")
+    assert 'id="v9-printer-disconnect"' in source
+    assert "runConnectionAction('/labels/b21/disconnect'" in source
+    assert "http://niimblue-node:3010" in source
+    assert "status.service_reachable === false" in source

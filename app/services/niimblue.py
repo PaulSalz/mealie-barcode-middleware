@@ -102,21 +102,33 @@ def _http_error_message(exc: Exception, *, action: str = "request") -> str:
     if isinstance(exc, httpx.TimeoutException):
         return f"niimblue-node {action} timed out"
     if isinstance(exc, httpx.HTTPError):
-        return f"niimblue-node {action} failed: {exc.__class__.__name__}"
+        detail = " ".join(str(exc).split())[:250]
+        return f"niimblue-node {action} failed: {detail or exc.__class__.__name__}"
     return str(exc)
+
+
+def _connection_probe(*, timeout: float = 2.0) -> tuple[bool, bool, Exception | None]:
+    """Return reachability, connection state and the last transport error."""
+    reachable = False
+    last_error = None
+    for attempt in range(2):
+        try:
+            payload = _request("GET", "/connected", timeout=timeout if attempt == 0 else min(timeout, 1.2)).json()
+            reachable = True
+            last_error = None
+            if bool(payload.get("connected")):
+                return True, True, None
+        except Exception as exc:
+            reachable = False
+            last_error = exc
+        if attempt == 0:
+            time.sleep(0.12)
+    return reachable, False, last_error
 
 
 def _connected(*, timeout: float = 2.0) -> bool:
     """Confirm connection state once more before reporting a transient disconnect."""
-    for attempt in range(2):
-        try:
-            if bool(_request("GET", "/connected", timeout=timeout if attempt == 0 else min(timeout, 1.2)).json().get("connected")):
-                return True
-        except Exception:
-            pass
-        if attempt == 0:
-            time.sleep(0.12)
-    return False
+    return _connection_probe(timeout=timeout)[1]
 
 
 def _wait_connected(seconds: float = 3.0) -> bool:
@@ -163,8 +175,10 @@ def detected_media() -> dict:
 
 def printer_status() -> dict:
     cfg = config()
+    configured = bool(cfg["url"] and cfg["address"] and cfg["transport"] in {"ble", "serial"})
     result = {
-        "configured": is_configured(),
+        "configured": configured,
+        "service_reachable": None,
         "connected": False,
         "address": cfg["address"],
         "transport": cfg["transport"],
@@ -172,26 +186,38 @@ def printer_status() -> dict:
         "dpi": cfg["dpi"],
         "max_label_width_mm": cfg["max_label_width_mm"],
     }
-    if not result["configured"]:
+    if not configured:
+        missing = []
+        if not cfg["url"]:
+            missing.append("niimblue-node URL")
+        if not cfg["address"]:
+            missing.append("printer address")
+        if cfg["transport"] not in {"ble", "serial"}:
+            missing.append("transport (ble or serial)")
+        result["error"] = "Printer configuration incomplete: " + ", ".join(missing)
         return result
-    try:
-        result["connected"] = _connected(timeout=1.5)
-        if result["connected"]:
-            try:
-                info = _request("GET", "/info", timeout=4).json()
-                result["info"] = info
-                metadata = info.get("modelMetadata") or {}
-                if metadata.get("dpi"):
-                    result["dpi"] = metadata["dpi"]
-                if info.get("detectedPrintTask"):
-                    result["detected_print_task"] = info["detectedPrintTask"]
-            except Exception as exc:
-                result["info_error"] = _http_error_message(exc, action="info request")
-            media = detected_media()
-            if media.get("tag_present"):
-                result["media"] = media
-    except Exception as exc:
-        result["error"] = _http_error_message(exc, action="status request")
+
+    reachable, connected, connection_error = _connection_probe(timeout=1.5)
+    result["service_reachable"] = reachable
+    result["connected"] = connected
+    if not reachable:
+        if connection_error is not None:
+            result["error"] = _http_error_message(connection_error, action="status request")
+        return result
+    if connected:
+        try:
+            info = _request("GET", "/info", timeout=4).json()
+            result["info"] = info
+            metadata = info.get("modelMetadata") or {}
+            if metadata.get("dpi"):
+                result["dpi"] = metadata["dpi"]
+            if info.get("detectedPrintTask"):
+                result["detected_print_task"] = info["detectedPrintTask"]
+        except Exception as exc:
+            result["info_error"] = _http_error_message(exc, action="info request")
+        media = detected_media()
+        if media.get("tag_present"):
+            result["media"] = media
     return result
 
 
