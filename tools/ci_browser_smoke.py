@@ -675,13 +675,13 @@ def main() -> None:
             const value = element.getBoundingClientRect();
             return {width:value.width,height:value.height};
           };
-          const style = visual && getComputedStyle(visual);
+          const style = image && getComputedStyle(image);
           return {
             box:rect(box),visual:rect(visual),image:rect(image),
             imageRatio:image.naturalWidth/image.naturalHeight,
             visualRatio:visual.getBoundingClientRect().width/visual.getBoundingClientRect().height,
             outline:style.outlineWidth,outlineOffset:style.outlineOffset,
-            selected:visual.classList.contains('b21-v2-element-selected')
+            selected:image.classList.contains('b21-v2-element-selected')
           };
         }""")
         assert code_frame["visual"]["width"] <= code_frame["box"]["width"] + 1, code_frame
@@ -690,7 +690,7 @@ def main() -> None:
         assert code_frame["outline"] == "2px" and code_frame["outlineOffset"] == "0px", code_frame
         assert code_frame["selected"], code_frame
 
-        page.locator("#b21-v2-element-select").select_option("label")
+        page.locator('.b21-v24-layer-select[data-layer-select="label"]').click()
         font_before = page.evaluate("""key => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
           return all[key].elements.find(row => row.id === 'label').fontSizePt;
