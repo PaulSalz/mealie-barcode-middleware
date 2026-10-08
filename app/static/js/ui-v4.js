@@ -113,7 +113,6 @@
     if (window.location.pathname !== '/settings') return;
     const tab = settingsTab();
     document.body.dataset.b2mSettingsTab = tab;
-    document.querySelectorAll('a[href="/settings?tab=printer"]').forEach((a) => a.closest('.list-group-item')?.remove());
     if (tab === 'tokens') {
       const health = $('scanner-health-card'); if (health) health.remove();
       document.querySelectorAll('h3.card-title').forEach((h) => {
@@ -210,7 +209,6 @@
     if (window.location.pathname !== '/settings') return;
     const printing = document.querySelector('a[href="/settings?tab=printing"]');
     if (printing) printing.childNodes[printing.childNodes.length-1].textContent=' Printer';
-    document.querySelectorAll('a[href="/settings?tab=printer"]').forEach((a)=>a.remove());
   }
 
   function printerInfoHtml(data) {
