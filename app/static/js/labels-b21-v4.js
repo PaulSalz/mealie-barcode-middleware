@@ -97,11 +97,11 @@
   }
   function syncDesignControls(){
     const paste=$('b21-v4-paste-design');if(paste)paste.disabled=!clipboard();
+    const applyAll=$('b21-v4-apply-all-design');if(applyAll)applyAll.disabled=!queue().length;
   }
-  function copyDesign(){
-    const c=context();if(!c||!Array.isArray(c.state.elements))return;
+  function captureDesign(c){
     const styles=readJson(TEXT_STYLE_KEY,{});
-    const design={
+    return {
       version:1,
       sourceKey:c.key,
       sourceLabel:String(c.entry.label||c.entry.code||''),
@@ -112,17 +112,25 @@
       threshold:Number(c.state.threshold||128),
       textStyles:clone(styles[c.key]||{})
     };
-    writeJson(DESIGN_CLIPBOARD_KEY,design);
+  }
+  function applyDesignToState(state,key,design,styles){
+    state.elements=clone(design.elements);
+    state.frame=design.frame!==false;
+    state.frameInsetMm=Number(design.frameInsetMm??1);
+    state.frameWidthMm=Number(design.frameWidthMm??.35);
+    state.threshold=Number(design.threshold||128);
+    if(Object.keys(design.textStyles||{}).length)styles[key]=clone(design.textStyles);
+    else delete styles[key];
+  }
+  function copyDesign(){
+    const c=context();if(!c||!Array.isArray(c.state.elements))return;
+    writeJson(DESIGN_CLIPBOARD_KEY,captureDesign(c));
     syncDesignControls();
     setDesignStatus('Design copied. Select another code and paste it.');
   }
   function pasteDesign(){
     const c=context(),design=clipboard();if(!c||!design)return;
-    c.state.elements=clone(design.elements);
-    c.state.frame=design.frame!==false;
-    c.state.frameInsetMm=Number(design.frameInsetMm??1);
-    c.state.frameWidthMm=Number(design.frameWidthMm??.35);
-    c.state.threshold=Number(design.threshold||128);
+    applyDesignToState(c.state,c.key,design,readJson(TEXT_STYLE_KEY,{}));
     writeJson(ENTRY_KEY,c.states);
     const styles=readJson(TEXT_STYLE_KEY,{});
     if(Object.keys(design.textStyles||{}).length)styles[c.key]=clone(design.textStyles);
@@ -131,10 +139,29 @@
     refreshDesigner();
     setDesignStatus('Design applied to this code.');
   }
+  function applyDesignToAll(){
+    const c=context();if(!c||!Array.isArray(c.state.elements))return;
+    const design=captureDesign(c),items=queue();
+    const editor=window.__b2mB21LabelEditor;
+    if(editor&&typeof editor.prepareQueue==='function')editor.prepareQueue();
+    const states=readJson(ENTRY_KEY,{});
+    const styles=readJson(TEXT_STYLE_KEY,{});
+    let applied=0;
+    items.forEach((entry,index)=>{
+      const key=entryKey(entry,index),state=states[key];
+      if(!state)return;
+      applyDesignToState(state,key,design,styles);
+      applied++;
+    });
+    writeJson(ENTRY_KEY,states);
+    writeJson(TEXT_STYLE_KEY,styles);
+    refreshDesigner();
+    setDesignStatus('Current design applied to '+applied+' codes.');
+  }
 
 
   if(window.__b2mB21LabelEditor){
-    Object.assign(window.__b2mB21LabelEditor,{applyPreset,copyDesign,pasteDesign,syncDesignControls});
+    Object.assign(window.__b2mB21LabelEditor,{applyPreset,copyDesign,pasteDesign,applyDesignToAll,syncDesignControls});
   }
 
   function applyPreset(name){
@@ -155,11 +182,12 @@
     const section=document.createElement('div');section.id='b21-v4-presets';section.className='b21-section';
     section.innerHTML='<div class="fw-semibold mb-2">Layout presets</div><div class="btn-group w-100 flex-wrap" role="group">'+
       [['stacked','Stacked'],['left','Code left'],['right','Code right'],['code','Code only'],['text','Text only']].map((p)=>'<button class="btn btn-outline-secondary" type="button" data-preset="'+p[0]+'">'+p[1]+'</button>').join('')+'</div>';
-    section.insertAdjacentHTML('beforeend','<div class="form-hint mt-2">Text size adapts to the selected roll and label. Narrow or portrait rolls stack side layouts to keep the code readable.</div><div class="btn-group w-100 mt-3" role="group"><button class="btn btn-outline-primary" type="button" id="b21-v4-copy-design">Copy design</button><button class="btn btn-outline-primary" type="button" id="b21-v4-paste-design" disabled>Paste design</button></div><div class="small text-secondary mt-2" id="b21-v4-design-status" role="status" aria-live="polite"></div>');
+    section.insertAdjacentHTML('beforeend','<div class="form-hint mt-2">Text size adapts to the selected roll and label. Narrow or portrait rolls stack side layouts to keep the code readable.</div><div class="btn-group w-100 mt-3" role="group"><button class="btn btn-outline-primary" type="button" id="b21-v4-copy-design">Copy design</button><button class="btn btn-outline-primary" type="button" id="b21-v4-paste-design" disabled>Paste design</button><button class="btn btn-outline-primary" type="button" id="b21-v4-apply-all-design">Apply to all</button></div><div class="small text-secondary mt-2" id="b21-v4-design-status" role="status" aria-live="polite"></div>');
     inspector.insertAdjacentElement('afterbegin',section);
     section.querySelectorAll('[data-preset]').forEach((button)=>button.addEventListener('click',()=>applyPreset(button.dataset.preset)));
     $('b21-v4-copy-design').addEventListener('click',copyDesign);
     $('b21-v4-paste-design').addEventListener('click',pasteDesign);
+    $('b21-v4-apply-all-design').addEventListener('click',applyDesignToAll);
     const selector=$('b21-entry-select');if(selector)selector.addEventListener('change',syncDesignControls);
     syncDesignControls();
     return true;
