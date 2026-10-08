@@ -729,6 +729,35 @@ def main() -> None:
         assert target_after["labelText"] == "CI Label Two", target_after
         assert target_after["textStyle"] == {"fontFamily": "mono", "bold": False}, target_after
 
+        # Apply the current design to every queued code, preserving each entry's
+        # encoded value, profile and copy count.
+        page.evaluate("""key => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          all[key].elements.find(row => row.id === 'label').x = 79;
+          all[key].frame = true;
+          localStorage.setItem('b2m-b21-entry-settings-v3', JSON.stringify(all));
+        }""", target_key)
+        page.locator("#b21-entry-select").select_option("0")
+        page.locator("#b21-v4-apply-all-design").click()
+        all_after = page.evaluate("""keys => {
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          return keys.map(key => ({
+            codeValue:all[key].codeValue,
+            profileId:all[key].profileId,
+            copies:all[key].copies,
+            frame:all[key].frame,
+            labelX:all[key].elements.find(row => row.id === 'label').x,
+            note:all[key].elements.find(row => row.id === 'text-smoke')?.text
+          }));
+        }""", [source_key, target_key])
+        assert [row["labelX"] for row in all_after] == [36, 36], all_after
+        assert [row["frame"] for row in all_after] == [False, False], all_after
+        assert [row["note"] for row in all_after] == ["Copied note", "Copied note"], all_after
+        assert all_after[1]["codeValue"] == target_before["codeValue"], all_after
+        assert all_after[1]["profileId"] == target_before["profileId"], all_after
+        assert all_after[1]["copies"] == target_before["copies"], all_after
+        assert page.locator("#b21-v4-design-status").inner_text() == "Current design applied to 2 codes."
+
         # Current label only must use the canonical job endpoint, never v30 batch queue.
         label_hits = {"batch": 0, "jobs_post": 0}
 
