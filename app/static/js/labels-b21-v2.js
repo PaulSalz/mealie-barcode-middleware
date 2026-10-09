@@ -184,12 +184,12 @@
         rangeHtml('X','x',0,100,1) + rangeHtml('Y','y',0,100,1) + rangeHtml('Width','w',2,100,1) + rangeHtml('Height','h',1,100,1) + rangeHtml('Rotation','rotation',0,359,1) + rangeHtml('Font size','fontSizePt',5,48,.5) + rangeHtml('Line width','lineWidthMm',.1,3,.05) +
       '</div>' +
       '<div class="mt-3"><div class="btn-group w-100" id="b21-v2-align">' +
-        '<button class="btn btn-outline-secondary" data-align="left" title="Left"><i class="ti ti-align-left"></i></button>' +
-        '<button class="btn btn-outline-secondary" data-align="hcenter" title="Horizontal center"><i class="ti ti-layout-align-center"></i></button>' +
-        '<button class="btn btn-outline-secondary" data-align="right" title="Right"><i class="ti ti-align-right"></i></button>' +
-        '<button class="btn btn-outline-secondary" data-align="top" title="Top"><i class="ti ti-layout-align-top"></i></button>' +
-        '<button class="btn btn-outline-secondary" data-align="vcenter" title="Vertical center"><i class="ti ti-layout-align-middle"></i></button>' +
-        '<button class="btn btn-outline-secondary" data-align="bottom" title="Bottom"><i class="ti ti-layout-align-bottom"></i></button>' +
+        '<button type="button" class="btn btn-outline-secondary" data-align="left" title="Left"><i class="ti ti-align-left"></i></button>' +
+        '<button type="button" class="btn btn-outline-secondary" data-align="hcenter" title="Horizontal center"><i class="ti ti-layout-align-center"></i></button>' +
+        '<button type="button" class="btn btn-outline-secondary" data-align="right" title="Right"><i class="ti ti-align-right"></i></button>' +
+        '<button type="button" class="btn btn-outline-secondary" data-align="top" title="Top"><i class="ti ti-layout-align-top"></i></button>' +
+        '<button type="button" class="btn btn-outline-secondary" data-align="vcenter" title="Vertical center"><i class="ti ti-layout-align-middle"></i></button>' +
+        '<button type="button" class="btn btn-outline-secondary" data-align="bottom" title="Bottom"><i class="ti ti-layout-align-bottom"></i></button>' +
       '</div></div>' +
       '<div class="d-flex gap-2 mt-3"><button class="btn btn-outline-primary flex-fill" type="button" id="b21-v2-add-text"><i class="ti ti-letter-t"></i> Free text</button><button class="btn btn-outline-primary flex-fill" type="button" id="b21-v2-add-line"><i class="ti ti-minus"></i> Line</button></div>' +
       '<div class="mt-3"><div class="form-hint">Double-click any slider to reset that value.</div></div>' +
@@ -205,7 +205,7 @@
     $('b21-v2-content').addEventListener('input', updateSelectedFromInspector);
     body.querySelectorAll('.b21-v2-range').forEach((range) => {
       range.addEventListener('input', updateSelectedFromInspector);
-      range.addEventListener('dblclick', function(){ this.value=this.dataset.default; updateSelectedFromInspector(); });
+      range.addEventListener('dblclick', function(){ this.value=this.dataset.default; this.dispatchEvent(new Event('input',{bubbles:true})); });
     });
     $('b21-v2-reset-element').addEventListener('click', resetSelected);
     $('b21-v2-reset-all').addEventListener('click', resetAll);
@@ -338,28 +338,27 @@
   function updateSelectedFromInspector(event){
     const s=currentState();if(!s)return;
     const el=s.elements.find((row)=>row.id===selectedElementId);if(!el)return;
-    if(el.type==='code'&&!$('b21-v2-content').readOnly)s.codeValue=$('b21-v2-content').value;
-    if(el.type==='text'&&!el.source&&!$('b21-v2-content').readOnly)el.text=$('b21-v2-content').value;
-    document.querySelectorAll('.b21-v2-range:not(.d-none)').forEach((input)=>{
-      const key=input.dataset.key;
-      if(key in el||['fontSizePt','lineWidthMm'].includes(key))el[key]=Number(input.value);
-    });
-    const changedKey=event&&event.target&&event.target.dataset?event.target.dataset.key:'';
-    if(el.type==='code'&&resolvedCodeKind(currentEntry(),s.codeValue)==='qr'&&(changedKey==='w'||changedKey==='h')){
+    const target=event&&event.target;
+    const changedKey=target&&target.dataset?target.dataset.key:'';
+    if(target&&target.id==='b21-v2-content'){
+      if(el.type==='code'&&!target.readOnly)s.codeValue=target.value;
+      if(el.type==='text'&&!el.source&&!target.readOnly)el.text=target.value;
+    } else if(target&&target.matches&&target.matches('.b21-v2-range')) {
+      if(changedKey in el||['fontSizePt','lineWidthMm'].includes(changedKey))el[changedKey]=Number(target.value);
+    }
+    const codeKind=resolvedCodeKind(currentEntry(),s.codeValue);
+    if(el.type==='code'&&codeKind==='qr'&&(changedKey==='w'||changedKey==='h')){
       const p=profileById(s.profileId);
       const sideMm=changedKey==='w'?Number(el.w||0)*p.width_mm/100:Number(el.h||0)*p.height_mm/100;
-      el.w=sideMm/p.width_mm*100;
-      el.h=sideMm/p.height_mm*100;
-      const width=$('b21-v2-w'),height=$('b21-v2-h');
-      if(width)width.value=String(el.w);
-      if(height)height.value=String(el.h);
+      el.w=sideMm/p.width_mm*100;el.h=sideMm/p.height_mm*100;
     }
-    document.querySelectorAll('.b21-v2-range:not(.d-none)').forEach((input)=>{
-      const out=$('b21-v2-'+input.dataset.key+'-value');if(out)out.textContent=input.value;
-    });
-    saveEntryStates();renderStage();
+    if(changedKey==='w'||changedKey==='h'){
+      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=el[key];if(out)out.textContent=input.value;}});
+    } else if(changedKey){const out=$('b21-v2-'+changedKey+'-value');if(out)out.textContent=target.value;}
+    saveEntryStates();
+    if(target&&target.id==='b21-v2-content')syncInspector();
+    renderStage();
   }
-
   function resetSelected(){
     const el=selectedElement(); if(!el)return; Object.assign(el,defaultForElement(el.type,el.id)); saveEntryStates(); syncInspector(); renderStage();
   }
@@ -377,24 +376,16 @@
   }
   function alignSelected(mode){
     const select=$('b21-v2-element-select');if(select&&select.value)selectedElementId=select.value;
-    const el=selectedElement();if(!el)return;
-    const stage=$('b21-label-stage'),node=stage&&stage.querySelector('[data-element-id="'+CSS.escape(String(el.id))+'"]');
-    if(!stage||!node)return;
-    const visual=el.type==='code'?node.querySelector('.b21-code-content'):el.type==='text'?(node.querySelector('.b21-v2-text-content')||node):node;
-    if(!visual)return;
-    const sr=stage.getBoundingClientRect();
-    let vr=visual.getBoundingClientRect();
-    if(!vr.width||!vr.height)vr=node.getBoundingClientRect();
-    if(!sr.width||!sr.height||!vr.width||!vr.height)return;
-    if(mode==='left')el.x+=((sr.left-vr.left)/sr.width)*100;
-    else if(mode==='hcenter')el.x+=((sr.left+sr.width/2-(vr.left+vr.width/2))/sr.width)*100;
-    else if(mode==='right')el.x+=((sr.right-vr.right)/sr.width)*100;
-    else if(mode==='top')el.y+=((sr.top-vr.top)/sr.height)*100;
-    else if(mode==='vcenter')el.y+=((sr.top+sr.height/2-(vr.top+vr.height/2))/sr.height)*100;
-    else if(mode==='bottom')el.y+=((sr.bottom-vr.bottom)/sr.height)*100;
+    const el=selectedElement(),state=currentState();if(!el||!state)return;
+    const profile=profileById(state.profileId),angle=Number(el.rotation||0)*Math.PI/180;
+    const widthMm=Number(el.w||0)*profile.width_mm/100,heightMm=Number(el.h||0)*profile.height_mm/100;
+    const halfX=(Math.abs(widthMm*Math.cos(angle))+Math.abs(heightMm*Math.sin(angle)))/2/profile.width_mm*100;
+    const halfY=(Math.abs(widthMm*Math.sin(angle))+Math.abs(heightMm*Math.cos(angle)))/2/profile.height_mm*100;
+    if(mode==='left')el.x=halfX;else if(mode==='hcenter')el.x=50;else if(mode==='right')el.x=100-halfX;
+    else if(mode==='top')el.y=halfY;else if(mode==='vcenter')el.y=50;else if(mode==='bottom')el.y=100-halfY;
+    el.x=Math.max(0,Math.min(100,el.x));el.y=Math.max(0,Math.min(100,el.y));
     saveEntryStates();syncInspector();renderStage();
   }
-
   function renderStage(){
     const stage=$('b21-label-stage'), entry=currentEntry(), s=currentState(); if(!stage||!entry||!s)return;
     const p=profileById(s.profileId), cal=getCalibration(p.id);
@@ -447,20 +438,14 @@
     return node;
   }
   function positionTextResizeHandle(node,handle){
-    const content=node&&node.querySelector('.b21-v2-text-content'),stage=$('b21-label-stage');
-    if(!content||!handle||!stage)return;
-    const nodeRect=node.getBoundingClientRect(),stageRect=stage.getBoundingClientRect();
-    let left=0,top=0,current=content;
-    while(current&&current!==node){left+=current.offsetLeft;top+=current.offsetTop;current=current.offsetParent;}
-    if(current!==node){left=content.offsetLeft;top=content.offsetTop;}
-    const transform=getComputedStyle(node).transform;
+    const stage=$('b21-label-stage');if(!node||!handle||!stage)return;
+    const nodeRect=node.getBoundingClientRect(),stageRect=stage.getBoundingClientRect(),transform=getComputedStyle(node).transform;
     let angle=0;
     if(transform&&transform!=='none'){
-      const values=transform.match(/^matrix\(([^)]+)\)$/);
+      const values=transform.match(/^matrix\\(([^)]+)\\)$/);
       if(values){const parts=values[1].split(',').map(Number);angle=Math.atan2(parts[1]||0,parts[0]||1);}
     }
-    const localX=left+content.offsetWidth-node.offsetWidth/2;
-    const localY=top+content.offsetHeight-node.offsetHeight/2;
+    const localX=node.offsetWidth/2,localY=node.offsetHeight/2;
     const centerX=(nodeRect.left+nodeRect.right)/2,centerY=(nodeRect.top+nodeRect.bottom)/2;
     const screenX=centerX+Math.cos(angle)*localX-Math.sin(angle)*localY;
     const screenY=centerY+Math.sin(angle)*localX+Math.cos(angle)*localY;
