@@ -552,7 +552,13 @@
   function bindExistingControls(){
     const entrySelect=$('b21-entry-select');if(entrySelect)entrySelect.addEventListener('change',()=>{selectedElementId='code';syncEntryControls();});
     const profileSelect=$('b21-profile-select');if(profileSelect)profileSelect.addEventListener('change',function(){const s=currentState();if(!s)return;s.profileId=this.value;saveEntryStates();localStorage.setItem(PROFILE_KEY,this.value);syncCalibration();renderStage();});
-    const queue=$('label-queue');if(queue)new MutationObserver(()=>setTimeout(()=>{syncEntryControls();},0)).observe(queue,{childList:true,subtree:true});
+    const queue=$('label-queue');
+    if(queue){
+      new MutationObserver(()=>setTimeout(()=>{syncEntryControls();},0)).observe(queue,{childList:true,subtree:true});
+      queue.addEventListener('change',function(event){
+        if(event.target&&event.target.matches('.entry-kind'))syncEntryControls();
+      });
+    }
   }
 
   window.__b2mB21LabelEditor = {
