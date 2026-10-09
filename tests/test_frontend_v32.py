@@ -209,7 +209,8 @@ def test_b21_drag_and_resize_use_visible_objects_and_rotated_corners():
     assert "type=\"button\" class=\"btn btn-outline-secondary\" data-align=" in editor
     assert "target.w=Math.max(2,Math.min(100,origW+2*localX/p.width_mm*100))" in editor
     assert "saveEntryStates();" in editor
-    assert "positionTextResizeHandle(node,handle)" in editor
+    assert "positionTextResizeHandle" not in editor
+    assert "el.id===selectedElementId&&el.type==='line'" in editor
 
 
 def test_b21_qr_links_dimensions_and_code128_can_stretch():
@@ -249,3 +250,34 @@ def test_b21_presets_reset_button_and_queue_feedback_regressions():
     assert "var(--tblr-primary)" in css
     assert "showQueueFeedback('Updated');" in queue
     assert "Updated · " not in queue
+
+
+def test_b21_frame_is_a_layer_with_line_style_inversion_and_correct_handles():
+    editor = read("app/static/js/labels-b21-v2.js")
+    layers = read("app/static/js/labels-v24.js")
+    css = read("app/static/css/labels-b21.css")
+    assert "id:'frame',type:'frame'" in editor
+    assert "state.elements.unshift(defaultFrame" in editor
+    assert "b21-v2-line-style" in editor
+    assert "el.type==='line'||el.type==='frame'" in editor
+    assert "ctx.setLineDash" in editor
+    assert "data-layer-invert=" in layers and "toggleInvert" in layers
+    assert "element.type==='frame'?'border-outer'" in layers
+    assert "b21-v2-frame-stroke" in css
+    assert "b21-v2-line-resize-handle { left: 100%; top: 50%;" in css
+    assert "positionTextResizeHandle" not in editor
+    assert "el.id===selectedElementId&&el.type==='line'" in editor
+    assert "setCodeDimensions: function" in editor
+
+
+def test_b21_connect_button_shares_the_output_choice_row_and_print_all_is_shared():
+    b21 = read("app/static/js/labels-b21.js")
+    editor = read("app/static/js/labels-b21-v2.js")
+    polish = read("app/static/js/labels-polish.js")
+    radio = b21.index('id="b21-output-b21"')
+    head_start = b21.rfind('<div class="b21-output-choice-head">', 0, radio)
+    printer = b21.index('id="b21-printer-card"', radio)
+    head_end = b21.index('\n                        </div>\n                    </div>', printer)
+    assert head_start < radio < printer < head_end
+    assert "id='label-print'" in editor or "installPrintAllButton" in editor
+    assert "Print all" in polish and "quickPrint.insertAdjacentElement('afterend', printAll)" in polish
