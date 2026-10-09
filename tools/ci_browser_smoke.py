@@ -977,7 +977,7 @@ def main() -> None:
         page.locator('[data-layer-select="label"]').click()
         page.wait_for_function(
             """() => {
-              const handle=document.querySelector('#b21-label-stage [data-element-id=label] > .b21-v2-resize-handle');
+              const handle=document.querySelector('#b21-label-stage > .b21-v2-resize-handle');
               const content=document.querySelector('#b21-label-stage [data-element-id=label] .b21-v2-text-content');
               if(!handle||!content)return false;
               const a=handle.getBoundingClientRect(),b=content.getBoundingClientRect();
@@ -990,7 +990,7 @@ def main() -> None:
           const element=all[key].elements.find(row=>row.id==='label');
           return {w:element.w,h:element.h,text:document.querySelector('#b21-label-stage [data-element-id="label"] .b21-v2-text-content')?.textContent};
         }""", source_key)
-        text_handle = page.locator('#b21-label-stage [data-element-id="label"] > .b21-v2-resize-handle').bounding_box()
+        text_handle = page.locator('#b21-label-stage > .b21-v2-resize-handle').bounding_box()
         assert text_handle is not None, "Selected text should expose its resize handle."
         resize_x = text_handle["x"] + text_handle["width"] / 2
         resize_y = text_handle["y"] + text_handle["height"] / 2
