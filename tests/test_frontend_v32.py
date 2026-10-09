@@ -277,6 +277,7 @@ def test_b21_frame_is_a_layer_with_line_style_inversion_and_correct_handles():
     assert "border-color: var(--b21-frame-color, #111) !important" in css
     assert ".b21-v2-frame-selected::after" in css
     assert "border: 2px solid var(--tblr-primary)" in css
+    assert "inset: calc(0px - var(--b21-frame-width, 1px) - 2px)" in css
     assert "border-radius: calc(var(--b21-frame-radius, 0px) + 2px)" in css
     assert "cornerRadiusMm:0" in editor
     assert "rangeHtml('Corner radius','cornerRadiusMm',0,10,.5)" in editor

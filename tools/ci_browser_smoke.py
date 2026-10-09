@@ -1109,12 +1109,13 @@ def main() -> None:
           const style=getComputedStyle(node);
           const marker=getComputedStyle(node,'::after');
           return {x:frame.x,y:frame.y,w:frame.w,h:frame.h,style:style.borderStyle,color:style.borderColor,boxSizing:style.boxSizing,
-            selected:node.classList.contains('b21-v2-frame-selected'),markerWidth:marker.borderTopWidth,
-            markerColor:marker.borderTopColor};
+            frameBorderWidth:style.borderTopWidth,frameCssWidth:style.getPropertyValue('--b21-frame-width'),selected:node.classList.contains('b21-v2-frame-selected'),
+            markerWidth:marker.borderTopWidth,markerOffset:marker.left,markerColor:marker.borderTopColor};
         }""", source_key)
         assert frame_before_geometry["selected"] and frame_before_geometry["boxSizing"] == "border-box", frame_before_geometry
         assert frame_before_geometry["color"] == "rgb(17, 17, 17)", frame_before_geometry
         assert frame_before_geometry["markerWidth"] == "2px", frame_before_geometry
+        assert abs(float(frame_before_geometry["markerOffset"].replace("px","")) + float(frame_before_geometry["frameCssWidth"].replace("px","")) + 2) < .1, frame_before_geometry
         assert frame_before_geometry["markerColor"] not in ("rgb(17, 17, 17)", "rgb(255, 255, 255)", "rgba(0, 0, 0, 0)"), frame_before_geometry
 
         page.locator('#b21-v2-line-style').select_option('dotted')
