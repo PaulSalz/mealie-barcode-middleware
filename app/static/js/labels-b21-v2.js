@@ -56,7 +56,7 @@
     const profile=profileById(profileId),inset=Math.max(0,Number(insetValue??1));
     return {id:'frame',type:'frame',name:'Label frame',visible:visible!==false,inverted:false,x:50,y:50,
       w:Math.max(1,100-2*inset/profile.width_mm*100),h:Math.max(1,100-2*inset/profile.height_mm*100),
-      rotation:0,lineWidthMm:Number(widthValue??.35),lineStyle:'solid'};
+      rotation:0,lineWidthMm:Number(widthValue??.35),lineStyle:'solid',cornerRadiusMm:0};
   }
 
   function defaultElements(entry, profileId) {
@@ -195,7 +195,7 @@
       '<div class="b21-v2-content-panel mb-2 d-none" id="b21-v2-content-row"><label class="form-label">Content / encoded value</label><input class="form-control" id="b21-v2-content"></div>' +
       '<div class="d-flex justify-content-between align-items-center gap-2 mb-2" id="b21-v2-content-actions"><button class="btn btn-sm btn-outline-secondary" type="button" id="b21-v2-reset-element"><i class="ti ti-restore"></i> Reset selected</button><button class="btn btn-sm btn-outline-danger" type="button" id="b21-v2-delete-element"><i class="ti ti-trash"></i> Delete</button></div>' +
       '<div class="row g-2" id="b21-v2-ranges">' +
-        rangeHtml('X','x',0,100,1) + rangeHtml('Y','y',0,100,1) + rangeHtml('Width','w',2,100,1) + rangeHtml('Height','h',1,100,1) + rangeHtml('Rotation','rotation',0,359,1) + rangeHtml('Font size','fontSizePt',5,48,.5) + rangeHtml('Line width','lineWidthMm',.1,3,.05) +
+        rangeHtml('X','x',0,100,1) + rangeHtml('Y','y',0,100,1) + rangeHtml('Width','w',2,100,1) + rangeHtml('Height','h',1,100,1) + rangeHtml('Rotation','rotation',0,359,1) + rangeHtml('Font size','fontSizePt',5,48,.5) + rangeHtml('Line width','lineWidthMm',.1,3,.05) + rangeHtml('Corner radius','cornerRadiusMm',0,10,.5) +
       '</div>' +
       '<div class="mt-2 b21-v2-line-style-wrap d-none" id="b21-v2-line-style-wrap"><label class="form-label" for="b21-v2-line-style">Line style</label><select class="form-select" id="b21-v2-line-style"><option value="solid">Solid</option><option value="dotted">Dotted</option><option value="dashed">Dashed</option></select></div>' +
       '<div class="mt-3"><div class="btn-group w-100" id="b21-v2-align">' +
@@ -337,9 +337,9 @@
       if(height){height.step='any';height.max=String(isQr?Math.min(100,100*p.width_mm/p.height_mm):100);}
     }
     const defs=defaultForElement(el.type,el.id);
-    ['x','y','w','h','rotation','fontSizePt','lineWidthMm'].forEach((key)=>{
+    ['x','y','w','h','rotation','fontSizePt','lineWidthMm','cornerRadiusMm'].forEach((key)=>{
       const input=$('b21-v2-'+key); const wrap=input&&input.closest('.b21-v2-range-wrap'); if(!input)return;
-      const relevant=key==='fontSizePt'?el.type==='text':key==='lineWidthMm'?(el.type==='line'||el.type==='frame'):el.type==='frame'||(key!=='h'||el.type!=='line');
+      const relevant=key==='fontSizePt'?el.type==='text':key==='lineWidthMm'?(el.type==='line'||el.type==='frame'):key==='cornerRadiusMm'?el.type==='frame':el.type==='frame'||(key!=='h'||el.type!=='line');
       if(wrap)wrap.classList.toggle('d-none',!relevant);
       if(relevant){input.value=Number(el[key]??defs[key]??0);input.dataset.default=Number(defs[key]??0);const out=$('b21-v2-'+key+'-value');if(out)out.textContent=(key==='w'||key==='h')?String(Math.round(Number(input.value))):input.value;}
     });
@@ -360,7 +360,7 @@
       if(el.type==='code'&&!target.readOnly)s.codeValue=target.value;
       if(el.type==='text'&&!el.source&&!target.readOnly)el.text=target.value;
     } else if(target&&target.matches&&target.matches('.b21-v2-range')) {
-      if(changedKey in el||['fontSizePt','lineWidthMm'].includes(changedKey))el[changedKey]=Number(target.value);
+      if(changedKey in el||['fontSizePt','lineWidthMm','cornerRadiusMm'].includes(changedKey))el[changedKey]=Number(target.value);
     }
     const codeKind=resolvedCodeKind(currentEntry(),s.codeValue);
     if(el.type==='code'&&codeKind==='qr'&&(changedKey==='w'||changedKey==='h')){
@@ -376,7 +376,15 @@
     renderStage();
   }
   function resetSelected(){
-    const el=selectedElement(); if(!el)return; Object.assign(el,defaultForElement(el.type,el.id)); saveEntryStates(); syncInspector(); renderStage();
+    const el=selectedElement(); if(!el)return;
+    const state=currentState();
+    const defaults=el.type==='frame'?defaultFrame(state.profileId,true,1,.35):defaultForElement(el.type,el.id);
+    if(el.type==='frame'){
+      Object.keys(el).forEach((key)=>{if(!(key in defaults))delete el[key];});
+      state.frame=true;state.frameInsetMm=1;state.frameWidthMm=.35;
+    }
+    Object.assign(el,defaults);
+    persistAndRender();
   }
   function resetAll(){
     const entry=currentEntry(); if(!entry)return; const key=entryKey(entry,currentIndex()); delete entryStates[key]; saveEntryStates(); selectedElementId='code'; syncEntryControls();
@@ -430,9 +438,13 @@
       const lineWidthMm=Number(el.lineWidthMm||.35);
       const lineWidthPx=Math.max(1,lineWidthMm*stageScale(p));
       const frameColor=el.inverted?'#fff':'#111';
+      const cornerRadiusPx=Math.max(0,Number(el.cornerRadiusMm||0)*stageScale(p));
+      const frameWidthPx=Math.max(1,Number(el.w||10)*p.width_mm/100*stageScale(p));
+      const frameHeightPx=Math.max(1,Number(el.h||10)*p.height_mm/100*stageScale(p));
       node.style.setProperty('--b21-frame-width',lineWidthPx+'px');
       node.style.setProperty('--b21-frame-style',lineBorderStyle(el.lineStyle));
       node.style.setProperty('--b21-frame-color',frameColor);
+      node.style.setProperty('--b21-frame-radius',cornerRadiusPx+'px');
       const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
       svg.setAttribute('viewBox','0 0 100 100');svg.setAttribute('preserveAspectRatio','none');svg.classList.add('b21-v2-frame-svg');
       svg.setAttribute('aria-hidden','true');
@@ -442,6 +454,9 @@
       const stroke=document.createElementNS('http://www.w3.org/2000/svg','rect');
       stroke.setAttribute('x','0');stroke.setAttribute('y','0');
       stroke.setAttribute('width','100');stroke.setAttribute('height','100');
+      const strokeRadiusPx=Math.max(0,cornerRadiusPx-lineWidthPx/2);
+      stroke.setAttribute('rx',String(Math.min(50,strokeRadiusPx/Math.max(1,frameWidthPx-lineWidthPx)*100)));
+      stroke.setAttribute('ry',String(Math.min(50,strokeRadiusPx/Math.max(1,frameHeightPx-lineWidthPx)*100)));
       stroke.setAttribute('fill','none');stroke.setAttribute('stroke-width',String(Math.max(8,lineWidthPx)));
       stroke.setAttribute('vector-effect','non-scaling-stroke');stroke.setAttribute('stroke','#000');
       stroke.setAttribute('stroke-opacity','0');stroke.setAttribute('pointer-events','stroke');
@@ -454,7 +469,10 @@
     }
     if(!selectionNode)selectionNode=node;
     node.dataset.elementId=el.id;node.dataset.rotation=String(Number(el.rotation||0));
-    if(el.id===selectedElementId)selectionNode.classList.add('b21-v2-element-selected');
+    if(el.id===selectedElementId){
+      selectionNode.classList.add('b21-v2-element-selected');
+      if(el.type==='frame')node.classList.add('b21-v2-frame-selected');
+    }
     if(el.inverted){
       node.classList.add('b21-layer-inverted');
       if(codeImage)codeImage.style.filter='invert(1)';
@@ -544,6 +562,15 @@
 
   function loadImage(url){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('Could not render code'));img.src=url;});}
   function drawContain(ctx,img,x,y,w,h){const scale=Math.min(w/img.naturalWidth,h/img.naturalHeight),dw=img.naturalWidth*scale,dh=img.naturalHeight*scale;ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);}
+  function traceRoundedRect(ctx,x,y,w,h,r){
+    const radius=Math.max(0,Math.min(Number(r)||0,w/2,h/2));
+    if(radius===0){ctx.rect(x,y,w,h);return;}
+    ctx.moveTo(x+radius,y);ctx.lineTo(x+w-radius,y);ctx.quadraticCurveTo(x+w,y,x+w,y+radius);
+    ctx.lineTo(x+w,y+h-radius);ctx.quadraticCurveTo(x+w,y+h,x+w-radius,y+h);
+    ctx.lineTo(x+radius,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-radius);
+    ctx.lineTo(x,y+radius);ctx.quadraticCurveTo(x,y,x+radius,y);
+    ctx.closePath();
+  }
   function drawText(ctx,text,cx,cy,maxWidth,fontPx,rotation,mono,inverted){ctx.save();ctx.translate(cx,cy);ctx.rotate(rotation*Math.PI/180);ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=(mono?'500 ':'600 ')+Math.max(8,fontPx)+'px '+(mono?'monospace':'sans-serif');const words=String(text||'').split(/\s+/),lines=[];let line='';words.forEach((word)=>{const c=line?line+' '+word:word;if(ctx.measureText(c).width<=maxWidth||!line)line=c;else{lines.push(line);line=word;}});if(line)lines.push(line);const rows=lines.slice(0,4),lh=fontPx*1.08,start=-(rows.length-1)*lh/2;if(inverted){ctx.fillStyle='#000';const pad=Math.max(1,fontPx*.06);rows.forEach((row,i)=>{const rowWidth=Math.min(maxWidth,ctx.measureText(row).width)+pad*2;ctx.fillRect(-rowWidth/2,start+i*lh-lh/2-pad/2,rowWidth,lh+pad);});}ctx.fillStyle=inverted?'#fff':'#000';rows.forEach((row,i)=>ctx.fillText(row,0,start+i*lh,maxWidth));ctx.restore();}
 
   async function renderSnapshot(entry,s,p,cal,calibrationOnly){
@@ -574,8 +601,10 @@
         ctx.setLineDash(el.lineStyle==='dotted'?[0,ctx.lineWidth*2]:el.lineStyle==='dashed'?[ctx.lineWidth*4,ctx.lineWidth*2]:[]);
         ctx.lineCap=el.lineStyle==='dotted'?'round':'butt';
         ctx.beginPath();
-        if(el.type==='frame')ctx.rect(-w/2+ctx.lineWidth/2,-h/2+ctx.lineWidth/2,w-ctx.lineWidth,h-ctx.lineWidth);
-        else{ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);}
+        if(el.type==='frame'){
+          const radius=Math.max(0,Number(el.cornerRadiusMm||0)*ppm-ctx.lineWidth/2);
+          traceRoundedRect(ctx,-w/2+ctx.lineWidth/2,-h/2+ctx.lineWidth/2,w-ctx.lineWidth,h-ctx.lineWidth,radius);
+        } else{ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);}
         ctx.stroke();ctx.restore();
       } else drawText(ctx,displayText(el,entry,s),cx,cy,w,Number(el.fontSizePt||14)*p.dpi/72,rot,!!el.mono,!!el.inverted);
     }
