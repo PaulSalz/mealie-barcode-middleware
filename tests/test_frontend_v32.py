@@ -264,7 +264,7 @@ def test_b21_frame_is_a_layer_with_line_style_inversion_and_correct_handles():
     assert "data-layer-invert=" in layers and "toggleInvert" in layers
     assert "element.type==='frame'?'border-outer'" in layers
     assert "b21-v2-frame-stroke" in css
-    assert "b21-v2-frame-resize-handle { left: 100%; top: 100%;" in css
+    assert "b21-v2-frame-resize-handle" in css and "left: calc(100% + var(--b21-frame-width, 1px))" in css
     assert "b21-v2-line-resize-handle { left: 100%; top: 50%;" in css
     assert "positionTextResizeHandle" not in editor
     assert "el.id===selectedElementId&&(el.type==='line'||el.type==='frame')" in editor
