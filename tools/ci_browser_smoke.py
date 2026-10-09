@@ -550,7 +550,8 @@ def main() -> None:
             "B21 printer controls should appear when B21 output is selected.",
             timeout_ms=5_000,
         )
-        assert page.locator("#label-print").is_visible(), "Print all should remain available in B21 Basic mode."
+        assert page.locator("#label-niim-print").is_visible(), "B21 Print all should remain available in Basic mode."
+        assert page.locator("#label-niim-print").inner_text().strip() == "Print all"
         assert page.locator("#label-niim-print").count() == 0
         assert page.locator("#b21-v2-print-scope").count() == 0
         assert page.locator("#b21-v2-copies").count() == 0
@@ -576,8 +577,8 @@ def main() -> None:
             lambda: page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
             "Global Advanced mode did not switch on.",
         )
-        assert page.locator("#label-print").is_visible()
-        assert page.locator("#label-niim-print").count() == 0
+        assert page.locator("#label-niim-print").is_visible()
+        assert page.locator("#label-niim-print").inner_text().strip() == "Print all"
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
@@ -596,6 +597,7 @@ def main() -> None:
           const edit = document.querySelector('#label-queue .entry-edit');
           const entryPrint = document.querySelector('#label-queue .entry-print');
           const printAll = document.getElementById('label-print');
+          const b21Print = document.getElementById('label-niim-print');
           const quickPrint = document.querySelector('#label-editor-mode [data-label-mode="quick"]');
           const layers = document.getElementById('b21-v2-layers-header');
           const presetHeader = document.getElementById('b21-v13-preset-header');
@@ -613,7 +615,9 @@ def main() -> None:
             queueEditVisible: !!edit && getComputedStyle(edit).display !== 'none',
             queuePrintVisible: !!entryPrint && getComputedStyle(entryPrint).display !== 'none',
             printButtonsAdjacent: !!edit && !!entryPrint && edit.previousElementSibling === entryPrint,
-            printAllAfterQuick: !!printAll && !!quickPrint && printAll.previousElementSibling === quickPrint,
+            printAllAfterQuick: !!printAll && !!quickPrint && quickPrint.nextElementSibling === printAll && printAll.nextElementSibling === b21Print,
+            b21PrintVisible: !!b21Print && getComputedStyle(b21Print).display !== 'none',
+            b21PrintText: b21Print?.textContent.trim(),
             printAllText: printAll?.textContent.trim(),
             copiesHeight: copies ? parseFloat(getComputedStyle(copies).height) : null,
             kindHeight: kind ? parseFloat(getComputedStyle(kind).height) : null,
@@ -640,6 +644,7 @@ def main() -> None:
         assert label_ui["queueEditVisible"] and label_ui["queuePrintVisible"], label_ui
         assert label_ui["printButtonsAdjacent"] and label_ui["printAllAfterQuick"], label_ui
         assert label_ui["printAllText"] == "Print all", label_ui
+        assert label_ui["b21PrintVisible"] and label_ui["b21PrintText"] == "Print all", label_ui
         assert abs(label_ui["copiesHeight"] - label_ui["kindHeight"]) < 1, label_ui
         assert not label_ui["previewMeta"], label_ui
         assert label_ui["printerInfo"] == 0 and label_ui["connectVisible"], label_ui
