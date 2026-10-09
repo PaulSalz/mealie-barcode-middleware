@@ -975,16 +975,19 @@ def main() -> None:
         }""", source_key)
         assert long_font < short_font, (short_font, long_font, smallest_profile, font_debug)
         page.locator('[data-layer-select="label"]').click()
-        page.wait_for_function(
-            """() => {
-              const handle=document.querySelector('#b21-label-stage > .b21-v2-resize-handle');
-              const content=document.querySelector('#b21-label-stage [data-element-id=label] .b21-v2-text-content');
-              if(!handle||!content)return false;
-              const a=handle.getBoundingClientRect(),b=content.getBoundingClientRect();
-              return Math.abs(a.left+a.width/2-b.right)<2 && Math.abs(a.top+a.height/2-b.bottom)<2;
-            }""",
-            timeout=5_000,
-        )
+        handle_geometry = page.evaluate("""() => {
+          const stage=document.getElementById('b21-label-stage');
+          const node=stage?.querySelector('[data-element-id=label]');
+          const handle=stage?.querySelector(':scope > .b21-v2-resize-handle');
+          const content=node?.querySelector('.b21-v2-text-content');
+          const rect=element=>{const r=element.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+          return {handle:handle&&rect(handle),content:content&&rect(content),node:node&&rect(node),
+            offsetParent:content?.offsetParent?.className,offsetLeft:content?.offsetLeft,offsetTop:content?.offsetTop,
+            offsetWidth:content?.offsetWidth,offsetHeight:content?.offsetHeight,nodeOffsetWidth:node?.offsetWidth,nodeOffsetHeight:node?.offsetHeight,
+            handleLeft:handle?.style.left,handleTop:handle?.style.top,transform:node&&getComputedStyle(node).transform};
+        }""")
+        assert handle_geometry["handle"] and handle_geometry["content"], handle_geometry
+        assert abs(handle_geometry["handle"]["left"] + handle_geometry["handle"]["width"] / 2 - handle_geometry["content"]["right"]) < 2 and abs(handle_geometry["handle"]["top"] + handle_geometry["handle"]["height"] / 2 - handle_geometry["content"]["bottom"]) < 2, handle_geometry
         text_resize_before = page.evaluate("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           const element=all[key].elements.find(row=>row.id==='label');
