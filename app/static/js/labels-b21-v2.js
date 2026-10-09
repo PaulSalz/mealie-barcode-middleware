@@ -493,7 +493,7 @@
     const initial=currentState()?.elements.find((row)=>String(row.id)===elementId);
     if(!initial||!rect.width||!rect.height)return;
     const origW=Number(initial.w||10),origH=Number(initial.h||10);
-    handle.setPointerCapture(event.pointerId);
+    stage.setPointerCapture(event.pointerId);
     const move=(e)=>{
       const state=currentState(),target=state&&state.elements.find((row)=>String(row.id)===elementId);
       if(!target)return;
@@ -506,9 +506,9 @@
       ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=target[key];if(out)out.textContent=String(Math.round(Number(input.value)));}});
       saveEntryStates();
     };
-    const end=(e)=>{try{handle.releasePointerCapture(e.pointerId);}catch(ignore){}window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);saveEntryStates();syncInspector();renderStage();};
-    /* Track on window because the handle itself is repositioned while dragging. */
-    window.addEventListener('pointermove',move);window.addEventListener('pointerup',end,{once:true});window.addEventListener('pointercancel',end,{once:true});
+    const end=(e)=>{try{stage.releasePointerCapture(e.pointerId);}catch(ignore){}stage.removeEventListener('pointermove',move);stage.removeEventListener('pointerup',end);stage.removeEventListener('pointercancel',end);saveEntryStates();syncInspector();renderStage();};
+    /* Capture on the stable stage because the resize handle moves with the text. */
+    stage.addEventListener('pointermove',move);stage.addEventListener('pointerup',end,{once:true});stage.addEventListener('pointercancel',end,{once:true});
   }
 
   function loadImage(url){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('Could not render code'));img.src=url;});}
