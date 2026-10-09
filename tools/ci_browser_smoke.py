@@ -696,6 +696,7 @@ def main() -> None:
           return {before,code,visualWidth:rect.width,visualHeight:rect.height,dimensions,inputValue:widthInput.value,selectedIndex:document.getElementById('b21-entry-select')?.value,imageSrc:stage.querySelector('.b21-code')?.src};
         }""")
         assert abs(qr_resize["code"]["w"] * qr_resize["dimensions"][0] - qr_resize["code"]["h"] * qr_resize["dimensions"][1]) < 0.01, qr_resize
+        assert abs(qr_resize["code"]["w"] - 40) < 0.01, qr_resize
         assert abs(qr_resize["visualWidth"] - qr_resize["visualHeight"]) < 1, qr_resize
 
         sticky_result = page.evaluate("""() => {
