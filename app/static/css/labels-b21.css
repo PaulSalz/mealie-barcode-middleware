@@ -209,6 +209,10 @@
 #b21-label-stage .b21-v2-frame-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 #b21-label-stage .b21-v2-frame-stroke { pointer-events: stroke; cursor: grab; }
 #b21-label-stage .b21-v2-resize-handle.b21-v2-line-resize-handle { left: 100%; top: 50%; transform: translate(-50%, -50%); }
-#b21-label-stage .b21-v2-resize-handle.b21-v2-frame-resize-handle { left: 100%; top: 100%; transform: translate(-50%, -50%); }
+#b21-label-stage .b21-v2-resize-handle.b21-v2-frame-resize-handle {
+  left: calc(100% + var(--b21-frame-width, 1px));
+  top: calc(100% + var(--b21-frame-width, 1px));
+  transform: translate(-50%, -50%);
+}
 #b21-label-stage .b21-v2-line.b21-layer-inverted { background: #111; }
 #b21-v2-line-style-wrap { min-width: 0; }
