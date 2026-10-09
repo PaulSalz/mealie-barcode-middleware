@@ -3,71 +3,135 @@
   if(window.location.pathname!=='/labels')return;
 
   let installed=false;
+  const $=id=>document.getElementById(id);
+
+  function profileSize(stage){
+    const match=String(stage.style.aspectRatio||'').match(/([\d.]+)\s*\/\s*([\d.]+)/);
+    return {width:match?Number(match[1]):50,height:match?Number(match[2]):30};
+  }
+  function rotationOf(node){
+    const value=getComputedStyle(node).transform;
+    if(!value||value==='none')return 0;
+    const match=value.match(/^matrix\(([^)]+)\)$/);
+    if(!match)return 0;
+    const values=match[1].split(',').map(Number);
+    return Math.atan2(values[1]||0,values[0]||1);
+  }
+  function positionHandle(stage,handle,box,visual){
+    if(!stage||!handle||!box||!visual||!box.isConnected)return;
+    const sr=stage.getBoundingClientRect(),vr=visual.getBoundingClientRect();
+    const cx=(vr.left+vr.right)/2,cy=(vr.top+vr.bottom)/2;
+    const width=visual.offsetWidth||box.offsetWidth,height=visual.offsetHeight||box.offsetHeight;
+    const angle=rotationOf(box),cos=Math.cos(angle),sin=Math.sin(angle);
+    const left=cx+cos*width/2-sin*height/2-sr.left;
+    const top=cy+sin*width/2+cos*height/2-sr.top;
+    const leftValue=left+'px',topValue=top+'px';
+    if(handle.style.left!==leftValue)handle.style.left=leftValue;
+    if(handle.style.top!==topValue)handle.style.top=topValue;
+  }
+  window.__b2mPositionB21ResizeHandle=positionHandle;
+  function currentCodeKind(image){
+    try{
+      const url=new URL(image&&image.src||'',window.location.href);
+      let kind=String(url.searchParams.get('kind')||'auto').toLowerCase();
+      const value=url.searchParams.get('value')||'';
+      if(kind==='auto')kind=/^[\x00-\x7f]*$/.test(value)&&value.length<=32?'code128':'qr';
+      return kind;
+    }catch(e){return 'auto';}
+  }
 
   function install(){
     if(installed)return true;
-    const stage=document.getElementById('b21-label-stage');
-    const w=document.getElementById('b21-v2-w');
-    const h=document.getElementById('b21-v2-h');
+    const stage=$('b21-label-stage'),w=$('b21-v2-w'),h=$('b21-v2-h');
     if(!stage||!w||!h)return false;
     installed=true;
 
     function installCodeHandle(){
       const selected=stage.querySelector('img.b21-v2-element-selected, img.b21-code.b21-v2-element-selected');
-      let handle=document.getElementById('b21-v2-code-resize-handle');
+      let handle=$('b21-v2-code-resize-handle');
       if(!selected){if(handle)handle.remove();return;}
-
-      function position(){
-        if(!handle||!selected.isConnected)return;
-        const sr=stage.getBoundingClientRect(),r=selected.getBoundingClientRect();
-        handle.style.left=(r.right-sr.left)+'px';
-        handle.style.top=(r.bottom-sr.top)+'px';
-      }
-
+      const box=selected.closest('.b21-code-box')||selected;
+      const visual=selected.closest('.b21-code-content')||selected;
+      const position=()=>positionHandle(stage,handle,box,visual);
       if(handle){position();return;}
-      handle=document.createElement('span');handle.id='b21-v2-code-resize-handle';handle.className='b21-v2-resize-handle';
-      handle.style.right='auto';handle.style.bottom='auto';handle.style.transform='translate(-50%,-50%)';
-      stage.appendChild(handle);position();
+
+      handle=document.createElement('span');
+      handle.id='b21-v2-code-resize-handle';
+      handle.className='b21-v2-resize-handle';
+      handle.style.right='auto';
+      handle.style.bottom='auto';
+      handle.style.transform='translate(-50%,-50%)';
+      stage.appendChild(handle);
+      position();
+
       handle.addEventListener('pointerdown',function(event){
         const active=stage.querySelector('img.b21-v2-element-selected, img.b21-code.b21-v2-element-selected');
         if(!active)return;
+        const activeBox=active.closest('.b21-code-box')||active;
+        const activeVisual=active.closest('.b21-code-content')||active;
+        const dimensions=profileSize(stage);
+        const kind=currentCodeKind(active);
+        const naturalRatio=active.naturalWidth&&active.naturalHeight?active.naturalWidth/active.naturalHeight:(kind==='code128'?3:1);
+        const aspect=kind==='qr'?1:Math.max(.1,naturalRatio||1);
+        const rect=stage.getBoundingClientRect();
+        const originalWidthMm=(activeVisual.offsetWidth||active.offsetWidth)/Math.max(1,stage.clientWidth)*dimensions.width;
+        const originalHeightMm=(activeVisual.offsetHeight||active.offsetHeight)/Math.max(1,stage.clientHeight)*dimensions.height;
+        if(!originalWidthMm||!originalHeightMm)return;
         event.preventDefault();event.stopPropagation();
-        const sr=stage.getBoundingClientRect(),sx=event.clientX,sy=event.clientY,ow=Number(w.value),oh=Number(h.value);
-        const box=active.closest('.b21-code-box')||active;
-        const visual=active.closest('.b21-code-content');
+        const sx=event.clientX,sy=event.clientY,angle=rotationOf(activeBox);
         handle.setPointerCapture(event.pointerId);
+
         function move(e){
-          const nw=Math.max(2,Math.min(100,ow+(e.clientX-sx)/sr.width*100));
-          const nh=Math.max(1,Math.min(100,oh+(e.clientY-sy)/sr.height*100));
-          w.value=nw;h.value=nh;box.style.width=nw+'%';box.style.height=nh+'%';
-          if(visual&&active.naturalWidth&&active.naturalHeight){
-            const maxWidth=box.clientWidth,maxHeight=box.clientHeight,ratio=active.naturalWidth/active.naturalHeight;
-            const width=Math.min(maxWidth,maxHeight*ratio),height=width/ratio;
-            visual.style.width=(width/maxWidth*100)+'%';visual.style.height=(height/maxHeight*100)+'%';
-          }else if(box===active){active.style.width=nw+'%';active.style.height=nh+'%';}
-          const r=active.getBoundingClientRect();handle.style.left=(r.right-sr.left)+'px';handle.style.top=(r.bottom-sr.top)+'px';
+          const dx=(e.clientX-sx)/Math.max(1,stage.clientWidth)*dimensions.width;
+          const dy=(e.clientY-sy)/Math.max(1,stage.clientHeight)*dimensions.height;
+          const localX=dx*Math.cos(angle)+dy*Math.sin(angle);
+          const localY=-dx*Math.sin(angle)+dy*Math.cos(angle);
+          const projected=2*(localX+localY/aspect)/(1+1/(aspect*aspect));
+          const maxWidthMm=Math.max(.5,Math.min(dimensions.width,dimensions.height*aspect));
+          const minWidthMm=Math.min(maxWidthMm,Math.max(dimensions.width*.02,dimensions.height*.01*aspect));
+          const newWidthMm=Math.max(minWidthMm,Math.min(maxWidthMm,originalWidthMm+projected));
+          const newHeightMm=newWidthMm/aspect;
+          const widthPct=newWidthMm/dimensions.width*100;
+          const heightPct=newHeightMm/dimensions.height*100;
+
+          w.value=String(widthPct);
+          h.value=String(heightPct);
+          activeBox.style.width=widthPct+'%';
+          activeBox.style.height=heightPct+'%';
+          activeVisual.style.width='100%';
+          activeVisual.style.height='100%';
+          active.style.width='100%';
+          active.style.height='100%';
+          positionHandle(stage,handle,activeBox,activeVisual);
         }
         function end(e){
           try{handle.releasePointerCapture(e.pointerId);}catch(ignore){}
-          handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',end);handle.removeEventListener('pointercancel',end);
-          w.dispatchEvent(new Event('input',{bubbles:true}));h.dispatchEvent(new Event('input',{bubbles:true}));
+          handle.removeEventListener('pointermove',move);
+          handle.removeEventListener('pointerup',end);
+          handle.removeEventListener('pointercancel',end);
+          w.dispatchEvent(new Event('input',{bubbles:true}));
+          h.dispatchEvent(new Event('input',{bubbles:true}));
         }
-        handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
+        handle.addEventListener('pointermove',move);
+        handle.addEventListener('pointerup',end);
+        handle.addEventListener('pointercancel',end);
       });
     }
 
     let pending=false;
     new MutationObserver(function(records){
-      if(records.every(function(record){return record.target.id==='b21-v2-code-resize-handle';}))return;
-      if(pending)return;pending=true;
+      if(records.length&&records.every(function(record){return record.target.id==='b21-v2-code-resize-handle';}))return;
+      if(pending)return;
+      pending=true;
       requestAnimationFrame(function(){pending=false;installCodeHandle();});
-    }).observe(stage,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+    }).observe(stage,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});
     stage.addEventListener('click',function(){requestAnimationFrame(installCodeHandle);});
     document.querySelectorAll('input[name="label-output"]').forEach(function(input){
       input.addEventListener('change',function(){
         if(input.checked&&input.value==='b21'){
           requestAnimationFrame(function(){
-            const select=document.getElementById('b21-entry-select');if(select)select.dispatchEvent(new Event('change',{bubbles:true}));
+            const select=$('b21-entry-select');
+            if(select)select.dispatchEvent(new Event('change',{bubbles:true}));
             installCodeHandle();
           });
         }

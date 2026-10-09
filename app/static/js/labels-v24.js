@@ -126,9 +126,13 @@
 
   function syncFloatingHandle(){
     cancelAnimationFrame(handleRaf);handleRaf=requestAnimationFrame(()=>{
-      const stage=$('b21-label-stage'),handle=$('b21-v2-code-resize-handle');if(!stage||!handle)return;
-      const node=stage.querySelector('img.b21-v2-element-selected,img.b21-code.b21-v2-element-selected,img.b21-v22-selected');if(!node)return;
-      const sr=stage.getBoundingClientRect(),r=node.getBoundingClientRect();handle.style.left=(r.right-sr.left)+'px';handle.style.top=(r.bottom-sr.top)+'px';
+      const stage=$('b21-label-stage'),handle=$('b21-v2-code-resize-handle');
+      if(!stage||!handle)return;
+      const id=selectedId(),node=id&&stage.querySelector('[data-element-id="'+CSS.escape(id)+'"]');
+      const visual=node&&node.querySelector('.b21-code-content');
+      if(!node||!node.classList.contains('b21-code-box')||!visual){handle.classList.add('d-none');return;}
+      handle.classList.remove('d-none');
+      if(typeof window.__b2mPositionB21ResizeHandle==='function')window.__b2mPositionB21ResizeHandle(stage,handle,node,visual);
     });
   }
   function installHandleTracking(){

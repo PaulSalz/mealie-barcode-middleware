@@ -17,7 +17,7 @@ def test_v35_assets_keep_one_theme_runtime():
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-scope-v32.js" in LABEL_JS
     assert LABEL_JS.index("js/labels-scope-v32.js") < LABEL_JS.index("js/labels-fixes-v30.js")
-    assert APP_VERSION == "2026.10.07.3"
+    assert APP_VERSION == "2026.10.09.1"
 
 
 def test_navbar_mode_is_atomic_and_persisted_per_user():
@@ -158,3 +158,51 @@ def test_printer_page_uses_one_connection_poll_and_pauses_for_scanning():
     assert "json('/labels/b21/status'" in source
     assert "printerScanInProgress" in source
     assert "get('tab') === 'printer') return" in settings
+
+
+def test_b21_output_controls_follow_the_selected_output():
+    output = read("app/static/js/labels-b21.js")
+    editor = read("app/static/js/labels-b21-v2.js")
+    css = read("app/static/css/labels-b21.css")
+    assert 'id="b21-output-grid" data-active-mode="browser"' in output
+    assert 'id="b21-printer-card"' in output
+    assert "$('b21-printer-card')?.classList.toggle('d-none', browser)" in output
+    assert 'header.className = \'b21-v2-header\'' in editor
+    assert 'header.classList.toggle(\'d-none\', !b21Output || !b21Output.checked)' in editor
+    assert '.b21-output-grid[data-active-mode="b21"] { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }' in css
+    assert '#b21-preview-selector { align-items: center; justify-content: flex-end; text-align: right; }' in css
+
+
+def test_b21_drag_and_resize_use_visible_objects_and_rotated_corners():
+    editor = read("app/static/js/labels-b21-v2.js")
+    resize = read("app/static/js/labels-b21-v2-patch.js")
+    layers = read("app/static/js/labels-v24.js")
+    css = read("app/static/css/labels-b21.css")
+    assert "event.target.closest('.b21-code-content')" in editor
+    assert "event.target.closest('.b21-v2-text-content')" in editor
+    assert "localX=dx*Math.cos(angle)+dy*Math.sin(angle)" in editor
+    assert "projected=2*(localX+localY/aspect)/(1+1/(aspect*aspect))" in resize
+    assert "function currentCodeKind(image)" in resize
+    assert "value.length<=32?'code128':'qr'" in resize
+    assert "cx+cos*width/2-sin*height/2" in resize
+    assert "window.__b2mPositionB21ResizeHandle" in layers
+    assert "#b21-label-stage .b21-element { pointer-events: none; cursor: default; }" in css
+    assert "#b21-label-stage .b21-code-content" in css
+    assert "cursor: grab;" in css
+    assert "elementWidthMm=Math.min(elementWidthMm,elementHeightMm*ratio)" in editor
+    assert "positionTextResizeHandle(node,handle)" in editor
+
+
+def test_b21_presets_reset_button_and_queue_feedback_regressions():
+    editor = read("app/static/js/labels-b21-v2.js")
+    presets = read("app/static/js/ui-v13-fixes.js")
+    css = read("app/static/css/labels-b21.css")
+    queue = read("app/static/js/labels-polish.js")
+    assert 'id="b21-v2-content-actions"><button' in editor
+    assert 'id="b21-v2-reset-element"' in editor
+    assert 'id="b21-v2-delete-element"' in editor
+    assert "clearPresetActive();" in presets
+    assert "event.target.closest('#b21-v2-reset-all')" in presets
+    assert "var(--tblr-primary)" in css
+    assert "showQueueFeedback('Updated');" in queue
+    assert "Updated · " not in queue

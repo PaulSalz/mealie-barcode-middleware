@@ -116,8 +116,7 @@
     const header = $('b21-v2-header');
     if (!header) return;
     const b21Output = document.querySelector('input[name="label-output"][value="b21"]');
-    const advancedEnabled = document.documentElement.classList.contains('b2m-advanced-enabled');
-    header.classList.toggle('d-none', !advancedEnabled || !b21Output || !b21Output.checked);
+    header.classList.toggle('d-none', !b21Output || !b21Output.checked);
   }
 
   function installHeader() {
@@ -128,7 +127,7 @@
     const header = document.createElement('div');
     header.id = 'b21-v2-header';
     const browserOutput = $('b21-output-grid') && $('b21-output-grid').querySelector('input[value="browser"]');
-    header.className = 'mt-3 b21-v2-header' + (browserOutput && browserOutput.checked ? ' d-none' : '');
+    header.className = 'b21-v2-header' + (browserOutput && browserOutput.checked ? ' d-none' : '');
     header.innerHTML =
       '<div class="b21-v2-toolbar">' +
         '<select class="form-select w-auto" id="b21-v2-print-scope" title="Print scope"><option value="queue">Print queue</option><option value="current">Current label only</option></select>' +
@@ -174,7 +173,7 @@
       '<div id="b21-v2-layers-header" class="d-flex align-items-center justify-content-between gap-2 mb-2 b21-v2-layers-header"><div><div class="fw-semibold">Element inspector</div><div class="text-secondary small">Click an element on the label to edit it.</div></div><button class="btn btn-sm btn-outline-secondary" id="b21-v2-reset-all" type="button"><i class="ti ti-restore"></i> Reset all</button></div>' +
       '<select class="form-select mb-2" id="b21-v2-element-select"></select>' +
       '<div class="b21-v2-content-panel mb-2 d-none" id="b21-v2-content-row"><label class="form-label">Content / encoded value</label><input class="form-control" id="b21-v2-content"></div>' +
-      '<div class="d-flex justify-content-end mb-2"><button class="btn btn-sm btn-outline-danger" type="button" id="b21-v2-delete-element"><i class="ti ti-trash"></i> Delete</button></div>' +
+      '<div class="d-flex justify-content-between align-items-center gap-2 mb-2" id="b21-v2-content-actions"><button class="btn btn-sm btn-outline-secondary" type="button" id="b21-v2-reset-element"><i class="ti ti-restore"></i> Reset selected</button><button class="btn btn-sm btn-outline-danger" type="button" id="b21-v2-delete-element"><i class="ti ti-trash"></i> Delete</button></div>' +
       '<div class="row g-2" id="b21-v2-ranges">' +
         rangeHtml('X','x',0,100,1) + rangeHtml('Y','y',0,100,1) + rangeHtml('Width','w',2,100,1) + rangeHtml('Height','h',1,100,1) + rangeHtml('Rotation','rotation',0,359,1) + rangeHtml('Font size','fontSizePt',5,48,.5) + rangeHtml('Line width','lineWidthMm',.1,3,.05) +
       '</div>' +
@@ -187,7 +186,7 @@
         '<button class="btn btn-outline-secondary" data-align="bottom" title="Bottom"><i class="ti ti-layout-align-bottom"></i></button>' +
       '</div></div>' +
       '<div class="d-flex gap-2 mt-3"><button class="btn btn-outline-primary flex-fill" type="button" id="b21-v2-add-text"><i class="ti ti-letter-t"></i> Free text</button><button class="btn btn-outline-primary flex-fill" type="button" id="b21-v2-add-line"><i class="ti ti-minus"></i> Line</button></div>' +
-      '<div class="mt-3"><button class="btn btn-sm btn-outline-secondary" type="button" id="b21-v2-reset-element"><i class="ti ti-restore"></i> Reset selected</button><div class="form-hint">Double-click any slider to reset that value.</div></div>' +
+      '<div class="mt-3"><div class="form-hint">Double-click any slider to reset that value.</div></div>' +
       '<div class="b21-section"><div class="fw-semibold mb-2">Label / calibration</div>' +
         '<div class="row g-2"><div class="col-6"><label class="form-check form-switch"><input class="form-check-input" type="checkbox" id="b21-v2-frame"><span class="form-check-label">Frame</span></label></div><div class="col-6"><label class="form-label">Threshold</label><input class="form-range" id="b21-v2-threshold" type="range" min="1" max="255" step="1"><div class="text-secondary small"><span id="b21-v2-threshold-value"></span></div></div></div>' +
         '<div class="row g-2 mt-1"><div class="col-6"><label class="form-label">Print offset X: <strong id="b21-v2-cal-x-value">0</strong> mm</label><input class="form-range" id="b21-v2-cal-x" type="range" min="-5" max="5" step="0.1" value="0"></div><div class="col-6"><label class="form-label">Print offset Y: <strong id="b21-v2-cal-y-value">0</strong> mm</label><input class="form-range" id="b21-v2-cal-y" type="range" min="-5" max="5" step="0.1" value="0"></div></div>' +
@@ -334,9 +333,30 @@
     if(['code','label','value'].includes(selectedElementId))return; const s=currentState(); if(!s)return; s.elements=s.elements.filter((el)=>el.id!==selectedElementId); selectedElementId='code'; persistAndRender();
   }
   function alignSelected(mode){
+    const select=$('b21-v2-element-select');if(select&&select.value)selectedElementId=select.value;
     const el=selectedElement();if(!el)return;
-    if(mode==='left') el.x=Math.max(0,el.w/2); else if(mode==='hcenter')el.x=50; else if(mode==='right')el.x=Math.min(100,100-el.w/2);
-    else if(mode==='top')el.y=Math.max(0,el.h/2); else if(mode==='vcenter')el.y=50; else if(mode==='bottom')el.y=Math.min(100,100-el.h/2);
+    const p=currentProfile(),cal=getCalibration(p.id),angle=Number(el.rotation||0)*Math.PI/180;
+    let elementWidthMm=Number(el.w||0)*p.width_mm/100,elementHeightMm=Number(el.h||0)*p.height_mm/100;
+    if(el.type==='code'){
+      const image=$('b21-label-stage')?.querySelector('[data-element-id="'+CSS.escape(String(el.id))+'"] .b21-code');
+      let ratio=image&&image.naturalWidth&&image.naturalHeight?image.naturalWidth/image.naturalHeight:0;
+      if(!ratio){
+        let kind=String((currentEntry()||{}).kind||'auto').toLowerCase();
+        const value=String(currentState()?.codeValue||(currentEntry()||{}).code||'');
+        if(kind==='auto')kind=/^[\x00-\x7f]*$/.test(value)&&value.length<=32?'code128':'qr';
+        ratio=kind==='qr'?1:3;
+      }
+      elementWidthMm=Math.min(elementWidthMm,elementHeightMm*ratio);
+      elementHeightMm=elementWidthMm/ratio;
+    }
+    const widthMm=Math.abs(elementWidthMm*Math.cos(angle))+Math.abs(elementHeightMm*Math.sin(angle));
+    const heightMm=Math.abs(elementWidthMm*Math.sin(angle))+Math.abs(elementHeightMm*Math.cos(angle));
+    if(mode==='left')el.x=Math.max(0,(widthMm/2-(cal.xMm||0))/p.width_mm*100);
+    else if(mode==='hcenter')el.x=50-(cal.xMm||0)/p.width_mm*100;
+    else if(mode==='right')el.x=Math.min(100,100-(widthMm/2+(cal.xMm||0))/p.width_mm*100);
+    else if(mode==='top')el.y=Math.max(0,(heightMm/2-(cal.yMm||0))/p.height_mm*100);
+    else if(mode==='vcenter')el.y=50-(cal.yMm||0)/p.height_mm*100;
+    else if(mode==='bottom')el.y=Math.min(100,100-(heightMm/2+(cal.yMm||0))/p.height_mm*100);
     saveEntryStates();syncInspector();renderStage();
   }
 
@@ -377,8 +397,17 @@
     if(codeImage)fitCodeContent(codeVisual,codeImage,el,p);
     node.addEventListener('pointerdown',(event)=>startRelativeDrag(event,node,el,p));
     node.addEventListener('click',(event)=>{event.stopPropagation();selectedElementId=el.id;syncInspector();renderStage();});
-    if(el.id===selectedElementId&&!codeImage){const handle=document.createElement('span');handle.className='b21-v2-resize-handle';handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));node.appendChild(handle);}
+    if(el.id===selectedElementId&&!codeImage){
+      const handle=document.createElement('span');handle.className='b21-v2-resize-handle';
+      handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));node.appendChild(handle);
+      if(el.type==='text')requestAnimationFrame(()=>positionTextResizeHandle(node,handle));
+    }
     return node;
+  }
+  function positionTextResizeHandle(node,handle){
+    const content=node&&node.querySelector('.b21-v2-text-content');if(!content||!handle)return;
+    handle.style.left=(content.offsetLeft+content.offsetWidth)+'px';
+    handle.style.top=(content.offsetTop+content.offsetHeight)+'px';
   }
   function fitCodeContent(visual,image,el,p){
     if(!image.naturalWidth||!image.naturalHeight)return;
@@ -395,7 +424,10 @@
   function applyBox(node,x,y,w,h,rotation){node.style.left=x+'%';node.style.top=y+'%';node.style.width=w+'%';node.style.height=h+'%';node.style.transform='translate(-50%,-50%) rotate('+rotation+'deg)';}
 
   function startRelativeDrag(event,node,el,p){
-    if(event.target.classList.contains('b21-v2-resize-handle'))return; event.preventDefault();event.stopPropagation();selectedElementId=el.id;
+    if(event.target.closest&&event.target.closest('.b21-v2-resize-handle'))return;
+    const hit=el.type==='code'?event.target.closest&&event.target.closest('.b21-code-content'):el.type==='line'?event.target===node:event.target.closest&&event.target.closest('.b21-v2-text-content');
+    if(!hit)return;
+    event.preventDefault();event.stopPropagation();selectedElementId=el.id;
     const startX=event.clientX,startY=event.clientY,origX=Number(el.x||0),origY=Number(el.y||0),rect=$('b21-label-stage').getBoundingClientRect(),elementId=String(el.id);node.setPointerCapture(event.pointerId);
     const move=(e)=>{
       /* Other editor controls can reload entryStates while a pointer is held.
@@ -409,14 +441,17 @@
     node.addEventListener('pointermove',move);node.addEventListener('pointerup',end);node.addEventListener('pointercancel',end);
   }
   function startResize(event,node,el){
-    event.preventDefault();event.stopPropagation();const startX=event.clientX,startY=event.clientY,origW=Number(el.w||10),origH=Number(el.h||10),rect=$('b21-label-stage').getBoundingClientRect();event.target.setPointerCapture(event.pointerId);
-    const handle=event.target;
+    event.preventDefault();event.stopPropagation();
+    const startX=event.clientX,startY=event.clientY,origW=Number(el.w||10),origH=Number(el.h||10);
+    const stage=$('b21-label-stage'),rect=stage.getBoundingClientRect(),p=currentProfile(),angle=Number(el.rotation||0)*Math.PI/180,handle=event.target;
+    handle.setPointerCapture(event.pointerId);
     const move=(e)=>{
-      el.w=Math.max(2,Math.min(100,origW+(e.clientX-startX)/rect.width*100));
-      el.h=Math.max(1,Math.min(100,origH+(e.clientY-startY)/rect.height*100));
+      const dx=(e.clientX-startX)/rect.width*p.width_mm,dy=(e.clientY-startY)/rect.height*p.height_mm;
+      const localX=dx*Math.cos(angle)+dy*Math.sin(angle),localY=-dx*Math.sin(angle)+dy*Math.cos(angle);
+      el.w=Math.max(2,Math.min(100,origW+2*localX/p.width_mm*100));
+      el.h=Math.max(1,Math.min(100,origH+2*localY/p.height_mm*100));
       node.style.width=el.w+'%';node.style.height=el.h+'%';
-      const visual=node.querySelector('.b21-code-content'),image=node.querySelector('.b21-code');
-      if(visual&&image)fitCodeContent(visual,image,el,p);
+      positionTextResizeHandle(node,handle);
     };
     const end=(e)=>{try{handle.releasePointerCapture(e.pointerId);}catch(ignore){}handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',end);handle.removeEventListener('pointercancel',end);saveEntryStates();syncInspector();renderStage();};
     handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);

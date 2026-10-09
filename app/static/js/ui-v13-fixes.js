@@ -155,6 +155,63 @@
     '</button>';
   }
 
+  function clearPresetActive() {
+    document.querySelectorAll('#b21-v4-presets [data-preset].active').forEach(function (button) {
+      button.classList.remove('active');
+    });
+  }
+
+  function installPresetStateTracking() {
+    const inspector = $('b21-v2-inspector');
+    const stage = $('b21-label-stage');
+    if (!inspector || inspector.dataset.b2mPresetTracking === '1') return;
+    inspector.dataset.b2mPresetTracking = '1';
+
+    inspector.addEventListener('input', function (event) {
+      if (event.target.closest('#b21-v4-presets')) return;
+      if (event.target.closest('#b21-v2-ranges, #b21-v2-content, #b21-v22-typography, #b21-v22-profile-threshold')) clearPresetActive();
+    });
+    inspector.addEventListener('change', function (event) {
+      if (event.target.closest('#b21-v4-presets')) return;
+      if (event.target.closest('#b21-v2-ranges, #b21-v2-content, #b21-v22-typography, #b21-v22-profile-threshold, #b21-v24-layer-list')) clearPresetActive();
+    });
+    inspector.addEventListener('click', function (event) {
+      if (event.target.closest('#b21-v2-reset-all')) { clearPresetActive(); return; }
+      if (event.target.closest('#b21-v4-presets')) return;
+      if (event.target.closest('#b21-v2-align, #b21-v2-reset-element, #b21-v2-reset-all, #b21-v2-add-text, #b21-v2-add-line, #b21-v2-delete-element, #b21-v22-typography [data-style], #b21-v22-typography [data-value], #b21-v24-layer-list [data-layer-visible], #b21-v24-layer-list [data-layer-forward], #b21-v24-layer-list [data-layer-back]')) clearPresetActive();
+    });
+
+    const entrySelect = $('b21-entry-select');
+    if (entrySelect) entrySelect.addEventListener('change', clearPresetActive);
+    const profileControls = $('b21-layout-body');
+    if (profileControls) {
+      profileControls.addEventListener('input', function (event) {
+        if (event.target.closest('#b21-profile-select, #b21-profile-editor')) clearPresetActive();
+      });
+      profileControls.addEventListener('change', function (event) {
+        if (event.target.closest('#b21-profile-select, #b21-profile-editor')) clearPresetActive();
+      });
+    }
+    let dragStart = null;
+    if (stage) {
+      stage.addEventListener('pointerdown', function (event) {
+        if ((event.target.closest && event.target.closest('[data-element-id]')) || (event.target.closest && event.target.closest('#b21-v2-code-resize-handle'))) dragStart = [event.clientX, event.clientY];
+      }, true);
+      stage.addEventListener('pointermove', function (event) {
+        if (dragStart && Math.hypot(event.clientX - dragStart[0], event.clientY - dragStart[1]) > 2) {
+          clearPresetActive();
+          dragStart = null;
+        }
+      }, true);
+      stage.addEventListener('pointerup', function () { dragStart = null; }, true);
+      stage.addEventListener('pointercancel', function () { dragStart = null; }, true);
+    }
+    ['b21-v4-paste-design', 'b21-v4-apply-all-design'].forEach(function (id) {
+      const button = $(id);
+      if (button) button.addEventListener('click', function () { window.setTimeout(clearPresetActive, 0); });
+    });
+  }
+
   function installPresetFix() {
     if (window.location.pathname !== '/labels') return true;
     const section = $('b21-v4-presets');
@@ -194,6 +251,7 @@
     if (pasteButton && editor && typeof editor.pasteDesign === 'function') pasteButton.addEventListener('click', editor.pasteDesign);
     if (applyAllButton && editor && typeof editor.applyDesignToAll === 'function') applyAllButton.addEventListener('click', editor.applyDesignToAll);
     if (editor && typeof editor.syncDesignControls === 'function') editor.syncDesignControls();
+    installPresetStateTracking();
     return true;
   }
 
