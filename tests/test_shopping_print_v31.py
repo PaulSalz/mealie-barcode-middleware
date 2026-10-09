@@ -21,4 +21,5 @@ def test_canvas_observer_documents_feedback_loop_guard():
 
 
 def test_hotfix_version():
-    assert 'APP_VERSION = "2026.10.07.3"' in read("app/version.py")
+    assert 'APP_VERSION = "2026.10.09.1"' in read("app/version.py")
+
