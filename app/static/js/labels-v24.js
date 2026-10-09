@@ -59,7 +59,7 @@
   }
 
   function persist(c){c.states[c.key]=c.state;writeJson(ENTRY_KEY,c.states);}
-  function layerName(element){return element.name||(element.type==='code'?'Code':element.type==='line'?'Line':'Text');}
+  function layerName(element){return element.name||(element.type==='frame'?'Label frame':element.type==='code'?'Code':element.type==='line'?'Line':'Text');}
   function selectLayer(id){const select=$('b21-v2-element-select');if(!select)return;select.value=String(id);refreshEditor();renderLayers();}
   function moveLayer(id,direction){
     const editor=window.__b2mB21LabelEditor;
@@ -72,7 +72,7 @@
     root.innerHTML=c.state.elements.map((element,index)=>({element,index})).reverse().map(({element,index})=>{
       const id=String(element.id),active=id===selected;
       return '<div class="b21-v24-layer'+(active?' active':'')+'">'+
-        '<button type="button" class="b21-v24-layer-select" data-layer-select="'+esc(id)+'"><i class="ti ti-'+(element.type==='code'?'qrcode':element.type==='line'?'minus':'letter-t')+'"></i><span><strong>'+esc(layerName(element))+'</strong><small>'+esc(element.type||'element')+'</small></span></button>'+
+        '<button type="button" class="b21-v24-layer-select" data-layer-select="'+esc(id)+'"><i class="ti ti-'+(element.type==='frame'?'border-outer':element.type==='code'?'qrcode':element.type==='line'?'minus':'letter-t')+'"></i><span><strong>'+esc(layerName(element))+'</strong><small>'+esc(element.type||'element')+'</small></span></button>'+
         '<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary'+(element.inverted?' active':'')+'" type="button" data-layer-invert="'+esc(id)+'" title="'+(element.inverted?'Restore layer colors':'Invert layer colors')+'" aria-label="'+(element.inverted?'Restore layer colors':'Invert layer colors')+'"><i class="ti ti-contrast-2"></i></button><button class="btn btn-outline-secondary" type="button" data-layer-visible="'+esc(id)+'" data-visible="'+(element.visible!==false)+'" title="'+(element.visible===false?'Show element':'Hide element')+'"><i class="ti ti-'+(element.visible===false?'eye-off':'eye')+'"></i></button><button class="btn btn-outline-secondary" type="button" data-layer-forward="'+esc(id)+'" title="Bring forward" '+(index<c.state.elements.length-1?'':'disabled')+'><i class="ti ti-arrow-up"></i></button><button class="btn btn-outline-secondary" type="button" data-layer-back="'+esc(id)+'" title="Send backward" '+(index>0?'':'disabled')+'><i class="ti ti-arrow-down"></i></button></div></div>';
     }).join('');
     root.querySelectorAll('[data-layer-select]').forEach(button=>button.addEventListener('click',()=>selectLayer(button.dataset.layerSelect)));
