@@ -376,7 +376,8 @@
   }
   function alignSelected(mode){
     const select=$('b21-v2-element-select');if(select&&select.value)selectedElementId=select.value;
-    const el=selectedElement(),state=currentState();if(!el||!state)return;
+    const state=currentState();if(!state)return;
+    const el=state.elements.find((row)=>row.id===selectedElementId);if(!el)return;
     const profile=profileById(state.profileId),angle=Number(el.rotation||0)*Math.PI/180;
     const widthMm=Number(el.w||0)*profile.width_mm/100,heightMm=Number(el.h||0)*profile.height_mm/100;
     const halfX=(Math.abs(widthMm*Math.cos(angle))+Math.abs(heightMm*Math.sin(angle)))/2/profile.width_mm*100;
