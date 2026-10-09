@@ -740,13 +740,19 @@ def main() -> None:
 
         # Selecting a layer and dragging it immediately must persist its new position.
         page.locator('[data-layer-select="label"]').click()
+        page.wait_for_function(
+            "() => !!document.querySelector('#b21-label-stage [data-element-id=label] .b21-v2-text-content.b21-v2-element-selected')",
+            timeout=5_000,
+        )
         label_before = page.evaluate("""() => {
-          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const queue = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}').queue || [];
+          const index = Number(document.getElementById('b21-entry-select')?.value || 0);
+          const entry = all[String(queue[index]?._id)];
           const element = entry && entry.elements.find(row => row.id === 'label');
           return element && {x: element.x, y: element.y};
         }""")
-        label_box = label_element.bounding_box()
+        label_box = page.locator('#b21-label-stage [data-element-id="label"] .b21-v2-text-content').bounding_box()
         assert label_before is not None and label_box is not None
         drag_x = label_box["x"] + label_box["width"] / 2
         drag_y = label_box["y"] + label_box["height"] / 2
@@ -756,8 +762,10 @@ def main() -> None:
         page.mouse.up()
         page.wait_for_timeout(150)
         label_after_drag = page.evaluate("""() => {
-          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const queue = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}').queue || [];
+          const index = Number(document.getElementById('b21-entry-select')?.value || 0);
+          const entry = all[String(queue[index]?._id)];
           const element = entry && entry.elements.find(row => row.id === 'label');
           return element && {x: element.x, y: element.y};
         }""")
@@ -766,8 +774,10 @@ def main() -> None:
         page.locator('[data-layer-select="code"]').click()
         page.locator('[data-layer-select="label"]').click()
         label_after_reselect = page.evaluate("""() => {
-          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const queue = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}').queue || [];
+          const index = Number(document.getElementById('b21-entry-select')?.value || 0);
+          const entry = all[String(queue[index]?._id)];
           const element = entry && entry.elements.find(row => row.id === 'label');
           return element && {x: element.x, y: element.y};
         }""")
