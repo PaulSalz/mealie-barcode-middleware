@@ -1107,11 +1107,15 @@ def main() -> None:
           const frame=all[key]?.elements.find(row=>row.id==='frame');
           const node=document.querySelector('#b21-label-stage [data-element-id="frame"]');
           const style=getComputedStyle(node);
-          return {w:frame.w,h:frame.h,style:style.borderStyle,color:style.borderColor,boxSizing:style.boxSizing,
-            selected:node.querySelector('.b21-v2-frame-stroke')?.classList.contains('b21-v2-element-selected')};
+          const marker=getComputedStyle(node,'::after');
+          return {x:frame.x,y:frame.y,w:frame.w,h:frame.h,style:style.borderStyle,color:style.borderColor,boxSizing:style.boxSizing,
+            selected:node.classList.contains('b21-v2-frame-selected'),markerWidth:marker.borderTopWidth,
+            markerColor:marker.borderTopColor};
         }""", source_key)
         assert frame_before_geometry["selected"] and frame_before_geometry["boxSizing"] == "border-box", frame_before_geometry
         assert frame_before_geometry["color"] == "rgb(17, 17, 17)", frame_before_geometry
+        assert frame_before_geometry["markerWidth"] == "2px", frame_before_geometry
+        assert frame_before_geometry["markerColor"] not in ("rgb(17, 17, 17)", "rgb(255, 255, 255)", "rgba(0, 0, 0, 0)"), frame_before_geometry
 
         page.locator('#b21-v2-line-style').select_option('dotted')
         page.wait_for_function("""key => {
@@ -1124,6 +1128,19 @@ def main() -> None:
         page.wait_for_function("""() => getComputedStyle(document.querySelector('#b21-label-stage [data-element-id="frame"]')).borderStyle==='dashed'""", timeout=5_000)
         page.locator('#b21-v2-line-style').select_option('solid')
         page.wait_for_function("""() => getComputedStyle(document.querySelector('#b21-label-stage [data-element-id="frame"]')).borderStyle==='solid'""", timeout=5_000)
+        radius_input=page.locator('#b21-v2-cornerRadiusMm')
+        assert radius_input.is_visible(), "Frame corner radius should be editable."
+        radius_input.evaluate("""input => {
+          input.value='4';
+          input.dispatchEvent(new Event('input',{bubbles:true}));
+        }""")
+        page.wait_for_function("""([key]) => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const frame=all[key]?.elements.find(row=>row.id==='frame');
+          const node=document.querySelector('#b21-label-stage [data-element-id="frame"]');
+          return frame?.cornerRadiusMm===4 && parseFloat(getComputedStyle(node).borderTopLeftRadius)>0
+            && Number(node.querySelector('.b21-v2-frame-stroke')?.getAttribute('rx'))>0;
+        }""", arg=[source_key], timeout=5_000)
 
         frame_before_drag = page.evaluate("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
@@ -1179,8 +1196,16 @@ def main() -> None:
           const node=document.querySelector('#b21-label-stage [data-element-id="frame"]');
           return frame?.inverted===true && getComputedStyle(node).borderColor==='rgb(255, 255, 255)';
         }""", arg=source_key, timeout=5_000)
-        page.locator('.b21-v24-layer [data-layer-invert="frame"]').click()
-        page.wait_for_function("""() => getComputedStyle(document.querySelector('#b21-label-stage [data-element-id="frame"]')).borderColor==='rgb(17, 17, 17)'""", timeout=5_000)
+        page.locator('#b21-v2-reset-element').click()
+        page.wait_for_function("""([key,w,h]) => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const frame=all[key]?.elements.find(row=>row.id==='frame');
+          const node=document.querySelector('#b21-label-stage [data-element-id="frame"]');
+          return frame?.inverted===false && frame.lineStyle==='solid' && frame.cornerRadiusMm===0
+            && frame.x===50 && frame.y===50 && frame.w===w && frame.h===h
+            && getComputedStyle(node).borderColor==='rgb(17, 17, 17)'
+            && getComputedStyle(node).borderTopLeftRadius==='0px';
+        }""", arg=[source_key,frame_before_geometry["w"],frame_before_geometry["h"]], timeout=5_000)
         page.locator('.b21-v24-layer [data-layer-visible="frame"]').click()
         page.wait_for_function("!document.querySelector('#b21-label-stage [data-element-id=frame]')", timeout=5_000)
         page.locator('.b21-v24-layer [data-layer-visible="frame"]').click()
