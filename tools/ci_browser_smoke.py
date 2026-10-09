@@ -670,7 +670,12 @@ def main() -> None:
         assert abs(code128_resize["afterWidth"]["height"] - code128_resize["beforeWidth"]["height"]) < 1, code128_resize
         assert code128_resize["afterHeight"]["height"] < code128_resize["afterWidth"]["height"] - 1, code128_resize
 
-        page.locator("#label-queue .entry-kind").nth(1).select_option("qr")
+        page.evaluate("""() => {
+          const selector=document.querySelectorAll('#label-queue .entry-kind')[1];
+          if(!selector) throw new Error('Second queue code-style selector is missing.');
+          selector.value='qr';
+          selector.dispatchEvent(new Event('change',{bubbles:true}));
+        }""")
         page.wait_for_function(
             "() => { const image=document.querySelector('#b21-label-stage .b21-code'); return !!image && image.src.includes('kind=qr') && image.complete && image.naturalWidth > 0; }",
             timeout=5_000,
