@@ -1197,15 +1197,21 @@ def main() -> None:
           return frame?.inverted===true && getComputedStyle(node).borderColor==='rgb(255, 255, 255)';
         }""", arg=source_key, timeout=5_000)
         page.locator('#b21-v2-reset-element').click()
-        page.wait_for_function("""([key,w,h]) => {
+        reset_frame_after=page.evaluate("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           const frame=all[key]?.elements.find(row=>row.id==='frame');
           const node=document.querySelector('#b21-label-stage [data-element-id="frame"]');
-          return frame?.inverted===false && frame.lineStyle==='solid' && frame.cornerRadiusMm===0
-            && frame.x===50 && frame.y===50 && frame.w===w && frame.h===h
-            && getComputedStyle(node).borderColor==='rgb(17, 17, 17)'
-            && getComputedStyle(node).borderTopLeftRadius==='0px';
-        }""", arg=[source_key,frame_before_geometry["w"],frame_before_geometry["h"]], timeout=5_000)
+          return {inverted:frame?.inverted,lineStyle:frame?.lineStyle,cornerRadiusMm:frame?.cornerRadiusMm,
+            x:frame?.x,y:frame?.y,w:frame?.w,h:frame?.h,borderColor:getComputedStyle(node).borderColor,
+            borderRadius:getComputedStyle(node).borderTopLeftRadius};
+        }""", source_key)
+        default_frame_width=max(1,100-200/smallest_profile["width_mm"])
+        default_frame_height=max(1,100-200/smallest_profile["height_mm"])
+        assert reset_frame_after["inverted"] is False and reset_frame_after["lineStyle"] == "solid", reset_frame_after
+        assert reset_frame_after["cornerRadiusMm"] == 0 and reset_frame_after["x"] == 50 and reset_frame_after["y"] == 50, reset_frame_after
+        assert abs(reset_frame_after["w"]-default_frame_width) < .0001, (reset_frame_after,default_frame_width)
+        assert abs(reset_frame_after["h"]-default_frame_height) < .0001, (reset_frame_after,default_frame_height)
+        assert reset_frame_after["borderColor"] == "rgb(17, 17, 17)" and reset_frame_after["borderRadius"] == "0px", reset_frame_after
         page.locator('.b21-v24-layer [data-layer-visible="frame"]').click()
         page.wait_for_function("!document.querySelector('#b21-label-stage [data-element-id=frame]')", timeout=5_000)
         page.locator('.b21-v24-layer [data-layer-visible="frame"]').click()
