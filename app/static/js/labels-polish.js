@@ -189,7 +189,7 @@
         var link = document.createElement('link');
         link.id = 'b21-designer-stylesheet';
         link.rel = 'stylesheet';
-        link.href = '/static/css/labels-b21.css?v=20261009-5';
+        link.href = '/static/css/labels-b21.css?v=20261009-8';
         document.head.appendChild(link);
     }
 

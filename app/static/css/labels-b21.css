@@ -104,7 +104,8 @@
 .b21-output-choice-label { display: block; min-width: 0; margin: 0; cursor: pointer; flex: 1 1 auto; }
 .b21-output-choice-label > span { display: flex; flex-direction: column; line-height: 1.2; }
 .b21-printer-card { min-width: 0; }
-#b21-connection-bar { justify-content: flex-start !important; }
+#b21-connection-bar { justify-content: flex-start !important; padding: 0; }
+.b21-printer-card { min-width: 0; flex: 0 0 auto; display: flex; align-items: center; }
 .b21-v2-header { margin-top: 0 !important; }
 @media (max-width: 767.98px) {
   .b21-output-grid,
@@ -191,3 +192,17 @@
   border-color: var(--tblr-primary);
 }
 #label-queue .label-copy-actions .entry-print { min-width: 4.4rem; }
+
+
+/* Give free lines a narrow, centered hit target and keep the resize point on the line. */
+#b21-label-stage .b21-element.b21-v2-line { pointer-events: none; cursor: default; border-top: 0 !important; }
+#b21-label-stage .b21-v2-line-stroke { position: absolute; left: 0; top: 50%; width: 100%; height: 12px; transform: translateY(-50%); pointer-events: auto; cursor: grab; }
+#b21-label-stage .b21-v2-line-stroke::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: var(--b21-line-width, 1px) var(--b21-line-style, solid) var(--b21-line-color, #111); transform: translateY(-50%); }
+#b21-label-stage .b21-v2-line-stroke:active { cursor: grabbing; }
+#b21-label-stage .b21-v2-frame { pointer-events: none; }
+#b21-label-stage .b21-v2-frame-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+#b21-label-stage .b21-v2-frame-stroke { pointer-events: stroke; cursor: grab; }
+#b21-label-stage .b21-v2-frame-stroke.b21-v2-element-selected { stroke: var(--tblr-primary) !important; }
+#b21-label-stage .b21-v2-resize-handle.b21-v2-line-resize-handle { left: 100%; top: 50%; transform: translate(-50%, -50%); }
+#b21-label-stage .b21-v2-line.b21-layer-inverted { background: #111; }
+#b21-v2-line-style-wrap { min-width: 0; }
