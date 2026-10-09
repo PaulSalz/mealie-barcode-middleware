@@ -114,7 +114,6 @@
           handle.removeEventListener('pointercancel',end);
           const editor=window.__b2mB21LabelEditor;
           if(editor&&typeof editor.setCodeDimensions==='function')editor.setCodeDimensions(Number(w.value),Number(h.value));
-          else{w.dispatchEvent(new Event('input',{bubbles:true}));h.dispatchEvent(new Event('input',{bubbles:true}));}
         }
         handle.addEventListener('pointermove',move);
         handle.addEventListener('pointerup',end);
