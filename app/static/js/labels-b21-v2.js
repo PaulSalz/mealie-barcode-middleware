@@ -293,7 +293,7 @@
     if(!s.elements.some((row)=>row.id===selectedElementId)) selectedElementId=s.elements[0] ? s.elements[0].id : '';
     const select=$('b21-v2-element-select');
     select.innerHTML=s.elements.map((row)=>'<option value="'+esc(row.id)+'"'+(row.id===selectedElementId?' selected':'')+'>'+esc(row.name||row.type)+'</option>').join('');
-    const el=selectedElement(); if(!el) return;
+    const el=s.elements.find((row)=>row.id===selectedElementId); if(!el) return;
     const contentRow=$('b21-v2-content-row');
     const content=$('b21-v2-content');
     const hasContent=el.type==='text'||el.type==='code';
@@ -336,7 +336,8 @@
   }
 
   function updateSelectedFromInspector(event){
-    const s=currentState(),el=selectedElement(); if(!s||!el)return;
+    const s=currentState();if(!s)return;
+    const el=s.elements.find((row)=>row.id===selectedElementId);if(!el)return;
     if(el.type==='code'&&!$('b21-v2-content').readOnly)s.codeValue=$('b21-v2-content').value;
     if(el.type==='text'&&!el.source&&!$('b21-v2-content').readOnly)el.text=$('b21-v2-content').value;
     document.querySelectorAll('.b21-v2-range:not(.d-none)').forEach((input)=>{
