@@ -575,7 +575,7 @@ def main() -> None:
             lambda: page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
             "Global Advanced mode did not switch on.",
         )
-        b21_toolbar.wait_for(state="visible", timeout=5_000)
+        assert page.locator("#label-niim-print").is_visible()
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
