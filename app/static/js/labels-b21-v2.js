@@ -401,7 +401,13 @@
     stage.style.aspectRatio=p.width_mm+' / '+p.height_mm; stage.innerHTML='';
 
     if(s.frame!==false){const frame=document.createElement('div');frame.className='b21-label-frame';stage.appendChild(frame);requestAnimationFrame(()=>{const scale=stage.clientWidth/p.width_mm;frame.style.inset=(Number(s.frameInsetMm||1)*scale)+'px';frame.style.borderWidth=Math.max(1,Number(s.frameWidthMm||.35)*scale)+'px';});}
-    s.elements.filter((el)=>el.visible!==false).forEach((el)=>stage.appendChild(buildStageElement(el,entry,s,p,cal)));
+    s.elements.filter((el)=>el.visible!==false).forEach((el)=>{
+      const node=buildStageElement(el,entry,s,p,cal);stage.appendChild(node);
+      if(el.type==='text'&&el.id===selectedElementId){
+        const handle=stage.querySelector(':scope > .b21-v2-resize-handle');
+        if(handle){positionTextResizeHandle(node,handle);requestAnimationFrame(()=>{if(handle.isConnected)positionTextResizeHandle(node,handle);});}
+      }
+    });
   }
 
   function displayText(el,entry,s){ if(el.type==='code')return ''; if(el.source==='label')return entry.label||entry.code||''; if(el.source==='value')return s.codeValue||entry.code||''; return el.text||''; }
@@ -436,7 +442,7 @@
     if(el.id===selectedElementId&&!codeImage){
       const handle=document.createElement('span');handle.className='b21-v2-resize-handle';
       handle.addEventListener('pointerdown',(event)=>startResize(event,node,el));stage.appendChild(handle);
-      if(el.type==='text')requestAnimationFrame(()=>positionTextResizeHandle(node,handle));
+
     }
     return node;
   }
