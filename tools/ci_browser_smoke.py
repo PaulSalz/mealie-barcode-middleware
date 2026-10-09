@@ -665,6 +665,7 @@ def main() -> None:
           return all[key]?.elements.find(row=>row.id==='code')?.inverted===true;
         }""", arg=invert_key, timeout=5_000)
         assert page.locator('#b21-label-stage [data-element-id="code"].b21-layer-inverted .b21-code').evaluate("el => getComputedStyle(el).filter") == "invert(1)"
+        assert page.locator('#b21-label-stage [data-element-id="code"].b21-layer-inverted .b21-code-content').evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(17, 17, 17)"
         page.locator('#b21-v24-layer-list [data-layer-invert="code"]').click()
         page.wait_for_function("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
