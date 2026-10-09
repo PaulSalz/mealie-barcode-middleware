@@ -416,6 +416,7 @@
     }
     if(!selectionNode)selectionNode=node;
     node.dataset.elementId=el.id;
+    node.classList.toggle('b21-layer-inverted',!!el.inverted);
     if(el.id===selectedElementId)selectionNode.classList.add('b21-v2-element-selected');
     const ox=(Number(cal.xMm||0)/p.width_mm)*100, oy=(Number(cal.yMm||0)/p.height_mm)*100;
     applyBox(node,Number(el.x||0)+ox,Number(el.y||0)+oy,Number(el.w||10),Number(el.h||10),Number(el.rotation||0));
@@ -502,7 +503,7 @@
       target.h=Math.max(1,Math.min(100,origH+2*localY/p.height_mm*100));
       node.style.width=target.w+'%';node.style.height=target.h+'%';
       positionTextResizeHandle(node,handle);
-      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=target[key];if(out)out.textContent=input.value;}});
+      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=target[key];if(out)out.textContent=String(Math.round(Number(input.value)));}});
       saveEntryStates();
     };
     const end=(e)=>{try{handle.releasePointerCapture(e.pointerId);}catch(ignore){}window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);saveEntryStates();syncInspector();renderStage();};
@@ -512,7 +513,7 @@
 
   function loadImage(url){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('Could not render code'));img.src=url;});}
   function drawContain(ctx,img,x,y,w,h){const scale=Math.min(w/img.naturalWidth,h/img.naturalHeight),dw=img.naturalWidth*scale,dh=img.naturalHeight*scale;ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);}
-  function drawText(ctx,text,cx,cy,maxWidth,fontPx,rotation,mono){ctx.save();ctx.translate(cx,cy);ctx.rotate(rotation*Math.PI/180);ctx.fillStyle='#000';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=(mono?'500 ':'600 ')+Math.max(8,fontPx)+'px '+(mono?'monospace':'sans-serif');const words=String(text||'').split(/\s+/),lines=[];let line='';words.forEach((word)=>{const c=line?line+' '+word:word;if(ctx.measureText(c).width<=maxWidth||!line)line=c;else{lines.push(line);line=word;}});if(line)lines.push(line);const rows=lines.slice(0,4),lh=fontPx*1.08,start=-(rows.length-1)*lh/2;rows.forEach((row,i)=>ctx.fillText(row,0,start+i*lh,maxWidth));ctx.restore();}
+  function drawText(ctx,text,cx,cy,maxWidth,fontPx,rotation,mono,inverted){ctx.save();ctx.translate(cx,cy);ctx.rotate(rotation*Math.PI/180);ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=(mono?'500 ':'600 ')+Math.max(8,fontPx)+'px '+(mono?'monospace':'sans-serif');const words=String(text||'').split(/\s+/),lines=[];let line='';words.forEach((word)=>{const c=line?line+' '+word:word;if(ctx.measureText(c).width<=maxWidth||!line)line=c;else{lines.push(line);line=word;}});if(line)lines.push(line);const rows=lines.slice(0,4),lh=fontPx*1.08,start=-(rows.length-1)*lh/2;if(inverted){ctx.fillStyle='#000';const pad=Math.max(1,fontPx*.06);rows.forEach((row,i)=>{const rowWidth=Math.min(maxWidth,ctx.measureText(row).width)+pad*2;ctx.fillRect(-rowWidth/2,start+i*lh-lh/2-pad/2,rowWidth,lh+pad);});}ctx.fillStyle=inverted?'#fff':'#000';rows.forEach((row,i)=>ctx.fillText(row,0,start+i*lh,maxWidth));ctx.restore();}
 
   async function renderSnapshot(entry,s,p,cal,calibrationOnly){
     const ppm=p.dpi/25.4,width=Math.max(8,Math.round(p.width_mm*ppm)),height=Math.max(8,Math.round(p.height_mm*ppm));const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.fillStyle='#000';ctx.strokeStyle='#000';ctx.save();ctx.translate(Number(cal.xMm||0)*ppm,Number(cal.yMm||0)*ppm);
@@ -520,9 +521,9 @@
     if(s.frame!==false){const inset=Number(s.frameInsetMm||1)*ppm,line=Math.max(1,Number(s.frameWidthMm||.35)*ppm);ctx.lineWidth=line;ctx.strokeRect(inset+line/2,inset+line/2,width-2*inset-line,height-2*inset-line);}
     for(const el of s.elements.filter((row)=>row.visible!==false)){
       const cx=width*el.x/100,cy=height*el.y/100,w=width*el.w/100,h=height*el.h/100,rot=Number(el.rotation||0);
-      if(el.type==='code'){const value=s.codeValue||entry.code||'',url='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(value),img=await loadImage(url);ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);if(resolvedCodeKind(entry,value)==='code128')ctx.drawImage(img,-w/2,-h/2,w,h);else{const side=Math.min(w,h);drawContain(ctx,img,-side/2,-side/2,side,side);}ctx.restore();}
-      else if(el.type==='line'){ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);ctx.lineWidth=Math.max(1,Number(el.lineWidthMm||.35)*ppm);ctx.beginPath();ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);ctx.stroke();ctx.restore();}
-      else drawText(ctx,displayText(el,entry,s),cx,cy,w,Number(el.fontSizePt||14)*p.dpi/72,rot,!!el.mono);
+      if(el.type==='code'){const value=s.codeValue||entry.code||'',url='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(value),img=await loadImage(url);ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);if(el.inverted){ctx.fillStyle='#000';ctx.fillRect(-w/2,-h/2,w,h);ctx.filter='invert(1)';}if(resolvedCodeKind(entry,value)==='code128')ctx.drawImage(img,-w/2,-h/2,w,h);else{const side=Math.min(w,h);drawContain(ctx,img,-side/2,-side/2,side,side);}ctx.restore();}
+      else if(el.type==='line'){ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);if(el.inverted){ctx.fillStyle='#000';ctx.fillRect(-w/2,-h/2,w,h);ctx.strokeStyle='#fff';}ctx.lineWidth=Math.max(1,Number(el.lineWidthMm||.35)*ppm);ctx.beginPath();ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);ctx.stroke();ctx.restore();}
+      else drawText(ctx,displayText(el,entry,s),cx,cy,w,Number(el.fontSizePt||14)*p.dpi/72,rot,!!el.mono,!!el.inverted);
     }
     ctx.restore();return canvas.toDataURL('image/png').split(',',2)[1];
   }
@@ -601,6 +602,15 @@
       if (!element) return false;
       element.visible = !!visible;
       selectedElementId = String(id);
+      persistAndRender();
+      return true;
+    },
+    toggleInvert: function (id) {
+      const state=currentState();
+      const element=state&&Array.isArray(state.elements)&&state.elements.find((row)=>String(row.id)===String(id));
+      if(!element)return false;
+      element.inverted=!element.inverted;
+      selectedElementId=String(id);
       persistAndRender();
       return true;
     },
