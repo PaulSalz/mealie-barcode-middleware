@@ -376,8 +376,8 @@
     renderStage();
   }
   function resetSelected(){
-    const el=selectedElement(); if(!el)return;
-    const state=currentState();
+    const state=currentState(); if(!state)return;
+    const el=state.elements.find((row)=>row.id===selectedElementId); if(!el)return;
     const defaults=el.type==='frame'?defaultFrame(state.profileId,true,1,.35):defaultForElement(el.type,el.id);
     if(el.type==='frame'){
       Object.keys(el).forEach((key)=>{if(!(key in defaults))delete el[key];});
