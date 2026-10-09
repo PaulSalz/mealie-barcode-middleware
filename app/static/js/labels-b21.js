@@ -156,10 +156,10 @@
                         <div class="b21-output-choice-head">
                             <input class="form-check-input" id="b21-output-b21" type="radio" name="label-output" value="b21"${configured ? '' : ' disabled'}>
                             <label class="b21-output-choice-label" for="b21-output-b21"><span><strong>B21 Pro</strong><small>Bluetooth label roll</small></span></label>
-                        </div>
-                        <div class="b21-printer-card" id="b21-printer-card">
-                            <div class="d-flex align-items-center justify-content-end gap-2 flex-wrap" id="b21-connection-bar">
-                                <button class="btn btn-outline-primary" type="button" id="b21-connect-button"><i class="ti ti-bluetooth icon"></i> Connect</button>
+                            <div class="b21-printer-card" id="b21-printer-card">
+                                <div class="d-flex align-items-center justify-content-end gap-2 flex-wrap" id="b21-connection-bar">
+                                    <button class="btn btn-outline-primary" type="button" id="b21-connect-button"><i class="ti ti-bluetooth icon"></i> Connect</button>
+                                </div>
                             </div>
                         </div>
                     </div>
