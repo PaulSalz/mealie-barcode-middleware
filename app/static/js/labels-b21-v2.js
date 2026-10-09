@@ -153,7 +153,7 @@
       const browserOutput = $('b21-output-grid') && $('b21-output-grid').querySelector('input[value="browser"]');
       print.classList.toggle('d-none', !!(browserOutput && browserOutput.checked));
       connect.insertAdjacentElement('afterend', print);
-      print.addEventListener('click', submitPrintJob);
+      print.addEventListener('click', () => submitPrintJob());
     }
     return true;
   }
@@ -533,17 +533,18 @@
     const singleIndex=entryId==null?-1:queue.findIndex((entry)=>String(entry&&entry._id)===String(entryId));
     if(entryId!=null&&singleIndex<0)return;
     const indices=entryId==null?queue.map((_,i)=>i):[singleIndex];
-    const button=$('label-niim-print'),status=$('b21-v2-job-state');if(button)button.disabled=true;if(status)status.textContent='Preparing…';
+    const button=entryId==null?$('label-niim-print'):Array.from(document.querySelectorAll('#label-queue .entry-print')).find((item)=>String(item.dataset.entryId)===String(entryId));
+    const status=$('b21-v2-job-state');if(button)button.disabled=true;if(status)status.textContent='Preparing…';
     try{
       // Snapshot first: subsequent UI changes cannot alter this job.
       const defs=indices.map((index)=>{const entry=clone(queue[index]),s=clone(getEntryState(queue[index],index)),p=clone(profileById(s.profileId)),cal=clone(getCalibration(p.id));return{entry,s,p,cal};});
       const pages=[];for(const def of defs){pages.push({image_base64:await renderSnapshot(def.entry,def.s,def.p,def.cal,false),width_mm:def.p.width_mm,height_mm:def.p.height_mm,quantity:Math.max(1,Number(def.entry.qty||def.s.copies||1)),density:def.p.density,label_type:def.p.label_type,dpi:def.p.dpi,threshold:def.s.threshold||128});}
-      const job=await fetchJson('/labels/b21/jobs',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pages})});activeJobId=job.id;if(status)status.textContent='Queued · '+job.id;pollJob(job.id);
+      const job=await fetchJson('/labels/b21/jobs',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pages})});activeJobId=job.id;if(status)status.textContent='Queued · '+job.id;pollJob(job.id,button);
     }catch(error){if(status){status.className='small text-danger b21-v2-job-state';status.textContent=error.message;}if(button)button.disabled=false;}
   }
-  function pollJob(id){
+  function pollJob(id,triggerButton){
     clearInterval(jobPoll);
-    const status=$('b21-v2-job-state'),button=$('label-niim-print');
+    const status=$('b21-v2-job-state'),button=triggerButton||$('label-niim-print');
     jobPoll=setInterval(async()=>{
       try{
         const job=await fetchJson('/labels/b21/jobs/'+encodeURIComponent(id));
@@ -584,6 +585,21 @@
       return true;
     },
     printQueueEntry: function (entryId) { return submitPrintJob(entryId); },
+    setCodeDimensions: function (widthPct,heightPct) {
+      const state=currentState(),code=state&&state.elements.find((row)=>row.type==='code');
+      const width=Number(widthPct),height=Number(heightPct);
+      if(!state||!code||!Number.isFinite(width)||!Number.isFinite(height))return false;
+      const profile=profileById(state.profileId),kind=resolvedCodeKind(currentEntry(),state.codeValue);
+      if(kind==='qr'){
+        const maxSide=Math.min(profile.width_mm,profile.height_mm);
+        const minSide=Math.min(maxSide,Math.max(profile.width_mm*.02,profile.height_mm*.01));
+        const side=Math.max(minSide,Math.min(maxSide,Math.min(width*profile.width_mm/100,height*profile.height_mm/100)));
+        code.w=side/profile.width_mm*100;code.h=side/profile.height_mm*100;
+      }else{
+        code.w=Math.max(2,Math.min(100,width));code.h=Math.max(1,Math.min(100,height));
+      }
+      selectedElementId='code';persistAndRender();return true;
+    },
     moveLayer: function (id, direction) {
       const state = currentState();
       if (!state || !Array.isArray(state.elements)) return false;
