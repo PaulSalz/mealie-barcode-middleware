@@ -693,7 +693,7 @@ def main() -> None:
           const state=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}')[key];
           const code=state.elements.find(row=>row.id==='code');
           const rect=stage.querySelector('.b21-code-content').getBoundingClientRect();
-          return {before,code,visualWidth:rect.width,visualHeight:rect.height,dimensions};
+          return {before,code,visualWidth:rect.width,visualHeight:rect.height,dimensions,inputValue:widthInput.value,selectedIndex:document.getElementById('b21-entry-select')?.value,imageSrc:stage.querySelector('.b21-code')?.src};
         }""")
         assert abs(qr_resize["code"]["w"] * qr_resize["dimensions"][0] - qr_resize["code"]["h"] * qr_resize["dimensions"][1]) < 0.01, qr_resize
         assert abs(qr_resize["visualWidth"] - qr_resize["visualHeight"]) < 1, qr_resize
