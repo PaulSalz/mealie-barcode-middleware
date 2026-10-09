@@ -680,20 +680,37 @@ def main() -> None:
             "() => { const image=document.querySelector('#b21-label-stage .b21-code'); return !!image && image.src.includes('kind=qr') && image.complete && image.naturalWidth > 0; }",
             timeout=5_000,
         )
+        page.wait_for_function(
+            """() => {
+              const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+              const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+              const code=all[String(queue[1]._id)]?.elements.find(row=>row.id==='code');
+              return !!code && Math.abs(code.w*50-code.h*30)<0.01;
+            }""",
+            timeout=5_000,
+        )
+        page.evaluate("""() => {
+          const widthInput=document.getElementById('b21-v2-w');
+          widthInput.value='40';
+          widthInput.dispatchEvent(new Event('input',{bubbles:true}));
+        }""")
+        page.wait_for_function(
+            """() => {
+              const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+              const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+              const code=all[String(queue[1]._id)]?.elements.find(row=>row.id==='code');
+              return !!code && Math.abs(code.w-40)<0.01 && Math.abs(code.w*50-code.h*30)<0.01;
+            }""",
+            timeout=5_000,
+        )
         qr_resize = page.evaluate("""() => {
           const stage=document.querySelector('#b21-label-stage');
           const widthInput=document.getElementById('b21-v2-w');
-          const dimensions=stage.style.aspectRatio.split('/').map(value=>Number(value.trim()));
-          const profile=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
-          const key=String(queue[1]._id);
-          const before=profile[key].elements.find(row=>row.id==='code');
-          widthInput.value='40';
-          widthInput.dispatchEvent(new Event('input',{bubbles:true}));
-          const state=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}')[key];
-          const code=state.elements.find(row=>row.id==='code');
+          const code=all[String(queue[1]._id)].elements.find(row=>row.id==='code');
           const rect=stage.querySelector('.b21-code-content').getBoundingClientRect();
-          return {before,code,visualWidth:rect.width,visualHeight:rect.height,dimensions,inputValue:widthInput.value,selectedIndex:document.getElementById('b21-entry-select')?.value,imageSrc:stage.querySelector('.b21-code')?.src};
+          return {code,visualWidth:rect.width,visualHeight:rect.height,dimensions:[50,30],inputValue:widthInput.value,selectedIndex:document.getElementById('b21-entry-select')?.value,imageSrc:stage.querySelector('.b21-code')?.src};
         }""")
         assert abs(qr_resize["code"]["w"] * qr_resize["dimensions"][0] - qr_resize["code"]["h"] * qr_resize["dimensions"][1]) < 0.01, qr_resize
         assert abs(qr_resize["code"]["w"] - 40) < 0.01, qr_resize
