@@ -207,9 +207,20 @@
   border-color: var(--b21-frame-color, #111) !important;
   border-radius: var(--b21-frame-radius, 0px) !important;
 }
+/* Selection ring follows the printable frame's radius rather than the
+   rectangular element outline. It is editor-only, not printed. */
 #b21-label-stage .b21-element.b21-v2-frame-selected {
-  outline: 1px solid var(--tblr-primary) !important;
-  outline-offset: calc(0px - var(--b21-frame-width, 1px)) !important;
+  outline: none !important;
+}
+#b21-label-stage .b21-v2-frame-selected::after {
+  content: "";
+  position: absolute;
+  inset: calc(0px - var(--b21-frame-width, 1px) - 1px);
+  z-index: 1;
+  box-sizing: border-box;
+  border: 1px solid var(--tblr-primary);
+  border-radius: calc(var(--b21-frame-radius, 0px) + var(--b21-frame-width, 1px) + 1px);
+  pointer-events: none;
 }
 #b21-label-stage .b21-v2-frame-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 #b21-label-stage .b21-v2-frame-stroke { pointer-events: stroke; cursor: grab; }
