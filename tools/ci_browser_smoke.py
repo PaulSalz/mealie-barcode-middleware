@@ -975,6 +975,16 @@ def main() -> None:
         }""", source_key)
         assert long_font < short_font, (short_font, long_font, smallest_profile, font_debug)
         page.locator('[data-layer-select="label"]').click()
+        page.wait_for_function(
+            """() => {
+              const handle=document.querySelector('#b21-label-stage [data-element-id=label] > .b21-v2-resize-handle');
+              const content=document.querySelector('#b21-label-stage [data-element-id=label] .b21-v2-text-content');
+              if(!handle||!content)return false;
+              const a=handle.getBoundingClientRect(),b=content.getBoundingClientRect();
+              return Math.abs(a.left+a.width/2-b.right)<2 && Math.abs(a.top+a.height/2-b.bottom)<2;
+            }""",
+            timeout=5_000,
+        )
         text_resize_before = page.evaluate("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           const element=all[key].elements.find(row=>row.id==='label');
