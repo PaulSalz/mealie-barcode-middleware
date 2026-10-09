@@ -166,7 +166,7 @@
             var current = count.textContent;
             if (current !== previous) {
                 previous = current;
-                showQueueFeedback('Updated · ' + current.replace(/[()]/g, ''));
+                showQueueFeedback('Updated');
             }
         }).observe(root, {childList:true, subtree:true});
         new MutationObserver(function() {
@@ -174,7 +174,7 @@
             var current = count.textContent;
             if (current === previous) return;
             previous = current;
-            showQueueFeedback('Updated · ' + current.replace(/[()]/g, ''));
+            showQueueFeedback('Updated');
         }).observe(count, {childList:true, characterData:true,subtree:true});
     }
 
@@ -183,7 +183,7 @@
         var link = document.createElement('link');
         link.id = 'b21-designer-stylesheet';
         link.rel = 'stylesheet';
-        link.href = '/static/css/labels-b21.css?v=20260921-1';
+        link.href = '/static/css/labels-b21.css?v=20261009-1';
         document.head.appendChild(link);
     }
 

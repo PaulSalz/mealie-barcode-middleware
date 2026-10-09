@@ -145,13 +145,23 @@
         output.innerHTML = `
             <div class="card-header"><div><h3 class="card-title">Output</h3><p class="card-subtitle">Choose the normal browser sheet or the B21 Pro label roll.</p></div></div>
             <div class="card-body">
-                <div class="b2m-choice-grid" id="b21-output-grid">
-                    <label class="b2m-choice-card"><input class="form-check-input me-2" type="radio" name="label-output" value="browser"><span><strong>Browser print</strong><small>Sheet/page layout</small></span></label>
-                    <label class="b2m-choice-card${configured ? '' : ' b2m-choice-disabled'}"><input class="form-check-input me-2" type="radio" name="label-output" value="b21"${configured ? '' : ' disabled'}><span><strong>B21 Pro</strong></span></label>
-                </div>
-                <div class="mt-3 pt-3 border-top" id="b21-printer-card">
-                    <div class="d-flex align-items-center justify-content-end gap-2 flex-wrap" id="b21-connection-bar">
-                        <button class="btn btn-outline-primary" type="button" id="b21-connect-button"><i class="ti ti-bluetooth icon"></i> Connect</button>
+                <div class="b2m-choice-grid b21-output-grid" id="b21-output-grid" data-active-mode="browser">
+                    <div class="b2m-choice-card b21-output-choice b21-output-choice-browser">
+                        <div class="b21-output-choice-head">
+                            <input class="form-check-input" id="b21-output-browser" type="radio" name="label-output" value="browser">
+                            <label class="b21-output-choice-label" for="b21-output-browser"><span><strong>Browser print</strong><small>Sheet/page layout</small></span></label>
+                        </div>
+                    </div>
+                    <div class="b2m-choice-card b21-output-choice b21-output-choice-b21${configured ? '' : ' b2m-choice-disabled'}">
+                        <div class="b21-output-choice-head">
+                            <input class="form-check-input" id="b21-output-b21" type="radio" name="label-output" value="b21"${configured ? '' : ' disabled'}>
+                            <label class="b21-output-choice-label" for="b21-output-b21"><span><strong>B21 Pro</strong><small>Bluetooth label roll</small></span></label>
+                        </div>
+                        <div class="b21-printer-card" id="b21-printer-card">
+                            <div class="d-flex align-items-center justify-content-end gap-2 flex-wrap" id="b21-connection-bar">
+                                <button class="btn btn-outline-primary" type="button" id="b21-connect-button"><i class="ti ti-bluetooth icon"></i> Connect</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>`;
@@ -320,6 +330,8 @@
         state.mode = mode === 'b21' && configured ? 'b21' : 'browser';
         localStorage.setItem(OUTPUT_KEY, state.mode);
         var browser = state.mode === 'browser';
+        $('b21-output-grid')?.setAttribute('data-active-mode', browser ? 'browser' : 'b21');
+        $('b21-printer-card')?.classList.toggle('d-none', browser);
         $('browser-preview-body').classList.toggle('d-none', !browser);
         $('browser-layout-body').classList.toggle('d-none', !browser);
         $('b21-preview-body').classList.toggle('d-none', browser);
