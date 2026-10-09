@@ -275,10 +275,10 @@ def test_b21_frame_is_a_layer_with_line_style_inversion_and_correct_handles():
     assert "[0,ctx.lineWidth*2]" in editor
     assert ".b21-v2-frame-stroke.b21-v2-element-selected" not in css
     assert "border-color: var(--b21-frame-color, #111) !important" in css
-    assert ".b21-v2-frame-selected::after" in css
-    assert "border: 2px solid var(--tblr-primary)" in css
-    assert "inset: calc(0px - var(--b21-frame-width, 1px) - 2px)" in css
-    assert "border-radius: calc(var(--b21-frame-radius, 0px) + 2px)" in css
+    assert "#b21-label-stage .b21-element.b21-v2-frame-selected" in css
+    assert "outline: 1px solid var(--tblr-primary)" in css
+    assert "outline-offset: calc(0px - var(--b21-frame-width, 1px))" in css
+    assert ".b21-v2-frame-selected::after" not in css
     assert "cornerRadiusMm:0" in editor
     assert "rangeHtml('Corner radius','cornerRadiusMm',0,10,.5)" in editor
     assert "function traceRoundedRect(ctx,x,y,w,h,r)" in editor
