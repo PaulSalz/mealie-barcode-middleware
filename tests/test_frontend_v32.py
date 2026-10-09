@@ -273,6 +273,8 @@ def test_b21_frame_is_a_layer_with_line_style_inversion_and_correct_handles():
     assert "stroke.setAttribute('stroke-opacity','0')" in editor
     assert "el.type==='frame'||(key!=='h'||el.type!=='line')" in editor
     assert "[0,ctx.lineWidth*2]" in editor
+    assert "else selectionNode.classList.add('b21-v2-element-selected');" in editor
+    assert "if(el.type==='frame')node.classList.add('b21-v2-frame-selected');" in editor
     assert ".b21-v2-frame-stroke.b21-v2-element-selected" not in css
     assert "border-color: var(--b21-frame-color, #111) !important" in css
     assert "#b21-label-stage .b21-element.b21-v2-frame-selected" in css

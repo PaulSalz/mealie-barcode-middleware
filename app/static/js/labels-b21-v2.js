@@ -470,8 +470,10 @@
     if(!selectionNode)selectionNode=node;
     node.dataset.elementId=el.id;node.dataset.rotation=String(Number(el.rotation||0));
     if(el.id===selectedElementId){
-      selectionNode.classList.add('b21-v2-element-selected');
+      // The SVG frame hit target is invisible and must not inherit the
+      // generic selection stroke (which renders as a thick square box).
       if(el.type==='frame')node.classList.add('b21-v2-frame-selected');
+      else selectionNode.classList.add('b21-v2-element-selected');
     }
     if(el.inverted){
       node.classList.add('b21-layer-inverted');
