@@ -436,11 +436,12 @@
       const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
       svg.setAttribute('viewBox','0 0 100 100');svg.setAttribute('preserveAspectRatio','none');svg.classList.add('b21-v2-frame-svg');
       svg.setAttribute('aria-hidden','true');
+      svg.style.left=(-lineWidthPx/2)+'px';svg.style.top=(-lineWidthPx/2)+'px';
+      svg.style.right='auto';svg.style.bottom='auto';
+      svg.style.width='calc(100% + '+lineWidthPx+'px)';svg.style.height='calc(100% + '+lineWidthPx+'px)';
       const stroke=document.createElementNS('http://www.w3.org/2000/svg','rect');
-      const insetX=Math.min(49,lineWidthMm*50/(p.width_mm*Math.max(.01,Number(el.w||100)/100)));
-      const insetY=Math.min(49,lineWidthMm*50/(p.height_mm*Math.max(.01,Number(el.h||100)/100)));
-      stroke.setAttribute('x',String(insetX));stroke.setAttribute('y',String(insetY));
-      stroke.setAttribute('width',String(Math.max(2,100-2*insetX)));stroke.setAttribute('height',String(Math.max(2,100-2*insetY)));
+      stroke.setAttribute('x','0');stroke.setAttribute('y','0');
+      stroke.setAttribute('width','100');stroke.setAttribute('height','100');
       stroke.setAttribute('fill','none');stroke.setAttribute('stroke-width',String(Math.max(8,lineWidthPx)));
       stroke.setAttribute('vector-effect','non-scaling-stroke');stroke.setAttribute('stroke','#000');
       stroke.setAttribute('stroke-opacity','0');stroke.setAttribute('pointer-events','stroke');
