@@ -304,7 +304,7 @@
     else content.value=el.text||'';
     content.readOnly=el.source==='label'||el.source==='value';
 
-    const p=currentProfile();
+    const p=profileById(s.profileId);
     const codeKind=resolvedCodeKind(currentEntry(),s.codeValue);
     let normalizedQr=false;
     if(codeKind==='qr'){
@@ -345,7 +345,7 @@
     });
     const changedKey=event&&event.target&&event.target.dataset?event.target.dataset.key:'';
     if(el.type==='code'&&resolvedCodeKind(currentEntry(),s.codeValue)==='qr'&&(changedKey==='w'||changedKey==='h')){
-      const p=currentProfile();
+      const p=profileById(s.profileId);
       const sideMm=changedKey==='w'?Number(el.w||0)*p.width_mm/100:Number(el.h||0)*p.height_mm/100;
       el.w=sideMm/p.width_mm*100;
       el.h=sideMm/p.height_mm*100;
