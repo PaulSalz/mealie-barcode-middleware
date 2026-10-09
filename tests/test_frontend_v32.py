@@ -195,9 +195,9 @@ def test_b21_drag_and_resize_use_visible_objects_and_rotated_corners():
     assert "#b21-label-stage .b21-element { pointer-events: none; cursor: default; }" in css
     assert "#b21-label-stage .b21-code-content" in css
     assert "cursor: grab;" in css
-    assert "const sr=stage.getBoundingClientRect()" in editor
-    assert "let vr=visual.getBoundingClientRect()" in editor
-    assert "el.x+=((sr.left-vr.left)/sr.width)*100" in editor
+    assert "const halfX=(Math.abs(widthMm*Math.cos(angle))+Math.abs(heightMm*Math.sin(angle)))/2/profile.width_mm*100" in editor
+    assert "const halfY=(Math.abs(widthMm*Math.sin(angle))+Math.abs(heightMm*Math.cos(angle)))/2/profile.height_mm*100" in editor
+    assert "type=\"button\" class=\"btn btn-outline-secondary\" data-align=" in editor
     assert "target.w=Math.max(2,Math.min(100,origW+2*localX/p.width_mm*100))" in editor
     assert "saveEntryStates();" in editor
     assert "positionTextResizeHandle(node,handle)" in editor
@@ -217,7 +217,9 @@ def test_b21_qr_links_dimensions_and_code128_can_stretch():
     assert "newWidthMm=Math.max(Math.min(2,dimensions.width)" in resize
     assert "newHeightMm=Math.max(Math.min(1,dimensions.height)" in resize
     assert "class=\"form-control entry-qty\" type=\"number\"" in queue
-    assert "entry-target-badge" in queue and "kindLabel" not in queue
+    assert "entry-target-badge" not in queue and "kindLabel" not in queue
+    assert "target.matches&&target.matches('.b21-v2-range')" in editor
+    assert "document.querySelectorAll('.b21-v2-range:not(.d-none)').forEach((input)=>{const key=input.dataset.key;if(key in el" not in editor
     assert "#label-queue .entry-kind," in css
     assert "#b21-v2-copies { height: calc(1.42857143em + .5rem + 2px); }" in css
 

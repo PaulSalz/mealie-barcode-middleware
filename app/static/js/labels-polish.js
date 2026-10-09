@@ -183,7 +183,7 @@
         var link = document.createElement('link');
         link.id = 'b21-designer-stylesheet';
         link.rel = 'stylesheet';
-        link.href = '/static/css/labels-b21.css?v=20261009-2';
+        link.href = '/static/css/labels-b21.css?v=20261009-3';
         document.head.appendChild(link);
     }
 

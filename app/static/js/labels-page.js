@@ -184,7 +184,7 @@
                 '<div class="col-md-6"><label class="form-label small mb-1">Code value</label><input class="form-control form-control-sm font-monospace entry-code" value="' + esc(entry.code) + '"' + (locked ? ' readonly' : '') + '></div>' +
                 '<div class="col-md-5"><label class="form-label small mb-1">Code style</label><select class="form-select form-select-sm entry-kind"><option value="auto"' + (entry.kind === 'auto' ? ' selected' : '') + '>Auto</option><option value="qr"' + (entry.kind === 'qr' ? ' selected' : '') + '>QR</option><option value="code128"' + (entry.kind === 'code128' ? ' selected' : '') + '>Code 128</option></select></div>' +
                 '<div class="col-md-5"><label class="form-label small mb-1">Copies</label><div class="input-group input-group-sm label-copy-actions"><input class="form-control entry-qty" type="number" min="1" max="99" step="1" value="' + entry.qty + '" aria-label="Copies"><button class="btn btn-outline-primary entry-edit" type="button" data-entry-id="' + esc(entry._id) + '" title="Edit label"><i class="ti ti-edit"></i> Edit</button></div></div>' +
-                '<div class="col-md-2 d-flex align-items-end pb-1">' + (entry.target_type === 'custom' ? '' : '<span class="badge bg-blue-lt entry-target-badge">' + esc(typeBadge(entry.target_type)) + '</span>') + '</div>' +
+
                 '</div><div class="form-hint entry-hint mt-1">' + (entry.kind === 'auto' ? 'Auto uses Code 128 for short ASCII IDs and QR for longer/Unicode values.' : '') + '</div></div>' +
                 '</div></div></div>';
 
