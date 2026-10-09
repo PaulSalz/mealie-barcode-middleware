@@ -1102,17 +1102,85 @@ def main() -> None:
         assert text_font_after["text"] == text_font_before["text"], (text_font_before, text_font_after)
 
         page.locator('[data-layer-select="frame"]').click()
+        frame_before_geometry = page.evaluate("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const frame=all[key]?.elements.find(row=>row.id==='frame');
+          const node=document.querySelector('#b21-label-stage [data-element-id="frame"]');
+          const style=getComputedStyle(node);
+          return {w:frame.w,h:frame.h,style:style.borderStyle,color:style.borderColor,boxSizing:style.boxSizing,
+            selected:node.querySelector('.b21-v2-frame-stroke')?.classList.contains('b21-v2-element-selected')};
+        }""", source_key)
+        assert frame_before_geometry["selected"] and frame_before_geometry["boxSizing"] == "border-box", frame_before_geometry
+        assert frame_before_geometry["color"] == "rgb(17, 17, 17)", frame_before_geometry
+
         page.locator('#b21-v2-line-style').select_option('dotted')
         page.wait_for_function("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
-          return all[key]?.elements.find(row=>row.id==='frame')?.lineStyle==='dotted';
+          const frame=all[key]?.elements.find(row=>row.id==='frame');
+          const node=document.querySelector('#b21-label-stage [data-element-id="frame"]');
+          return frame?.lineStyle==='dotted' && getComputedStyle(node).borderStyle==='dotted';
         }""", arg=source_key, timeout=5_000)
+        page.locator('#b21-v2-line-style').select_option('dashed')
+        page.wait_for_function("""() => getComputedStyle(document.querySelector('#b21-label-stage [data-element-id="frame"]')).borderStyle==='dashed'""", timeout=5_000)
+        page.locator('#b21-v2-line-style').select_option('solid')
+        page.wait_for_function("""() => getComputedStyle(document.querySelector('#b21-label-stage [data-element-id="frame"]')).borderStyle==='solid'""", timeout=5_000)
+
+        frame_before_drag = page.evaluate("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const frame=all[key].elements.find(row=>row.id==='frame');
+          return {x:frame.x,y:frame.y,w:frame.w,h:frame.h};
+        }""", source_key)
+        frame_drag_box=page.locator('#b21-label-stage [data-element-id="frame"]').bounding_box()
+        assert frame_drag_box, "Frame box should be on the stage."
+        drag_x=frame_drag_box["x"]+frame_drag_box["width"]/2
+        drag_y=frame_drag_box["y"]+2
+        page.mouse.move(drag_x,drag_y)
+        page.mouse.down()
+        page.mouse.move(drag_x+12,drag_y+8,steps=4)
+        page.mouse.up()
+        page.wait_for_function("""([key,x,y]) => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const frame=all[key]?.elements.find(row=>row.id==='frame');
+          return !!frame && frame.x>x && frame.y>y;
+        }""", arg=[source_key,frame_before_drag["x"],frame_before_drag["y"]], timeout=5_000)
+        frame_before_resize = page.evaluate("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const frame=all[key].elements.find(row=>row.id==='frame');
+          return {w:frame.w,h:frame.h};
+        }""", source_key)
+        frame_handle = page.locator('#b21-label-stage [data-element-id="frame"] > .b21-v2-frame-resize-handle').bounding_box()
+        frame_box = page.locator('#b21-label-stage [data-element-id="frame"]').bounding_box()
+        assert frame_handle and frame_box, (frame_handle, frame_box)
+        assert abs((frame_handle["x"]+frame_handle["width"]/2)-(frame_box["x"]+frame_box["width"])) < 2, (frame_handle, frame_box)
+        assert abs((frame_handle["y"]+frame_handle["height"]/2)-(frame_box["y"]+frame_box["height"])) < 2, (frame_handle, frame_box)
+        resize_x=frame_handle["x"]+frame_handle["width"]/2
+        resize_y=frame_handle["y"]+frame_handle["height"]/2
+        page.mouse.move(resize_x,resize_y)
+        page.mouse.down()
+        page.mouse.move(resize_x-20,resize_y-15,steps=5)
+        page.mouse.up()
+        page.wait_for_function("""([key,w,h]) => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const frame=all[key]?.elements.find(row=>row.id==='frame');
+          return !!frame && frame.w<w-1 && frame.h<h-1;
+        }""", arg=[source_key,frame_before_resize["w"],frame_before_resize["h"]], timeout=5_000)
+        frame_geometry_controls=page.evaluate("""() => ({
+          x:!document.querySelector('#b21-v2-x').closest('.b21-v2-range-wrap').classList.contains('d-none'),
+          y:!document.querySelector('#b21-v2-y').closest('.b21-v2-range-wrap').classList.contains('d-none'),
+          w:!document.querySelector('#b21-v2-w').closest('.b21-v2-range-wrap').classList.contains('d-none'),
+          h:!document.querySelector('#b21-v2-h').closest('.b21-v2-range-wrap').classList.contains('d-none')
+        })""")
+        assert all(frame_geometry_controls.values()), frame_geometry_controls
+
         page.locator('.b21-v24-layer [data-layer-invert="frame"]').click()
         page.wait_for_function("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
-          return all[key]?.elements.find(row=>row.id==='frame')?.inverted===true;
+          const frame=all[key]?.elements.find(row=>row.id==='frame');
+          const node=document.querySelector('#b21-label-stage [data-element-id="frame"]');
+          return frame?.inverted===true && getComputedStyle(node).borderColor==='rgb(255, 255, 255)';
         }""", arg=source_key, timeout=5_000)
-        assert page.locator('#b21-label-stage [data-element-id="frame"] .b21-v2-frame-stroke').get_attribute('stroke') == '#fff'
+        page.locator('.b21-v24-layer [data-layer-invert="frame"]').click()
+        page.wait_for_function("""() => getComputedStyle(document.querySelector('#b21-label-stage [data-element-id="frame"]')).borderColor==='rgb(17, 17, 17)'""", timeout=5_000)
         page.locator('.b21-v24-layer [data-layer-visible="frame"]').click()
         page.wait_for_function("!document.querySelector('#b21-label-stage [data-element-id=frame]')", timeout=5_000)
         page.locator('.b21-v24-layer [data-layer-visible="frame"]').click()
