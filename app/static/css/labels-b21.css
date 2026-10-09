@@ -172,6 +172,7 @@
 
 
 /* Inverted layer colors are shared by the editor preview and B21 label snapshot. */
+#b21-label-stage .b21-code-box.b21-layer-inverted .b21-code-content { background: #111; }
 #b21-label-stage .b21-code-box.b21-layer-inverted .b21-code { filter: invert(1); }
 #b21-label-stage .b21-v2-free-text.b21-layer-inverted .b21-v2-text-content {
   color: #fff;
