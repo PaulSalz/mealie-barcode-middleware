@@ -550,7 +550,7 @@ def main() -> None:
             "B21 printer controls should appear when B21 output is selected.",
             timeout_ms=5_000,
         )
-        assert b21_toolbar.is_visible(), "B21 printer controls should remain available in Basic mode."
+        assert page.locator("#label-niim-print").is_visible(), "B21 queue print button should remain available in Basic mode."
         assert page.locator("#b21-v2-print-scope").count() == 0
         assert page.locator("#b21-v2-copies").count() == 0
         assert page.locator("#label-print").inner_text().strip() == "Print all"
