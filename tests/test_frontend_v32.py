@@ -84,12 +84,19 @@ def test_label_text_color_and_frame_controls_are_explicit():
     assert "Useful for cutting/alignment" not in source
 
 
-def test_current_print_scope_bypasses_v30_queue_capture():
-    source = read("app/static/js/labels-scope-v32.js")
-    assert "b21-v2-print-scope" in source
-    assert "currentScope() !== 'current'" in source
-    assert "label-niim-print-current-v32" in source
-    assert "button.id = 'label-niim-print'" in source
+def test_label_print_buttons_replace_scope_picker_and_layer_inversion_is_available():
+    editor = read("app/static/js/labels-b21-v2.js")
+    queue = read("app/static/js/labels-page.js")
+    layers = read("app/static/js/labels-v24.js")
+    polish = read("app/static/js/labels-polish.js")
+    assert "b21-v2-print-scope" not in editor and "b21-v2-copies" not in editor
+    assert "async function submitPrintJob(entryId)" in editor
+    assert "function printQueueEntry(entryId)" in queue
+    assert 'class="btn btn-outline-primary entry-print"' in queue
+    assert "Print all" in polish and "quickPrint.insertAdjacentElement('afterend', printAll)" in polish
+    assert "toggleInvert" in editor and "data-layer-invert=" in layers
+    assert "b21-layer-inverted" in editor
+    assert "String(Math.round(Number(input.value)))" in editor
 
 
 
@@ -188,6 +195,8 @@ def test_b21_drag_and_resize_use_visible_objects_and_rotated_corners():
     assert "event.target.closest('.b21-v2-text-content')" in editor
     assert "localX=dx*Math.cos(angle)+dy*Math.sin(angle)" in editor
     assert "Math.min(originalWidthMm,originalHeightMm)+localX+localY" in resize
+    assert "activeBox.offsetWidth||active.offsetWidth" in resize
+    assert "editor.setCodeDimensions(Number(w.value),Number(h.value))" in resize
     assert "function currentCodeKind(image)" in resize
     assert "value.length<=32?'code128':'qr'" in resize
     assert "cx+cos*width/2-sin*height/2" in resize
@@ -217,11 +226,14 @@ def test_b21_qr_links_dimensions_and_code128_can_stretch():
     assert "newWidthMm=Math.max(Math.min(2,dimensions.width)" in resize
     assert "newHeightMm=Math.max(Math.min(1,dimensions.height)" in resize
     assert "class=\"form-control entry-qty\" type=\"number\"" in queue
+    assert "class=\"btn btn-outline-primary entry-print\"" in queue
+    assert "class=\"btn btn-outline-primary entry-edit\"" in queue
     assert "entry-target-badge" not in queue and "kindLabel" not in queue
     assert "target.matches&&target.matches('.b21-v2-range')" in editor
     assert "document.querySelectorAll('.b21-v2-range:not(.d-none)').forEach((input)=>{const key=input.dataset.key;if(key in el" not in editor
     assert "#label-queue .entry-kind," in css
-    assert "#b21-v2-copies { height: calc(1.42857143em + .5rem + 2px); }" in css
+    assert "#b21-v2-copies" not in css
+    assert "#label-queue .label-copy-actions .entry-print" in css
 
 
 def test_b21_presets_reset_button_and_queue_feedback_regressions():

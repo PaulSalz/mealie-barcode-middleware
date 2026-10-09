@@ -550,9 +550,10 @@ def main() -> None:
             "B21 printer controls should appear when B21 output is selected.",
             timeout_ms=5_000,
         )
-        assert b21_toolbar.is_visible(), "B21 queue and copies controls should remain available in Basic mode."
-        assert page.locator("#b21-v2-print-scope").is_visible()
-        assert page.locator("#b21-v2-copies").is_visible()
+        assert page.locator("#label-niim-print").is_visible(), "B21 queue print button should remain available in Basic mode."
+        assert page.locator("#b21-v2-print-scope").count() == 0
+        assert page.locator("#b21-v2-copies").count() == 0
+        assert page.locator("#label-print").inner_text().strip() == "Print all"
         b21_columns = page.locator("#b21-output-grid").evaluate(
             "(el) => getComputedStyle(el).gridTemplateColumns.split(' ').map(parseFloat)"
         )
@@ -574,7 +575,7 @@ def main() -> None:
             lambda: page.locator("html").evaluate("el => el.classList.contains('b2m-advanced-enabled')"),
             "Global Advanced mode did not switch on.",
         )
-        b21_toolbar.wait_for(state="visible", timeout=5_000)
+        assert page.locator("#label-niim-print").is_visible()
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
@@ -591,6 +592,9 @@ def main() -> None:
           const kind = document.querySelector('#label-queue .entry-kind');
           const copies = document.querySelector('#label-queue .entry-qty');
           const edit = document.querySelector('#label-queue .entry-edit');
+          const entryPrint = document.querySelector('#label-queue .entry-print');
+          const printAll = document.getElementById('label-print');
+          const quickPrint = document.querySelector('#label-editor-mode [data-label-mode="quick"]');
           const layers = document.getElementById('b21-v2-layers-header');
           const presetHeader = document.getElementById('b21-v13-preset-header');
           const reset = document.getElementById('b21-v2-reset-all');
@@ -605,6 +609,10 @@ def main() -> None:
             selectorRemoved: !selector,
             entrySelectHidden: !!entrySelect && entrySelect.hidden,
             queueEditVisible: !!edit && getComputedStyle(edit).display !== 'none',
+            queuePrintVisible: !!entryPrint && getComputedStyle(entryPrint).display !== 'none',
+            printButtonsAdjacent: !!edit && !!entryPrint && edit.previousElementSibling === entryPrint,
+            printAllAfterQuick: !!printAll && !!quickPrint && printAll.previousElementSibling === quickPrint,
+            printAllText: printAll?.textContent.trim(),
             copiesHeight: copies ? parseFloat(getComputedStyle(copies).height) : null,
             kindHeight: kind ? parseFloat(getComputedStyle(kind).height) : null,
             previewMeta: !!document.getElementById('b21-preview-meta'),
@@ -623,7 +631,9 @@ def main() -> None:
         }""")
         assert label_ui["title"] == "B21 label preview", label_ui
         assert label_ui["selectorRemoved"] and label_ui["entrySelectHidden"], label_ui
-        assert label_ui["queueEditVisible"], label_ui
+        assert label_ui["queueEditVisible"] and label_ui["queuePrintVisible"], label_ui
+        assert label_ui["printButtonsAdjacent"] and label_ui["printAllAfterQuick"], label_ui
+        assert label_ui["printAllText"] == "Print all", label_ui
         assert abs(label_ui["copiesHeight"] - label_ui["kindHeight"]) < 1, label_ui
         assert not label_ui["previewMeta"], label_ui
         assert label_ui["printerInfo"] == 0 and label_ui["connectVisible"], label_ui
@@ -645,6 +655,22 @@ def main() -> None:
             timeout=5_000,
         )
         page.locator('#b21-v24-layer-list [data-layer-select="code"]').click()
+        invert_key = page.evaluate("""() => {
+          const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+          return String(queue[Number(document.getElementById('b21-entry-select')?.value||0)]?._id);
+        }""")
+        page.locator('#b21-v24-layer-list [data-layer-invert="code"]').click()
+        page.wait_for_function("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          return all[key]?.elements.find(row=>row.id==='code')?.inverted===true;
+        }""", arg=invert_key, timeout=5_000)
+        assert page.locator('#b21-label-stage [data-element-id="code"].b21-layer-inverted .b21-code').evaluate("el => getComputedStyle(el).filter") == "invert(1)"
+        assert page.locator('#b21-label-stage [data-element-id="code"].b21-layer-inverted .b21-code-content').evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(17, 17, 17)"
+        page.locator('#b21-v24-layer-list [data-layer-invert="code"]').click()
+        page.wait_for_function("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          return all[key]?.elements.find(row=>row.id==='code')?.inverted===false;
+        }""", arg=invert_key, timeout=5_000)
         for align_mode, edge in (("right", "right"), ("left", "left")):
             page.locator(f'#b21-v2-align [data-align="{align_mode}"]').click()
             page.wait_for_function(
@@ -669,6 +695,41 @@ def main() -> None:
         assert code128_resize["afterWidth"]["width"] > code128_resize["beforeWidth"]["width"] + 1, code128_resize
         assert abs(code128_resize["afterWidth"]["height"] - code128_resize["beforeWidth"]["height"]) < 1, code128_resize
         assert code128_resize["afterHeight"]["height"] < code128_resize["afterWidth"]["height"] - 1, code128_resize
+        size_labels = page.evaluate("""() => ['w','h'].map(key => document.getElementById('b21-v2-'+key+'-value')?.textContent || '')""")
+        assert all(value.isdigit() for value in size_labels), size_labels
+
+        # Code 128 handle resize must persist both dimensions without a release snap.
+        code_drag_before = page.evaluate("""() => {
+          const data=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+          const index=Number(document.getElementById('b21-entry-select')?.value||0);
+          const key=String(data[index]?._id);
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const code=all[key]?.elements.find(row=>row.id==='code');
+          return {key,w:code.w,h:code.h};
+        }""")
+        code_handle = page.locator('#b21-v2-code-resize-handle')
+        code_handle.wait_for(state='attached', timeout=5_000)
+        code_handle_box = code_handle.bounding_box()
+        assert code_handle_box is not None
+        page.mouse.move(code_handle_box['x']+code_handle_box['width']/2, code_handle_box['y']+code_handle_box['height']/2)
+        page.mouse.down()
+        page.mouse.move(code_handle_box['x']+code_handle_box['width']/2+14, code_handle_box['y']+code_handle_box['height']/2+10, steps=4)
+        page.mouse.up()
+        page.wait_for_function("""([key,width,height]) => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const code=all[key]?.elements.find(row=>row.id==='code');
+          return !!code && (code.w!==width || code.h!==height);
+        }""", arg=[code_drag_before['key'],code_drag_before['w'],code_drag_before['h']], timeout=5_000)
+        code_drag_after = page.evaluate("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const code=all[key].elements.find(row=>row.id==='code');
+          const stage=document.getElementById('b21-label-stage').getBoundingClientRect();
+          const box=document.querySelector('#b21-label-stage .b21-code-box').getBoundingClientRect();
+          return {w:code.w,h:code.h,boxW:box.width,boxH:box.height,stageW:stage.width,stageH:stage.height};
+        }""", code_drag_before['key'])
+        assert code_drag_after['w'] != code_drag_before['w'] or code_drag_after['h'] != code_drag_before['h'], (code_drag_before, code_drag_after)
+        assert abs(code_drag_after['boxW'] - code_drag_after['stageW']*code_drag_after['w']/100) < 2, code_drag_after
+        assert abs(code_drag_after['boxH'] - code_drag_after['stageH']*code_drag_after['h']/100) < 2, code_drag_after
 
         page.evaluate("""() => {
           const selector=document.querySelectorAll('#label-queue .entry-kind')[1];
@@ -717,6 +778,39 @@ def main() -> None:
         assert abs(qr_resize["code"]["w"] * qr_resize["dimensions"][0] - qr_resize["code"]["h"] * qr_resize["dimensions"][1]) < 0.01, qr_resize
         assert abs(qr_resize["code"]["w"] - 40) < 0.01, qr_resize
         assert abs(qr_resize["visualWidth"] - qr_resize["visualHeight"]) < 1, qr_resize
+
+        # QR handle drag stays square and its stored dimensions match the final preview.
+        qr_drag_before = page.evaluate("""() => {
+          const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+          const key=String(queue[Number(document.getElementById('b21-entry-select')?.value||0)]?._id);
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const code=all[key].elements.find(row=>row.id==='code');
+          return {key,w:code.w,h:code.h};
+        }""")
+        qr_handle = page.locator('#b21-v2-code-resize-handle')
+        qr_handle.wait_for(state='attached', timeout=5_000)
+        qr_handle_box = qr_handle.bounding_box()
+        assert qr_handle_box is not None
+        page.mouse.move(qr_handle_box['x']+qr_handle_box['width']/2, qr_handle_box['y']+qr_handle_box['height']/2)
+        page.mouse.down()
+        page.mouse.move(qr_handle_box['x']+qr_handle_box['width']/2+12, qr_handle_box['y']+qr_handle_box['height']/2+12, steps=4)
+        page.mouse.up()
+        page.wait_for_function("""([key,width,height]) => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const code=all[key]?.elements.find(row=>row.id==='code');
+          return !!code && (Math.abs(code.w-width)>0.001 || Math.abs(code.h-height)>0.001);
+        }""", arg=[qr_drag_before['key'],qr_drag_before['w'],qr_drag_before['h']], timeout=5_000)
+        qr_drag_after = page.evaluate("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const code=all[key].elements.find(row=>row.id==='code');
+          const stage=document.getElementById('b21-label-stage').getBoundingClientRect();
+          const visual=document.querySelector('#b21-label-stage .b21-code-content').getBoundingClientRect();
+          return {w:code.w,h:code.h,visualW:visual.width,visualH:visual.height,stageW:stage.width,stageH:stage.height};
+        }""", qr_drag_before['key'])
+        assert abs(qr_drag_after['w']*qr_resize['dimensions'][0] - qr_drag_after['h']*qr_resize['dimensions'][1]) < 0.01, qr_drag_after
+        assert abs(qr_drag_after['visualW'] - qr_drag_after['visualH']) < 1, qr_drag_after
+        assert abs(qr_drag_after['visualW'] - qr_drag_after['stageW']*qr_drag_after['w']/100) < 2, qr_drag_after
+        assert abs(qr_drag_after['visualH'] - qr_drag_after['stageH']*qr_drag_after['h']/100) < 2, qr_drag_after
 
         sticky_result = page.evaluate("""() => {
             const preview = document.querySelector('.b21-sticky-preview-card');
@@ -1095,8 +1189,9 @@ def main() -> None:
         assert all_after[1]["copies"] == target_before["copies"], all_after
         assert page.locator("#b21-v4-design-status").inner_text() == "Current design applied to 2 codes."
 
-        # Current label only must use the canonical job endpoint, never v30 batch queue.
-        label_hits = {"batch": 0, "jobs_post": 0}
+        # A row Print button submits only that queued label to the canonical job endpoint.
+        label_hits = {"batch": 0, "jobs_post": 0, "pages": 0}
+        label_quantities = []
 
         def handle_batch(route):
             label_hits["batch"] += 1
@@ -1104,6 +1199,9 @@ def main() -> None:
 
         def handle_job_create(route):
             label_hits["jobs_post"] += 1
+            payload = route.request.post_data_json
+            label_hits["pages"] = len(payload.get("pages", []))
+            label_quantities.extend(page.get("quantity") for page in payload.get("pages", []))
             route.fulfill(status=200, content_type="application/json", body=json.dumps({"id": "ci-label-job"}))
 
         def handle_job_status(route):
@@ -1116,12 +1214,15 @@ def main() -> None:
         page.route("**/labels/b21/print-batch-v30", handle_batch)
         page.route("**/labels/b21/jobs", lambda route: handle_job_create(route) if route.request.method == "POST" else route.continue_())
         page.route("**/labels/b21/jobs/ci-label-job", handle_job_status)
-        page.locator("#b21-v2-print-scope").select_option("current")
+        expected_single_quantity = page.evaluate("""() => {
+          const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+          return Number(queue[1]?.qty||1);
+        }""")
         try:
             with page.expect_request(lambda request: request.url.endswith("/labels/b21/jobs") and request.method == "POST", timeout=7_000):
-                page.locator("#label-niim-print").dispatch_event("click")
+                page.locator("#label-queue .entry-print").nth(1).click()
         except PlaywrightTimeoutError as exc:
-            raise AssertionError(f"Current-label print did not reach canonical job endpoint; hits={label_hits!r}") from exc
+            raise AssertionError(f"Single-label print did not reach canonical job endpoint; hits={label_hits!r}") from exc
         wait_until(
             lambda: label_hits["jobs_post"] == 1,
             f"Current-label job route callback did not complete; hits={label_hits!r}",
@@ -1129,6 +1230,8 @@ def main() -> None:
             step_ms=25,
         )
         assert label_hits["batch"] == 0, label_hits
+        assert label_hits["pages"] == 1, label_hits
+        assert label_quantities == [expected_single_quantity], (label_quantities, expected_single_quantity)
 
         # Restore Basic mode so later settings checks start from their default.
         if not global_advanced.is_visible():

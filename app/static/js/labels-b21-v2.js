@@ -136,8 +136,6 @@
     header.className = 'b21-v2-header' + (browserOutput && browserOutput.checked ? ' d-none' : '');
     header.innerHTML =
       '<div class="b21-v2-toolbar">' +
-        '<select class="form-select w-auto" id="b21-v2-print-scope" title="Print scope"><option value="queue">Print queue</option><option value="current">Current label only</option></select>' +
-        '<div class="input-group input-group-sm w-auto"><span class="input-group-text">Copies</span><input class="form-control" id="b21-v2-copies" type="number" min="1" max="99" value="1" style="width:5rem"></div>' +
         '<span class="small text-secondary b21-v2-job-state" id="b21-v2-job-state"></span>' +
       '</div>';
     bar.appendChild(header);
@@ -155,14 +153,8 @@
       const browserOutput = $('b21-output-grid') && $('b21-output-grid').querySelector('input[value="browser"]');
       print.classList.toggle('d-none', !!(browserOutput && browserOutput.checked));
       connect.insertAdjacentElement('afterend', print);
-      print.addEventListener('click', submitPrintJob);
+      print.addEventListener('click', () => submitPrintJob());
     }
-    $('b21-v2-copies').addEventListener('change', function () {
-      const entry = currentEntry(); if (!entry) return;
-      const s = getEntryState(entry, currentIndex());
-      s.copies = Math.max(1, Math.min(99, Number(this.value || 1)));
-      this.value = s.copies; saveEntryStates();
-    });
     return true;
   }
 
@@ -276,7 +268,6 @@
     const s=currentState(); if(!s) return;
     const profileSelect=$('b21-profile-select');
     if(profileSelect && profiles.some((p)=>String(p.id)===String(s.profileId))) profileSelect.value=s.profileId;
-    if($('b21-v2-copies')) $('b21-v2-copies').value=s.copies || 1;
     syncCalibration(); syncInspector(); renderStage();
   }
 
@@ -319,15 +310,15 @@
     if(el.type==='code'){
       const width=$('b21-v2-w'),height=$('b21-v2-h');
       const isQr=codeKind==='qr';
-      if(width){width.step=isQr?'any':'1';width.max=String(isQr?Math.min(100,100*p.height_mm/p.width_mm):100);}
-      if(height){height.step=isQr?'any':'1';height.max=String(isQr?Math.min(100,100*p.width_mm/p.height_mm):100);}
+      if(width){width.step='any';width.max=String(isQr?Math.min(100,100*p.height_mm/p.width_mm):100);}
+      if(height){height.step='any';height.max=String(isQr?Math.min(100,100*p.width_mm/p.height_mm):100);}
     }
     const defs=defaultForElement(el.type,el.id);
     ['x','y','w','h','rotation','fontSizePt','lineWidthMm'].forEach((key)=>{
       const input=$('b21-v2-'+key); const wrap=input&&input.closest('.b21-v2-range-wrap'); if(!input)return;
       const relevant=key==='fontSizePt'?el.type==='text':key==='lineWidthMm'?el.type==='line':true;
       if(wrap)wrap.classList.toggle('d-none',!relevant);
-      if(relevant){input.value=Number(el[key]??defs[key]??0);input.dataset.default=Number(defs[key]??0);const out=$('b21-v2-'+key+'-value');if(out)out.textContent=input.value;}
+      if(relevant){input.value=Number(el[key]??defs[key]??0);input.dataset.default=Number(defs[key]??0);const out=$('b21-v2-'+key+'-value');if(out)out.textContent=(key==='w'||key==='h')?String(Math.round(Number(input.value))):input.value;}
     });
     $('b21-v2-delete-element').disabled=['code','label','value'].includes(el.id);
     $('b21-v2-frame').checked=s.frame!==false;
@@ -353,7 +344,7 @@
       el.w=sideMm/p.width_mm*100;el.h=sideMm/p.height_mm*100;
     }
     if(changedKey==='w'||changedKey==='h'){
-      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=el[key];if(out)out.textContent=input.value;}});
+      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=el[key];if(out)out.textContent=String(Math.round(Number(input.value)));}});
     } else if(changedKey){const out=$('b21-v2-'+changedKey+'-value');if(out)out.textContent=target.value;}
     saveEntryStates();
     if(target&&target.id==='b21-v2-content')syncInspector();
@@ -425,6 +416,7 @@
     }
     if(!selectionNode)selectionNode=node;
     node.dataset.elementId=el.id;
+    node.classList.toggle('b21-layer-inverted',!!el.inverted);
     if(el.id===selectedElementId)selectionNode.classList.add('b21-v2-element-selected');
     const ox=(Number(cal.xMm||0)/p.width_mm)*100, oy=(Number(cal.yMm||0)/p.height_mm)*100;
     applyBox(node,Number(el.x||0)+ox,Number(el.y||0)+oy,Number(el.w||10),Number(el.h||10),Number(el.rotation||0));
@@ -501,7 +493,7 @@
     const initial=currentState()?.elements.find((row)=>String(row.id)===elementId);
     if(!initial||!rect.width||!rect.height)return;
     const origW=Number(initial.w||10),origH=Number(initial.h||10);
-    handle.setPointerCapture(event.pointerId);
+    stage.setPointerCapture(event.pointerId);
     const move=(e)=>{
       const state=currentState(),target=state&&state.elements.find((row)=>String(row.id)===elementId);
       if(!target)return;
@@ -511,17 +503,17 @@
       target.h=Math.max(1,Math.min(100,origH+2*localY/p.height_mm*100));
       node.style.width=target.w+'%';node.style.height=target.h+'%';
       positionTextResizeHandle(node,handle);
-      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=target[key];if(out)out.textContent=input.value;}});
+      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=target[key];if(out)out.textContent=String(Math.round(Number(input.value)));}});
       saveEntryStates();
     };
-    const end=(e)=>{try{handle.releasePointerCapture(e.pointerId);}catch(ignore){}window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);saveEntryStates();syncInspector();renderStage();};
-    /* Track on window because the handle itself is repositioned while dragging. */
-    window.addEventListener('pointermove',move);window.addEventListener('pointerup',end,{once:true});window.addEventListener('pointercancel',end,{once:true});
+    const end=(e)=>{try{stage.releasePointerCapture(e.pointerId);}catch(ignore){}stage.removeEventListener('pointermove',move);stage.removeEventListener('pointerup',end);stage.removeEventListener('pointercancel',end);saveEntryStates();syncInspector();renderStage();};
+    /* Capture on the stable stage because the resize handle moves with the text. */
+    stage.addEventListener('pointermove',move);stage.addEventListener('pointerup',end,{once:true});stage.addEventListener('pointercancel',end,{once:true});
   }
 
   function loadImage(url){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('Could not render code'));img.src=url;});}
   function drawContain(ctx,img,x,y,w,h){const scale=Math.min(w/img.naturalWidth,h/img.naturalHeight),dw=img.naturalWidth*scale,dh=img.naturalHeight*scale;ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);}
-  function drawText(ctx,text,cx,cy,maxWidth,fontPx,rotation,mono){ctx.save();ctx.translate(cx,cy);ctx.rotate(rotation*Math.PI/180);ctx.fillStyle='#000';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=(mono?'500 ':'600 ')+Math.max(8,fontPx)+'px '+(mono?'monospace':'sans-serif');const words=String(text||'').split(/\s+/),lines=[];let line='';words.forEach((word)=>{const c=line?line+' '+word:word;if(ctx.measureText(c).width<=maxWidth||!line)line=c;else{lines.push(line);line=word;}});if(line)lines.push(line);const rows=lines.slice(0,4),lh=fontPx*1.08,start=-(rows.length-1)*lh/2;rows.forEach((row,i)=>ctx.fillText(row,0,start+i*lh,maxWidth));ctx.restore();}
+  function drawText(ctx,text,cx,cy,maxWidth,fontPx,rotation,mono,inverted){ctx.save();ctx.translate(cx,cy);ctx.rotate(rotation*Math.PI/180);ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=(mono?'500 ':'600 ')+Math.max(8,fontPx)+'px '+(mono?'monospace':'sans-serif');const words=String(text||'').split(/\s+/),lines=[];let line='';words.forEach((word)=>{const c=line?line+' '+word:word;if(ctx.measureText(c).width<=maxWidth||!line)line=c;else{lines.push(line);line=word;}});if(line)lines.push(line);const rows=lines.slice(0,4),lh=fontPx*1.08,start=-(rows.length-1)*lh/2;if(inverted){ctx.fillStyle='#000';const pad=Math.max(1,fontPx*.06);rows.forEach((row,i)=>{const rowWidth=Math.min(maxWidth,ctx.measureText(row).width)+pad*2;ctx.fillRect(-rowWidth/2,start+i*lh-lh/2-pad/2,rowWidth,lh+pad);});}ctx.fillStyle=inverted?'#fff':'#000';rows.forEach((row,i)=>ctx.fillText(row,0,start+i*lh,maxWidth));ctx.restore();}
 
   async function renderSnapshot(entry,s,p,cal,calibrationOnly){
     const ppm=p.dpi/25.4,width=Math.max(8,Math.round(p.width_mm*ppm)),height=Math.max(8,Math.round(p.height_mm*ppm));const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.fillStyle='#000';ctx.strokeStyle='#000';ctx.save();ctx.translate(Number(cal.xMm||0)*ppm,Number(cal.yMm||0)*ppm);
@@ -529,25 +521,30 @@
     if(s.frame!==false){const inset=Number(s.frameInsetMm||1)*ppm,line=Math.max(1,Number(s.frameWidthMm||.35)*ppm);ctx.lineWidth=line;ctx.strokeRect(inset+line/2,inset+line/2,width-2*inset-line,height-2*inset-line);}
     for(const el of s.elements.filter((row)=>row.visible!==false)){
       const cx=width*el.x/100,cy=height*el.y/100,w=width*el.w/100,h=height*el.h/100,rot=Number(el.rotation||0);
-      if(el.type==='code'){const value=s.codeValue||entry.code||'',url='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(value),img=await loadImage(url);ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);if(resolvedCodeKind(entry,value)==='code128')ctx.drawImage(img,-w/2,-h/2,w,h);else{const side=Math.min(w,h);drawContain(ctx,img,-side/2,-side/2,side,side);}ctx.restore();}
-      else if(el.type==='line'){ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);ctx.lineWidth=Math.max(1,Number(el.lineWidthMm||.35)*ppm);ctx.beginPath();ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);ctx.stroke();ctx.restore();}
-      else drawText(ctx,displayText(el,entry,s),cx,cy,w,Number(el.fontSizePt||14)*p.dpi/72,rot,!!el.mono);
+      if(el.type==='code'){const value=s.codeValue||entry.code||'',url='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(value),img=await loadImage(url);ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);if(el.inverted){ctx.fillStyle='#000';ctx.fillRect(-w/2,-h/2,w,h);ctx.filter='invert(1)';}if(resolvedCodeKind(entry,value)==='code128')ctx.drawImage(img,-w/2,-h/2,w,h);else{const side=Math.min(w,h);drawContain(ctx,img,-side/2,-side/2,side,side);}ctx.restore();}
+      else if(el.type==='line'){ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);if(el.inverted){ctx.fillStyle='#000';ctx.fillRect(-w/2,-h/2,w,h);ctx.strokeStyle='#fff';}ctx.lineWidth=Math.max(1,Number(el.lineWidthMm||.35)*ppm);ctx.beginPath();ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);ctx.stroke();ctx.restore();}
+      else drawText(ctx,displayText(el,entry,s),cx,cy,w,Number(el.fontSizePt||14)*p.dpi/72,rot,!!el.mono,!!el.inverted);
     }
     ctx.restore();return canvas.toDataURL('image/png').split(',',2)[1];
   }
 
-  async function submitPrintJob(){
-    const queue=readQueue();if(!queue.length)return;const scope=($('b21-v2-print-scope')||{}).value||'queue';const indices=scope==='current'?[currentIndex()]:queue.map((_,i)=>i);const button=$('label-niim-print'),status=$('b21-v2-job-state');if(button)button.disabled=true;if(status)status.textContent='Preparing…';
+  async function submitPrintJob(entryId){
+    const queue=readQueue();if(!queue.length)return;
+    const singleIndex=entryId==null?-1:queue.findIndex((entry)=>String(entry&&entry._id)===String(entryId));
+    if(entryId!=null&&singleIndex<0)return;
+    const indices=entryId==null?queue.map((_,i)=>i):[singleIndex];
+    const button=entryId==null?$('label-niim-print'):Array.from(document.querySelectorAll('#label-queue .entry-print')).find((item)=>String(item.dataset.entryId)===String(entryId));
+    const status=$('b21-v2-job-state');if(button)button.disabled=true;if(status)status.textContent='Preparing…';
     try{
       // Snapshot first: subsequent UI changes cannot alter this job.
       const defs=indices.map((index)=>{const entry=clone(queue[index]),s=clone(getEntryState(queue[index],index)),p=clone(profileById(s.profileId)),cal=clone(getCalibration(p.id));return{entry,s,p,cal};});
-      const pages=[];for(const def of defs){pages.push({image_base64:await renderSnapshot(def.entry,def.s,def.p,def.cal,false),width_mm:def.p.width_mm,height_mm:def.p.height_mm,quantity:def.s.copies||1,density:def.p.density,label_type:def.p.label_type,dpi:def.p.dpi,threshold:def.s.threshold||128});}
-      const job=await fetchJson('/labels/b21/jobs',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pages})});activeJobId=job.id;if(status)status.textContent='Queued · '+job.id;pollJob(job.id);
+      const pages=[];for(const def of defs){pages.push({image_base64:await renderSnapshot(def.entry,def.s,def.p,def.cal,false),width_mm:def.p.width_mm,height_mm:def.p.height_mm,quantity:Math.max(1,Number(def.entry.qty||def.s.copies||1)),density:def.p.density,label_type:def.p.label_type,dpi:def.p.dpi,threshold:def.s.threshold||128});}
+      const job=await fetchJson('/labels/b21/jobs',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pages})});activeJobId=job.id;if(status)status.textContent='Queued · '+job.id;pollJob(job.id,button);
     }catch(error){if(status){status.className='small text-danger b21-v2-job-state';status.textContent=error.message;}if(button)button.disabled=false;}
   }
-  function pollJob(id){
+  function pollJob(id,triggerButton){
     clearInterval(jobPoll);
-    const status=$('b21-v2-job-state'),button=$('label-niim-print');
+    const status=$('b21-v2-job-state'),button=triggerButton||$('label-niim-print');
     jobPoll=setInterval(async()=>{
       try{
         const job=await fetchJson('/labels/b21/jobs/'+encodeURIComponent(id));
@@ -587,6 +584,22 @@
       select.dispatchEvent(new Event('change',{bubbles:true}));
       return true;
     },
+    printQueueEntry: function (entryId) { return submitPrintJob(entryId); },
+    setCodeDimensions: function (widthPct,heightPct) {
+      const state=currentState(),code=state&&state.elements.find((row)=>row.type==='code');
+      const width=Number(widthPct),height=Number(heightPct);
+      if(!state||!code||!Number.isFinite(width)||!Number.isFinite(height))return false;
+      const profile=profileById(state.profileId),kind=resolvedCodeKind(currentEntry(),state.codeValue);
+      if(kind==='qr'){
+        const maxSide=Math.min(profile.width_mm,profile.height_mm);
+        const minSide=Math.min(maxSide,Math.max(profile.width_mm*.02,profile.height_mm*.01));
+        const side=Math.max(minSide,Math.min(maxSide,Math.min(width*profile.width_mm/100,height*profile.height_mm/100)));
+        code.w=side/profile.width_mm*100;code.h=side/profile.height_mm*100;
+      }else{
+        code.w=Math.max(2,Math.min(100,width));code.h=Math.max(1,Math.min(100,height));
+      }
+      selectedElementId='code';persistAndRender();return true;
+    },
     moveLayer: function (id, direction) {
       const state = currentState();
       if (!state || !Array.isArray(state.elements)) return false;
@@ -605,6 +618,15 @@
       if (!element) return false;
       element.visible = !!visible;
       selectedElementId = String(id);
+      persistAndRender();
+      return true;
+    },
+    toggleInvert: function (id) {
+      const state=currentState();
+      const element=state&&Array.isArray(state.elements)&&state.elements.find((row)=>String(row.id)===String(id));
+      if(!element)return false;
+      element.inverted=!element.inverted;
+      selectedElementId=String(id);
       persistAndRender();
       return true;
     },

@@ -37,6 +37,12 @@
         group.innerHTML = '<button type="button" class="btn btn-outline-secondary" data-label-mode="quick"><i class="ti ti-sparkles icon"></i> Quick print</button>' +
             '<button type="button" class="btn btn-outline-secondary" data-label-mode="advanced"><i class="ti ti-adjustments icon"></i> Advanced editor</button>';
         header.insertBefore(group, header.firstChild);
+        var printAll = document.getElementById('label-print');
+        var quickPrint = group.querySelector('[data-label-mode="quick"]');
+        if (printAll && quickPrint) {
+            printAll.innerHTML = '<i class="ti ti-printer icon"></i> Print all';
+            quickPrint.insertAdjacentElement('afterend', printAll);
+        }
         group.querySelectorAll('[data-label-mode]').forEach(function(button) {
             button.addEventListener('click', function() {
                 advancedMode = button.dataset.labelMode === 'advanced';
@@ -183,7 +189,7 @@
         var link = document.createElement('link');
         link.id = 'b21-designer-stylesheet';
         link.rel = 'stylesheet';
-        link.href = '/static/css/labels-b21.css?v=20261009-3';
+        link.href = '/static/css/labels-b21.css?v=20261009-5';
         document.head.appendChild(link);
     }
 

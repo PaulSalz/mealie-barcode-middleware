@@ -183,7 +183,7 @@
                 '<div class="col-md-6"><label class="form-label small mb-1">Label</label><input class="form-control form-control-sm entry-label" value="' + esc(entry.label) + '"></div>' +
                 '<div class="col-md-6"><label class="form-label small mb-1">Code value</label><input class="form-control form-control-sm font-monospace entry-code" value="' + esc(entry.code) + '"' + (locked ? ' readonly' : '') + '></div>' +
                 '<div class="col-md-5"><label class="form-label small mb-1">Code style</label><select class="form-select form-select-sm entry-kind"><option value="auto"' + (entry.kind === 'auto' ? ' selected' : '') + '>Auto</option><option value="qr"' + (entry.kind === 'qr' ? ' selected' : '') + '>QR</option><option value="code128"' + (entry.kind === 'code128' ? ' selected' : '') + '>Code 128</option></select></div>' +
-                '<div class="col-md-5"><label class="form-label small mb-1">Copies</label><div class="input-group input-group-sm label-copy-actions"><input class="form-control entry-qty" type="number" min="1" max="99" step="1" value="' + entry.qty + '" aria-label="Copies"><button class="btn btn-outline-primary entry-edit" type="button" data-entry-id="' + esc(entry._id) + '" title="Edit label"><i class="ti ti-edit"></i> Edit</button></div></div>' +
+                '<div class="col-md-7"><label class="form-label small mb-1">Copies</label><div class="input-group input-group-sm label-copy-actions"><input class="form-control entry-qty" type="number" min="1" max="99" step="1" value="' + entry.qty + '" aria-label="Copies"><button class="btn btn-outline-primary entry-print" type="button" data-entry-id="' + esc(entry._id) + '" title="Print this label"><i class="ti ti-printer"></i> Print</button><button class="btn btn-outline-primary entry-edit" type="button" data-entry-id="' + esc(entry._id) + '" title="Edit label"><i class="ti ti-edit"></i> Edit</button></div></div>' +
 
                 '</div><div class="form-hint entry-hint mt-1">' + (entry.kind === 'auto' ? 'Auto uses Code 128 for short ASCII IDs and QR for longer/Unicode values.' : '') + '</div></div>' +
                 '</div></div></div>';
@@ -192,6 +192,7 @@
             col.querySelector('.entry-qty').addEventListener('change', function() {
                 setQty(entry._id, this.value);
             });
+            col.querySelector('.entry-print').addEventListener('click', function() { printQueueEntry(entry._id); });
             col.querySelector('.entry-edit').addEventListener('click', function() {
                 var editor = window.__b2mB21LabelEditor;
                 var select = $('b21-entry-select');
@@ -340,12 +341,13 @@
         $('preview-summary').textContent = summary;
     }
 
-    function renderPrint() {
+    function renderPrint(entries) {
         var values = layout();
         var grid = $('print-grid');
+        var labelsToPrint = Array.isArray(entries) ? entries : queue;
         grid.innerHTML = '';
         applyVars(grid, values, true);
-        queue.forEach(function(entry) {
+        labelsToPrint.forEach(function(entry) {
             for (var n = 0; n < entry.qty; n++) grid.appendChild(createLabelCell(entry, values, true));
         });
         var style = $('dynamic-print-style');
@@ -435,14 +437,15 @@
         } catch (e) { root.innerHTML = '<div class="text-danger">Action search failed</div>'; }
     }, 180);
 
-    async function registerQueue() {
+    async function registerQueue(entries) {
         refreshQueueFromStorage();
         render();
-        if (!queue.length) return;
+        var labelsToRegister = Array.isArray(entries) ? entries : queue;
+        if (!labelsToRegister.length) return;
         var data = await fetchJson('/labels/register', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-            body: JSON.stringify({labels: queue.map(function(entry) {
+            body: JSON.stringify({labels: labelsToRegister.map(function(entry) {
                 return {
                     code: entry.code,
                     label: entry.label,
@@ -457,19 +460,31 @@
         return data;
     }
 
-    async function registerAndPrint() {
-        if (!queue.length) return;
-        var button = $('label-print');
-        button.disabled = true;
+    async function registerAndPrint(entryId) {
+        refreshQueueFromStorage();
+        var entriesToPrint = entryId == null ? queue.slice() : queue.filter(function(entry) { return String(entry._id) === String(entryId); });
+        if (!entriesToPrint.length) return;
+        var button = entryId == null ? $('label-print') : document.querySelector('#label-queue .entry-print[data-entry-id="' + CSS.escape(String(entryId)) + '"]');
+        if (button) button.disabled = true;
         try {
-            await registerQueue();
-            renderPrint();
+            await registerQueue(entriesToPrint);
+            renderPrint(entriesToPrint);
             window.print();
         } catch (error) {
             window.alert('Could not register labels: ' + error.message);
         } finally {
-            button.disabled = queue.length === 0;
+            var printAll = $('label-print');
+            if (printAll) printAll.disabled = queue.length === 0;
         }
+    }
+
+    function printQueueEntry(entryId) {
+        var b21Output = $('b21-output-b21');
+        var editor = window.__b2mB21LabelEditor;
+        if (b21Output && b21Output.checked && editor && typeof editor.printQueueEntry === 'function') {
+            return editor.printQueueEntry(entryId);
+        }
+        return registerAndPrint(entryId);
     }
 
     function imageFromSvg(svg) {
