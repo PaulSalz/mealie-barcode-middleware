@@ -685,7 +685,8 @@ def main() -> None:
               const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
               const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
               const code=all[String(queue[1]._id)]?.elements.find(row=>row.id==='code');
-              return !!code && Math.abs(code.w*50-code.h*30)<0.01;
+              const dimensions=document.querySelector('#b21-label-stage').style.aspectRatio.split('/').map(value=>Number(value.trim()));
+              return !!code && Math.abs(code.w*dimensions[0]-code.h*dimensions[1])<0.01;
             }""",
             timeout=5_000,
         )
@@ -699,7 +700,8 @@ def main() -> None:
               const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
               const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
               const code=all[String(queue[1]._id)]?.elements.find(row=>row.id==='code');
-              return !!code && Math.abs(code.w-40)<0.01 && Math.abs(code.w*50-code.h*30)<0.01;
+              const dimensions=document.querySelector('#b21-label-stage').style.aspectRatio.split('/').map(value=>Number(value.trim()));
+              return !!code && Math.abs(code.w-40)<0.01 && Math.abs(code.w*dimensions[0]-code.h*dimensions[1])<0.01;
             }""",
             timeout=5_000,
         )
@@ -710,7 +712,7 @@ def main() -> None:
           const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
           const code=all[String(queue[1]._id)].elements.find(row=>row.id==='code');
           const rect=stage.querySelector('.b21-code-content').getBoundingClientRect();
-          return {code,visualWidth:rect.width,visualHeight:rect.height,dimensions:[50,30],inputValue:widthInput.value,selectedIndex:document.getElementById('b21-entry-select')?.value,imageSrc:stage.querySelector('.b21-code')?.src};
+          return {code,visualWidth:rect.width,visualHeight:rect.height,dimensions:stage.style.aspectRatio.split('/').map(value=>Number(value.trim())),inputValue:widthInput.value,selectedIndex:document.getElementById('b21-entry-select')?.value,imageSrc:stage.querySelector('.b21-code')?.src};
         }""")
         assert abs(qr_resize["code"]["w"] * qr_resize["dimensions"][0] - qr_resize["code"]["h"] * qr_resize["dimensions"][1]) < 0.01, qr_resize
         assert abs(qr_resize["code"]["w"] - 40) < 0.01, qr_resize
