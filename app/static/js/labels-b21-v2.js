@@ -406,6 +406,7 @@
 
   function displayText(el,entry,s){ if(el.type==='code')return ''; if(el.source==='label')return entry.label||entry.code||''; if(el.source==='value')return s.codeValue||entry.code||''; return el.text||''; }
   function buildStageElement(el,entry,s,p,cal){
+    const stage=$('b21-label-stage');
     let node, selectionNode, codeVisual=null, codeImage=null;
     if(el.type==='code'){
       node=document.createElement('div');node.className='b21-element b21-code-box';
