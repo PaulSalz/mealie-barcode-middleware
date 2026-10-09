@@ -199,10 +199,16 @@
 #b21-label-stage .b21-v2-line-stroke { position: absolute; left: 0; top: 50%; width: 100%; height: 12px; transform: translateY(-50%); pointer-events: auto; cursor: grab; }
 #b21-label-stage .b21-v2-line-stroke::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: var(--b21-line-width, 1px) var(--b21-line-style, solid) var(--b21-line-color, #111); transform: translateY(-50%); }
 #b21-label-stage .b21-v2-line-stroke:active { cursor: grabbing; }
-#b21-label-stage .b21-v2-frame { pointer-events: none; }
+#b21-label-stage .b21-v2-frame {
+  pointer-events: none;
+  box-sizing: border-box;
+  border-style: var(--b21-frame-style, solid) !important;
+  border-width: var(--b21-frame-width, 1px) !important;
+  border-color: var(--b21-frame-color, #111) !important;
+}
 #b21-label-stage .b21-v2-frame-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 #b21-label-stage .b21-v2-frame-stroke { pointer-events: stroke; cursor: grab; }
-#b21-label-stage .b21-v2-frame-stroke.b21-v2-element-selected { stroke: var(--tblr-primary) !important; }
 #b21-label-stage .b21-v2-resize-handle.b21-v2-line-resize-handle { left: 100%; top: 50%; transform: translate(-50%, -50%); }
+#b21-label-stage .b21-v2-resize-handle.b21-v2-frame-resize-handle { left: 100%; top: 100%; transform: translate(-50%, -50%); }
 #b21-label-stage .b21-v2-line.b21-layer-inverted { background: #111; }
 #b21-v2-line-style-wrap { min-width: 0; }
