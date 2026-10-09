@@ -76,8 +76,8 @@
             setHidden(code ? code.closest('.col-md-6') : null, !advancedMode);
             setHidden(kind ? kind.closest('.col-md-5') : null, !advancedMode);
             setHidden(hint, !advancedMode);
-            var badges = card.querySelector('.col-md-4');
-            setHidden(badges, !advancedMode);
+            var badges = card.querySelector('.entry-target-badge');
+            setHidden(badges ? badges.parentElement : null, !advancedMode);
         });
 
         var printCard = document.getElementById('label-format');
@@ -183,7 +183,7 @@
         var link = document.createElement('link');
         link.id = 'b21-designer-stylesheet';
         link.rel = 'stylesheet';
-        link.href = '/static/css/labels-b21.css?v=20261009-1';
+        link.href = '/static/css/labels-b21.css?v=20261009-2';
         document.head.appendChild(link);
     }
 

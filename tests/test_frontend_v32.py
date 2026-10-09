@@ -17,7 +17,7 @@ def test_v35_assets_keep_one_theme_runtime():
     assert "js/ui-fixes-v30.js" not in GLOBAL_JS
     assert "js/labels-scope-v32.js" in LABEL_JS
     assert LABEL_JS.index("js/labels-scope-v32.js") < LABEL_JS.index("js/labels-fixes-v30.js")
-    assert APP_VERSION == "2026.10.09.1"
+    assert APP_VERSION == "2026.10.09.2"
 
 
 def test_navbar_mode_is_atomic_and_persisted_per_user():
@@ -164,13 +164,19 @@ def test_b21_output_controls_follow_the_selected_output():
     output = read("app/static/js/labels-b21.js")
     editor = read("app/static/js/labels-b21-v2.js")
     css = read("app/static/css/labels-b21.css")
+    queue = read("app/static/js/labels-page.js")
     assert 'id="b21-output-grid" data-active-mode="browser"' in output
     assert 'id="b21-printer-card"' in output
     assert "$('b21-printer-card')?.classList.toggle('d-none', browser)" in output
     assert 'header.className = \'b21-v2-header\'' in editor
     assert 'header.classList.toggle(\'d-none\', !b21Output || !b21Output.checked)' in editor
     assert '.b21-output-grid[data-active-mode="b21"] { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }' in css
-    assert '#b21-preview-selector { align-items: center; justify-content: flex-end; text-align: right; }' in css
+    assert "Preview label" not in output
+    assert "entrySelect.hidden = true" in output
+    assert "b21-preview-selector" not in output
+    assert "selectQueueEntry: function (entryId)" in editor
+    assert ".entry-edit" in queue
+    assert "scrollIntoView({behavior:'smooth', block:'center'})" in queue
 
 
 def test_b21_drag_and_resize_use_visible_objects_and_rotated_corners():
@@ -181,7 +187,7 @@ def test_b21_drag_and_resize_use_visible_objects_and_rotated_corners():
     assert "event.target.closest('.b21-code-content')" in editor
     assert "event.target.closest('.b21-v2-text-content')" in editor
     assert "localX=dx*Math.cos(angle)+dy*Math.sin(angle)" in editor
-    assert "projected=2*(localX+localY/aspect)/(1+1/(aspect*aspect))" in resize
+    assert "Math.min(originalWidthMm,originalHeightMm)+localX+localY" in resize
     assert "function currentCodeKind(image)" in resize
     assert "value.length<=32?'code128':'qr'" in resize
     assert "cx+cos*width/2-sin*height/2" in resize
@@ -189,8 +195,31 @@ def test_b21_drag_and_resize_use_visible_objects_and_rotated_corners():
     assert "#b21-label-stage .b21-element { pointer-events: none; cursor: default; }" in css
     assert "#b21-label-stage .b21-code-content" in css
     assert "cursor: grab;" in css
-    assert "elementWidthMm=Math.min(elementWidthMm,elementHeightMm*ratio)" in editor
+    assert "const sr=stage.getBoundingClientRect()" in editor
+    assert "let vr=visual.getBoundingClientRect()" in editor
+    assert "el.x+=((sr.left-vr.left)/sr.width)*100" in editor
+    assert "target.w=Math.max(2,Math.min(100,origW+2*localX/p.width_mm*100))" in editor
+    assert "saveEntryStates();" in editor
     assert "positionTextResizeHandle(node,handle)" in editor
+
+
+def test_b21_qr_links_dimensions_and_code128_can_stretch():
+    editor = read("app/static/js/labels-b21-v2.js")
+    resize = read("app/static/js/labels-b21-v2-patch.js")
+    queue = read("app/static/js/labels-page.js")
+    css = read("app/static/css/labels-b21.css")
+    assert "code.w=nextW;code.h=nextH" in editor
+    assert "const sideMm=changedKey==='w'?Number(el.w||0)*p.width_mm/100:Number(el.h||0)*p.height_mm/100" in editor
+    assert "el.w=sideMm/p.width_mm*100" in editor and "el.h=sideMm/p.height_mm*100" in editor
+    assert "visual.style.width='100%'" in editor
+    assert "image.style.objectFit='fill'" in editor
+    assert "ctx.drawImage(img,-w/2,-h/2,w,h)" in editor
+    assert "newWidthMm=Math.max(Math.min(2,dimensions.width)" in resize
+    assert "newHeightMm=Math.max(Math.min(1,dimensions.height)" in resize
+    assert "class=\"form-control entry-qty\" type=\"number\"" in queue
+    assert "entry-target-badge" in queue and "kindLabel" not in queue
+    assert "#label-queue .entry-kind," in css
+    assert "#b21-v2-copies { height: calc(1.42857143em + .5rem + 2px); }" in css
 
 
 def test_b21_presets_reset_button_and_queue_feedback_regressions():

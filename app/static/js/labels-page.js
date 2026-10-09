@@ -150,11 +150,12 @@
         render();
     }
 
-    function updateQty(id, delta) {
+    function setQty(id, quantity) {
         refreshQueueFromStorage();
         var entry = queue.find(function(row) { return row._id === String(id); });
         if (!entry) return;
-        entry.qty = Math.max(1, Math.min(99, entry.qty + delta));
+        var parsed = Number(quantity);
+        entry.qty = Math.max(1, Math.min(99, Number.isFinite(parsed) ? Math.round(parsed) : 1));
         persist({queue: true});
         render();
     }
@@ -162,10 +163,6 @@
     function typeBadge(type) {
         var labels = {food: 'Food', recipe: 'Recipe', action: 'Action', generic: 'Generic', custom: 'Custom'};
         return labels[type] || type;
-    }
-
-    function kindLabel(kind) {
-        return {auto: 'Auto', qr: 'QR', code128: 'Code 128'}[kind] || kind;
     }
 
     function renderQueue() {
@@ -186,14 +183,36 @@
                 '<div class="col-md-6"><label class="form-label small mb-1">Label</label><input class="form-control form-control-sm entry-label" value="' + esc(entry.label) + '"></div>' +
                 '<div class="col-md-6"><label class="form-label small mb-1">Code value</label><input class="form-control form-control-sm font-monospace entry-code" value="' + esc(entry.code) + '"' + (locked ? ' readonly' : '') + '></div>' +
                 '<div class="col-md-5"><label class="form-label small mb-1">Code style</label><select class="form-select form-select-sm entry-kind"><option value="auto"' + (entry.kind === 'auto' ? ' selected' : '') + '>Auto</option><option value="qr"' + (entry.kind === 'qr' ? ' selected' : '') + '>QR</option><option value="code128"' + (entry.kind === 'code128' ? ' selected' : '') + '>Code 128</option></select></div>' +
-                '<div class="col-md-3"><label class="form-label small mb-1">Copies</label><div class="label-qty"><button type="button" data-delta="-1">−</button><span>' + entry.qty + '</span><button type="button" data-delta="1">+</button></div></div>' +
-                '<div class="col-md-4 d-flex align-items-end pb-1"><span class="badge bg-blue-lt me-1">' + esc(typeBadge(entry.target_type)) + '</span><span class="badge bg-muted-lt">' + esc(kindLabel(entry.kind)) + '</span></div>' +
+                '<div class="col-md-5"><label class="form-label small mb-1">Copies</label><div class="input-group input-group-sm label-copy-actions"><input class="form-control entry-qty" type="number" min="1" max="99" step="1" value="' + entry.qty + '" aria-label="Copies"><button class="btn btn-outline-primary entry-edit" type="button" data-entry-id="' + esc(entry._id) + '" title="Edit label"><i class="ti ti-edit"></i> Edit</button></div></div>' +
+                '<div class="col-md-2 d-flex align-items-end pb-1">' + (entry.target_type === 'custom' ? '' : '<span class="badge bg-blue-lt entry-target-badge">' + esc(typeBadge(entry.target_type)) + '</span>') + '</div>' +
                 '</div><div class="form-hint entry-hint mt-1">' + (entry.kind === 'auto' ? 'Auto uses Code 128 for short ASCII IDs and QR for longer/Unicode values.' : '') + '</div></div>' +
                 '</div></div></div>';
 
             col.querySelector('.label-remove').addEventListener('click', function() { removeEntry(entry._id); });
-            col.querySelectorAll('[data-delta]').forEach(function(button) {
-                button.addEventListener('click', function() { updateQty(entry._id, Number(button.dataset.delta)); });
+            col.querySelector('.entry-qty').addEventListener('change', function() {
+                setQty(entry._id, this.value);
+            });
+            col.querySelector('.entry-edit').addEventListener('click', function() {
+                var editor = window.__b2mB21LabelEditor;
+                var select = $('b21-entry-select');
+                var index = queue.findIndex(function(row) { return String(row._id) === String(entry._id); });
+                if (editor && typeof editor.selectQueueEntry === 'function') editor.selectQueueEntry(entry._id);
+                else if (select && index >= 0) {
+                    select.value = String(index);
+                    select.dispatchEvent(new Event('change', {bubbles:true}));
+                }
+                var output = $('b21-output-b21');
+                if (output && !output.disabled && !output.checked) {
+                    output.checked = true;
+                    output.dispatchEvent(new Event('change', {bubbles:true}));
+                }
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(function() {
+                        var stage = $('b21-label-stage');
+                        var target = stage && !stage.closest('.d-none') ? stage : $('browser-preview-body');
+                        if (target) target.scrollIntoView({behavior:'smooth', block:'center'});
+                    });
+                });
             });
             col.querySelector('.entry-label').addEventListener('input', function() {
                 var entryId = entry._id;

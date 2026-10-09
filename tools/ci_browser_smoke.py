@@ -578,12 +578,19 @@ def main() -> None:
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
+        page.wait_for_function(
+            "() => { const link=document.getElementById('b21-designer-stylesheet'); return !!link && !!link.sheet && link.sheet.cssRules.length > 0; }",
+            timeout=5_000,
+        )
 
-        # The B21 selector belongs in the preview heading; redundant printer data stays in Settings.
+        # Queue edit actions replace the preview dropdown; redundant printer data stays in Settings.
         label_ui = page.evaluate("""() => {
           const preview = document.querySelector('.b21-sticky-preview-card');
-          const header = preview && preview.querySelector('.card-header');
           const selector = document.getElementById('b21-preview-selector');
+          const entrySelect = document.getElementById('b21-entry-select');
+          const kind = document.querySelector('#label-queue .entry-kind');
+          const copies = document.querySelector('#label-queue .entry-qty');
+          const edit = document.querySelector('#label-queue .entry-edit');
           const layers = document.getElementById('b21-v2-layers-header');
           const presetHeader = document.getElementById('b21-v13-preset-header');
           const reset = document.getElementById('b21-v2-reset-all');
@@ -595,8 +602,11 @@ def main() -> None:
             .filter(id => document.getElementById(id)).length;
           return {
             title: preview?.querySelector('.card-title')?.textContent.trim(),
-            selectorInHeader: !!selector && selector.parentElement === header,
-            selectorVisible: !!selector && getComputedStyle(selector).display !== 'none',
+            selectorRemoved: !selector,
+            entrySelectHidden: !!entrySelect && entrySelect.hidden,
+            queueEditVisible: !!edit && getComputedStyle(edit).display !== 'none',
+            copiesHeight: copies ? parseFloat(getComputedStyle(copies).height) : null,
+            kindHeight: kind ? parseFloat(getComputedStyle(kind).height) : null,
             previewMeta: !!document.getElementById('b21-preview-meta'),
             printerInfo, connectVisible: !!document.querySelector('#b21-connect-button'),
             layersTitle: layers?.querySelector('.fw-semibold')?.textContent.trim(),
@@ -612,7 +622,9 @@ def main() -> None:
           };
         }""")
         assert label_ui["title"] == "B21 label preview", label_ui
-        assert label_ui["selectorInHeader"] and label_ui["selectorVisible"], label_ui
+        assert label_ui["selectorRemoved"] and label_ui["entrySelectHidden"], label_ui
+        assert label_ui["queueEditVisible"], label_ui
+        assert abs(label_ui["copiesHeight"] - label_ui["kindHeight"]) < 1, label_ui
         assert not label_ui["previewMeta"], label_ui
         assert label_ui["printerInfo"] == 0 and label_ui["connectVisible"], label_ui
         assert label_ui["layersTitle"] == "Layers" and label_ui["layersMargin"] >= 16, label_ui
@@ -621,6 +633,90 @@ def main() -> None:
         assert label_ui["alignTitle"] == "Align" and label_ui["alignHintCount"] == 0, label_ui
         assert label_ui["duplicateAlignLabel"] == "", label_ui
         assert label_ui["dividerWidth"] == 1 and label_ui["dividerBeforeTypography"], label_ui
+
+        page.locator("#label-queue .entry-edit").nth(1).click()
+        assert page.locator("#b21-entry-select").input_value() == "1"
+        page.wait_for_function(
+            "() => document.querySelector('#b21-label-stage [data-element-id=label]')?.textContent === 'CI Label Two'",
+            timeout=5_000,
+        )
+        page.wait_for_function(
+            "() => { const image=document.querySelector('#b21-label-stage .b21-code'); return !!image && image.complete && image.naturalWidth > 0; }",
+            timeout=5_000,
+        )
+        page.locator('#b21-v24-layer-list [data-layer-select="code"]').click()
+        for align_mode, edge in (("right", "right"), ("left", "left")):
+            page.locator(f'#b21-v2-align [data-align="{align_mode}"]').click()
+            page.wait_for_function(
+                "edge => { const stage=document.querySelector('#b21-label-stage'), code=stage?.querySelector('.b21-code-content'); if(!stage||!code)return false; const a=stage.getBoundingClientRect(),b=code.getBoundingClientRect(); return Math.abs(a[edge]-b[edge])<2; }",
+                arg=edge,
+                timeout=5_000,
+            )
+
+        code128_resize = page.evaluate("""() => {
+          const stage=document.querySelector('#b21-label-stage');
+          const widthInput=document.getElementById('b21-v2-w');
+          const heightInput=document.getElementById('b21-v2-h');
+          const bounds=()=>{const rect=stage.querySelector('.b21-code-content').getBoundingClientRect();return {width:rect.width,height:rect.height};};
+          const beforeWidth=bounds();
+          widthInput.value=String(Math.min(100,Number(widthInput.value)+5));
+          widthInput.dispatchEvent(new Event('input',{bubbles:true}));
+          const afterWidth=bounds();
+          heightInput.value=String(Math.max(1,Number(heightInput.value)-8));
+          heightInput.dispatchEvent(new Event('input',{bubbles:true}));
+          return {beforeWidth,afterWidth,afterHeight:bounds()};
+        }""")
+        assert code128_resize["afterWidth"]["width"] > code128_resize["beforeWidth"]["width"] + 1, code128_resize
+        assert abs(code128_resize["afterWidth"]["height"] - code128_resize["beforeWidth"]["height"]) < 1, code128_resize
+        assert code128_resize["afterHeight"]["height"] < code128_resize["afterWidth"]["height"] - 1, code128_resize
+
+        page.evaluate("""() => {
+          const selector=document.querySelectorAll('#label-queue .entry-kind')[1];
+          if(!selector) throw new Error('Second queue code-style selector is missing.');
+          selector.value='qr';
+          selector.dispatchEvent(new Event('change',{bubbles:true}));
+        }""")
+        page.wait_for_function(
+            "() => { const image=document.querySelector('#b21-label-stage .b21-code'); return !!image && image.src.includes('kind=qr') && image.complete && image.naturalWidth > 0; }",
+            timeout=5_000,
+        )
+        page.wait_for_function(
+            """() => {
+              const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+              const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+              const code=all[String(queue[1]._id)]?.elements.find(row=>row.id==='code');
+              const dimensions=document.querySelector('#b21-label-stage').style.aspectRatio.split('/').map(value=>Number(value.trim()));
+              return !!code && Math.abs(code.w*dimensions[0]-code.h*dimensions[1])<0.01;
+            }""",
+            timeout=5_000,
+        )
+        page.evaluate("""() => {
+          const widthInput=document.getElementById('b21-v2-w');
+          widthInput.value='40';
+          widthInput.dispatchEvent(new Event('input',{bubbles:true}));
+        }""")
+        page.wait_for_function(
+            """() => {
+              const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+              const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+              const code=all[String(queue[1]._id)]?.elements.find(row=>row.id==='code');
+              const dimensions=document.querySelector('#b21-label-stage').style.aspectRatio.split('/').map(value=>Number(value.trim()));
+              return !!code && Math.abs(code.w-40)<0.01 && Math.abs(code.w*dimensions[0]-code.h*dimensions[1])<0.01;
+            }""",
+            timeout=5_000,
+        )
+        qr_resize = page.evaluate("""() => {
+          const stage=document.querySelector('#b21-label-stage');
+          const widthInput=document.getElementById('b21-v2-w');
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+          const code=all[String(queue[1]._id)].elements.find(row=>row.id==='code');
+          const rect=stage.querySelector('.b21-code-content').getBoundingClientRect();
+          return {code,visualWidth:rect.width,visualHeight:rect.height,dimensions:stage.style.aspectRatio.split('/').map(value=>Number(value.trim())),inputValue:widthInput.value,selectedIndex:document.getElementById('b21-entry-select')?.value,imageSrc:stage.querySelector('.b21-code')?.src};
+        }""")
+        assert abs(qr_resize["code"]["w"] * qr_resize["dimensions"][0] - qr_resize["code"]["h"] * qr_resize["dimensions"][1]) < 0.01, qr_resize
+        assert abs(qr_resize["code"]["w"] - 40) < 0.01, qr_resize
+        assert abs(qr_resize["visualWidth"] - qr_resize["visualHeight"]) < 1, qr_resize
 
         sticky_result = page.evaluate("""() => {
             const preview = document.querySelector('.b21-sticky-preview-card');
@@ -644,13 +740,19 @@ def main() -> None:
 
         # Selecting a layer and dragging it immediately must persist its new position.
         page.locator('[data-layer-select="label"]').click()
+        page.wait_for_function(
+            "() => !!document.querySelector('#b21-label-stage [data-element-id=label] .b21-v2-text-content.b21-v2-element-selected')",
+            timeout=5_000,
+        )
         label_before = page.evaluate("""() => {
-          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const queue = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}').queue || [];
+          const index = Number(document.getElementById('b21-entry-select')?.value || 0);
+          const entry = all[String(queue[index]?._id)];
           const element = entry && entry.elements.find(row => row.id === 'label');
           return element && {x: element.x, y: element.y};
         }""")
-        label_box = label_element.bounding_box()
+        label_box = page.locator('#b21-label-stage [data-element-id="label"] .b21-v2-text-content').bounding_box()
         assert label_before is not None and label_box is not None
         drag_x = label_box["x"] + label_box["width"] / 2
         drag_y = label_box["y"] + label_box["height"] / 2
@@ -660,8 +762,10 @@ def main() -> None:
         page.mouse.up()
         page.wait_for_timeout(150)
         label_after_drag = page.evaluate("""() => {
-          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const queue = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}').queue || [];
+          const index = Number(document.getElementById('b21-entry-select')?.value || 0);
+          const entry = all[String(queue[index]?._id)];
           const element = entry && entry.elements.find(row => row.id === 'label');
           return element && {x: element.x, y: element.y};
         }""")
@@ -670,8 +774,10 @@ def main() -> None:
         page.locator('[data-layer-select="code"]').click()
         page.locator('[data-layer-select="label"]').click()
         label_after_reselect = page.evaluate("""() => {
-          const state = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
-          const entry = Object.values(state).find(value => value && Array.isArray(value.elements));
+          const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
+          const queue = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}').queue || [];
+          const index = Number(document.getElementById('b21-entry-select')?.value || 0);
+          const entry = all[String(queue[index]?._id)];
           const element = entry && entry.elements.find(row => row.id === 'label');
           return element && {x: element.x, y: element.y};
         }""")
@@ -694,7 +800,7 @@ def main() -> None:
         assert saved_order.index("label") > saved_order.index("code")
 
         # Presets fit label text to the selected roll; copy/paste keeps each code's identity.
-        page.locator("#b21-entry-select").select_option("0")
+        page.locator("#label-queue .entry-edit").nth(0).click()
         page.evaluate("window.__b2mB21LabelEditor.prepareQueue()")
         smallest_profile = page.evaluate("""async () => {
           const data = await (await fetch('/labels/b21/profiles')).json();
@@ -748,7 +854,7 @@ def main() -> None:
         }""")
         assert code_frame["visual"]["width"] <= code_frame["box"]["width"] + 1, code_frame
         assert code_frame["visual"]["height"] <= code_frame["box"]["height"] + 1, code_frame
-        assert abs(code_frame["visualRatio"] - code_frame["imageRatio"]) < .03, code_frame
+        assert abs(code_frame["visualRatio"] - code_frame["box"]["width"] / code_frame["box"]["height"]) < .03, code_frame
         assert code_frame["outline"] == "2px" and code_frame["outlineOffset"] == "0px", code_frame
         assert code_frame["selected"], code_frame
         assert code_frame["activeOutlines"] == 1, code_frame
@@ -868,6 +974,53 @@ def main() -> None:
           };
         }""", source_key)
         assert long_font < short_font, (short_font, long_font, smallest_profile, font_debug)
+        page.locator('[data-layer-select="label"]').click()
+        handle_geometry = page.evaluate("""() => {
+          const stage=document.getElementById('b21-label-stage');
+          const node=stage?.querySelector('[data-element-id=label]');
+          const handle=stage?.querySelector(':scope > .b21-v2-resize-handle');
+          const content=node?.querySelector('.b21-v2-text-content');
+          const rect=element=>{const r=element.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+          return {handle:handle&&rect(handle),content:content&&rect(content),node:node&&rect(node),
+            offsetParent:content?.offsetParent?.className,offsetLeft:content?.offsetLeft,offsetTop:content?.offsetTop,
+            offsetWidth:content?.offsetWidth,offsetHeight:content?.offsetHeight,nodeOffsetWidth:node?.offsetWidth,nodeOffsetHeight:node?.offsetHeight,
+            handleLeft:handle?.style.left,handleTop:handle?.style.top,transform:node&&getComputedStyle(node).transform};
+        }""")
+        assert handle_geometry["handle"] and handle_geometry["content"], handle_geometry
+        assert abs(handle_geometry["handle"]["left"] + handle_geometry["handle"]["width"] / 2 - handle_geometry["content"]["right"]) < 2 and abs(handle_geometry["handle"]["top"] + handle_geometry["handle"]["height"] / 2 - handle_geometry["content"]["bottom"]) < 2, handle_geometry
+        text_resize_before = page.evaluate("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const element=all[key].elements.find(row=>row.id==='label');
+          return {w:element.w,h:element.h,text:document.querySelector('#b21-label-stage [data-element-id="label"] .b21-v2-text-content')?.textContent};
+        }""", source_key)
+        text_handle = page.locator('#b21-label-stage > .b21-v2-resize-handle').bounding_box()
+        assert text_handle is not None, "Selected text should expose its resize handle."
+        resize_x = text_handle["x"] + text_handle["width"] / 2
+        resize_y = text_handle["y"] + text_handle["height"] / 2
+        page.mouse.move(resize_x, resize_y)
+        page.mouse.down()
+        page.mouse.move(resize_x - 60, resize_y + 12, steps=5)
+        page.mouse.up()
+        page.wait_for_function(
+            "([key,width]) => { const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}'); const element=all[key]?.elements.find(row=>row.id==='label'); return !!element && element.w !== width; }",
+            arg=[source_key, text_resize_before["w"]],
+            timeout=5_000,
+        )
+        text_resize_after = page.evaluate("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const element=all[key].elements.find(row=>row.id==='label');
+          return {w:element.w,h:element.h,text:document.querySelector('#b21-label-stage [data-element-id="label"] .b21-v2-text-content')?.textContent};
+        }""", source_key)
+        assert text_resize_after["w"] != text_resize_before["w"], (text_resize_before, text_resize_after)
+        assert text_resize_after["text"] == text_resize_before["text"], (text_resize_before, text_resize_after)
+        page.locator('[data-layer-select="code"]').click()
+        page.locator('[data-layer-select="label"]').click()
+        text_resize_reloaded = page.evaluate("""key => {
+          const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
+          const element=all[key].elements.find(row=>row.id==='label');
+          return {w:element.w,h:element.h};
+        }""", source_key)
+        assert text_resize_reloaded == {"w": text_resize_after["w"], "h": text_resize_after["h"]}, (text_resize_after, text_resize_reloaded)
         page.evaluate("""key => {
           const data = JSON.parse(localStorage.getItem('b2m-label-generator-v2') || '{}');
           data.queue[0].label = 'CI Label One';
@@ -886,7 +1039,7 @@ def main() -> None:
         }""", source_key)
         page.locator("#b21-entry-select").dispatch_event("change")
         page.locator("#b21-v4-copy-design").click()
-        page.locator("#b21-entry-select").select_option("1")
+        page.locator("#label-queue .entry-edit").nth(1).click()
         target_before = page.evaluate("""key => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
           const row = all[key];
@@ -921,7 +1074,7 @@ def main() -> None:
           all[key].frame = true;
           localStorage.setItem('b2m-b21-entry-settings-v3', JSON.stringify(all));
         }""", target_key)
-        page.locator("#b21-entry-select").select_option("0")
+        page.locator("#label-queue .entry-edit").nth(0).click()
         page.locator("#b21-v4-apply-all-design").click()
         all_after = page.evaluate("""keys => {
           const all = JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3') || '{}');
