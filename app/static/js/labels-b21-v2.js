@@ -449,7 +449,7 @@
     const transform=getComputedStyle(node).transform;
     let angle=0;
     if(transform&&transform!=='none'){
-      const values=transform.match(/^matrix\\(([^)]+)\\)$/);
+      const values=transform.match(/^matrix\(([^)]+)\)$/);
       if(values){const parts=values[1].split(',').map(Number);angle=Math.atan2(parts[1]||0,parts[0]||1);}
     }
     const localX=left+content.offsetWidth-node.offsetWidth/2;
