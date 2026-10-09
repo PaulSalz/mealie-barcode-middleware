@@ -1142,7 +1142,7 @@ def main() -> None:
         page.wait_for_function("""([key,id,width]) => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           const line=all[key]?.elements.find(row=>row.id===id); return !!line && line.w>width;
-        }""", [source_key, line_id, line_before["w"]], timeout=5_000)
+        }""", arg=[source_key, line_id, line_before["w"]], timeout=5_000)
         line_after = page.evaluate("""([key,id]) => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           const line=all[key].elements.find(row=>row.id===id); return {w:line.w,h:line.h};
