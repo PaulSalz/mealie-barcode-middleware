@@ -208,7 +208,9 @@ def test_b21_qr_links_dimensions_and_code128_can_stretch():
     resize = read("app/static/js/labels-b21-v2-patch.js")
     queue = read("app/static/js/labels-page.js")
     css = read("app/static/css/labels-b21.css")
-    assert "if(changedKey==='w')el.h=Number(el.w||0)*p.width_mm/p.height_mm" in editor
+    assert "code.w=nextW;code.h=nextH" in editor
+    assert "const sideMm=changedKey==='w'?Number(el.w||0)*p.width_mm/100:Number(el.h||0)*p.height_mm/100" in editor
+    assert "el.w=sideMm/p.width_mm*100" in editor and "el.h=sideMm/p.height_mm*100" in editor
     assert "visual.style.width='100%'" in editor
     assert "image.style.objectFit='fill'" in editor
     assert "ctx.drawImage(img,-w/2,-h/2,w,h)" in editor
