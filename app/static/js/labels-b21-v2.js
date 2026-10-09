@@ -136,8 +136,6 @@
     header.className = 'b21-v2-header' + (browserOutput && browserOutput.checked ? ' d-none' : '');
     header.innerHTML =
       '<div class="b21-v2-toolbar">' +
-        '<select class="form-select w-auto" id="b21-v2-print-scope" title="Print scope"><option value="queue">Print queue</option><option value="current">Current label only</option></select>' +
-        '<div class="input-group input-group-sm w-auto"><span class="input-group-text">Copies</span><input class="form-control" id="b21-v2-copies" type="number" min="1" max="99" value="1" style="width:5rem"></div>' +
         '<span class="small text-secondary b21-v2-job-state" id="b21-v2-job-state"></span>' +
       '</div>';
     bar.appendChild(header);
@@ -157,12 +155,6 @@
       connect.insertAdjacentElement('afterend', print);
       print.addEventListener('click', submitPrintJob);
     }
-    $('b21-v2-copies').addEventListener('change', function () {
-      const entry = currentEntry(); if (!entry) return;
-      const s = getEntryState(entry, currentIndex());
-      s.copies = Math.max(1, Math.min(99, Number(this.value || 1)));
-      this.value = s.copies; saveEntryStates();
-    });
     return true;
   }
 
@@ -276,7 +268,6 @@
     const s=currentState(); if(!s) return;
     const profileSelect=$('b21-profile-select');
     if(profileSelect && profiles.some((p)=>String(p.id)===String(s.profileId))) profileSelect.value=s.profileId;
-    if($('b21-v2-copies')) $('b21-v2-copies').value=s.copies || 1;
     syncCalibration(); syncInspector(); renderStage();
   }
 
@@ -319,15 +310,15 @@
     if(el.type==='code'){
       const width=$('b21-v2-w'),height=$('b21-v2-h');
       const isQr=codeKind==='qr';
-      if(width){width.step=isQr?'any':'1';width.max=String(isQr?Math.min(100,100*p.height_mm/p.width_mm):100);}
-      if(height){height.step=isQr?'any':'1';height.max=String(isQr?Math.min(100,100*p.width_mm/p.height_mm):100);}
+      if(width){width.step='any';width.max=String(isQr?Math.min(100,100*p.height_mm/p.width_mm):100);}
+      if(height){height.step='any';height.max=String(isQr?Math.min(100,100*p.width_mm/p.height_mm):100);}
     }
     const defs=defaultForElement(el.type,el.id);
     ['x','y','w','h','rotation','fontSizePt','lineWidthMm'].forEach((key)=>{
       const input=$('b21-v2-'+key); const wrap=input&&input.closest('.b21-v2-range-wrap'); if(!input)return;
       const relevant=key==='fontSizePt'?el.type==='text':key==='lineWidthMm'?el.type==='line':true;
       if(wrap)wrap.classList.toggle('d-none',!relevant);
-      if(relevant){input.value=Number(el[key]??defs[key]??0);input.dataset.default=Number(defs[key]??0);const out=$('b21-v2-'+key+'-value');if(out)out.textContent=input.value;}
+      if(relevant){input.value=Number(el[key]??defs[key]??0);input.dataset.default=Number(defs[key]??0);const out=$('b21-v2-'+key+'-value');if(out)out.textContent=(key==='w'||key==='h')?String(Math.round(Number(input.value))):input.value;}
     });
     $('b21-v2-delete-element').disabled=['code','label','value'].includes(el.id);
     $('b21-v2-frame').checked=s.frame!==false;
@@ -353,7 +344,7 @@
       el.w=sideMm/p.width_mm*100;el.h=sideMm/p.height_mm*100;
     }
     if(changedKey==='w'||changedKey==='h'){
-      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=el[key];if(out)out.textContent=input.value;}});
+      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=el[key];if(out)out.textContent=String(Math.round(Number(input.value)));}});
     } else if(changedKey){const out=$('b21-v2-'+changedKey+'-value');if(out)out.textContent=target.value;}
     saveEntryStates();
     if(target&&target.id==='b21-v2-content')syncInspector();
@@ -536,12 +527,16 @@
     ctx.restore();return canvas.toDataURL('image/png').split(',',2)[1];
   }
 
-  async function submitPrintJob(){
-    const queue=readQueue();if(!queue.length)return;const scope=($('b21-v2-print-scope')||{}).value||'queue';const indices=scope==='current'?[currentIndex()]:queue.map((_,i)=>i);const button=$('label-niim-print'),status=$('b21-v2-job-state');if(button)button.disabled=true;if(status)status.textContent='Preparing…';
+  async function submitPrintJob(entryId){
+    const queue=readQueue();if(!queue.length)return;
+    const singleIndex=entryId==null?-1:queue.findIndex((entry)=>String(entry&&entry._id)===String(entryId));
+    if(entryId!=null&&singleIndex<0)return;
+    const indices=entryId==null?queue.map((_,i)=>i):[singleIndex];
+    const button=$('label-niim-print'),status=$('b21-v2-job-state');if(button)button.disabled=true;if(status)status.textContent='Preparing…';
     try{
       // Snapshot first: subsequent UI changes cannot alter this job.
       const defs=indices.map((index)=>{const entry=clone(queue[index]),s=clone(getEntryState(queue[index],index)),p=clone(profileById(s.profileId)),cal=clone(getCalibration(p.id));return{entry,s,p,cal};});
-      const pages=[];for(const def of defs){pages.push({image_base64:await renderSnapshot(def.entry,def.s,def.p,def.cal,false),width_mm:def.p.width_mm,height_mm:def.p.height_mm,quantity:def.s.copies||1,density:def.p.density,label_type:def.p.label_type,dpi:def.p.dpi,threshold:def.s.threshold||128});}
+      const pages=[];for(const def of defs){pages.push({image_base64:await renderSnapshot(def.entry,def.s,def.p,def.cal,false),width_mm:def.p.width_mm,height_mm:def.p.height_mm,quantity:Math.max(1,Number(def.entry.qty||def.s.copies||1)),density:def.p.density,label_type:def.p.label_type,dpi:def.p.dpi,threshold:def.s.threshold||128});}
       const job=await fetchJson('/labels/b21/jobs',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pages})});activeJobId=job.id;if(status)status.textContent='Queued · '+job.id;pollJob(job.id);
     }catch(error){if(status){status.className='small text-danger b21-v2-job-state';status.textContent=error.message;}if(button)button.disabled=false;}
   }
@@ -587,6 +582,7 @@
       select.dispatchEvent(new Event('change',{bubbles:true}));
       return true;
     },
+    printQueueEntry: function (entryId) { return submitPrintJob(entryId); },
     moveLayer: function (id, direction) {
       const state = currentState();
       if (!state || !Array.isArray(state.elements)) return false;
