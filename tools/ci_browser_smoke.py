@@ -578,6 +578,10 @@ def main() -> None:
         page.locator("#b21-v24-layer-list").wait_for(state="visible", timeout=5_000)
         label_element = page.locator('#b21-label-stage [data-element-id="label"]')
         label_element.wait_for(state="attached", timeout=5_000)
+        page.wait_for_function(
+            "() => { const link=document.getElementById('b21-designer-stylesheet'); return !!link && !!link.sheet && link.sheet.cssRules.length > 0; }",
+            timeout=5_000,
+        )
 
         # Queue edit actions replace the preview dropdown; redundant printer data stays in Settings.
         label_ui = page.evaluate("""() => {
