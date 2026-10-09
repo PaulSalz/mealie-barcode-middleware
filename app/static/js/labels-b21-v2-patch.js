@@ -71,8 +71,8 @@
         const activeVisual=active.closest('.b21-code-content')||active;
         const dimensions=profileSize(stage);
         const kind=currentCodeKind(active);
-        const originalWidthMm=(activeVisual.offsetWidth||active.offsetWidth)/Math.max(1,stage.clientWidth)*dimensions.width;
-        const originalHeightMm=(activeVisual.offsetHeight||active.offsetHeight)/Math.max(1,stage.clientHeight)*dimensions.height;
+        const originalWidthMm=(activeBox.offsetWidth||active.offsetWidth)/Math.max(1,stage.clientWidth)*dimensions.width;
+        const originalHeightMm=(activeBox.offsetHeight||active.offsetHeight)/Math.max(1,stage.clientHeight)*dimensions.height;
         if(!originalWidthMm||!originalHeightMm)return;
         event.preventDefault();event.stopPropagation();
         const sx=event.clientX,sy=event.clientY,angle=rotationOf(activeBox);
@@ -112,8 +112,9 @@
           handle.removeEventListener('pointermove',move);
           handle.removeEventListener('pointerup',end);
           handle.removeEventListener('pointercancel',end);
-          w.dispatchEvent(new Event('input',{bubbles:true}));
-          h.dispatchEvent(new Event('input',{bubbles:true}));
+          const editor=window.__b2mB21LabelEditor;
+          if(editor&&typeof editor.setCodeDimensions==='function')editor.setCodeDimensions(Number(w.value),Number(h.value));
+          else{w.dispatchEvent(new Event('input',{bubbles:true}));h.dispatchEvent(new Event('input',{bubbles:true}));}
         }
         handle.addEventListener('pointermove',move);
         handle.addEventListener('pointerup',end);
