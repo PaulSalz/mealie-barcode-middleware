@@ -439,14 +439,20 @@
     return node;
   }
   function positionTextResizeHandle(node,handle){
-    const stage=$('b21-label-stage');if(!node||!handle||!stage)return;
-    const nodeRect=node.getBoundingClientRect(),stageRect=stage.getBoundingClientRect(),transform=getComputedStyle(node).transform;
+    const content=node&&node.querySelector('.b21-v2-text-content'),stage=$('b21-label-stage');
+    if(!content||!handle||!stage)return;
+    const nodeRect=node.getBoundingClientRect(),stageRect=stage.getBoundingClientRect();
+    let left=0,top=0,current=content;
+    while(current&&current!==node){left+=current.offsetLeft;top+=current.offsetTop;current=current.offsetParent;}
+    if(current!==node){left=content.offsetLeft;top=content.offsetTop;}
+    const transform=getComputedStyle(node).transform;
     let angle=0;
     if(transform&&transform!=='none'){
       const values=transform.match(/^matrix\(([^)]+)\)$/);
       if(values){const parts=values[1].split(',').map(Number);angle=Math.atan2(parts[1]||0,parts[0]||1);}
     }
-    const localX=node.offsetWidth/2,localY=node.offsetHeight/2;
+    const localX=left+content.offsetWidth-node.offsetWidth/2;
+    const localY=top+content.offsetHeight-node.offsetHeight/2;
     const centerX=(nodeRect.left+nodeRect.right)/2,centerY=(nodeRect.top+nodeRect.bottom)/2;
     const screenX=centerX+Math.cos(angle)*localX-Math.sin(angle)*localY;
     const screenY=centerY+Math.sin(angle)*localX+Math.cos(angle)*localY;
