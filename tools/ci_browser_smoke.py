@@ -1110,10 +1110,12 @@ def main() -> None:
           const marker=getComputedStyle(node,'::after');
           return {x:frame.x,y:frame.y,w:frame.w,h:frame.h,style:style.borderStyle,color:style.borderColor,boxSizing:style.boxSizing,
             frameBorderWidth:style.borderTopWidth,frameCssWidth:style.getPropertyValue('--b21-frame-width'),selected:node.classList.contains('b21-v2-frame-selected'),
-            markerWidth:marker.borderTopWidth,markerStyle:marker.borderTopStyle,markerColor:marker.borderTopColor,markerInset:marker.top,outlineStyle:style.outlineStyle};
+            markerWidth:marker.borderTopWidth,markerStyle:marker.borderTopStyle,markerColor:marker.borderTopColor,markerInset:marker.top,outlineStyle:style.outlineStyle,
+            svgSelection:!!node.querySelector('.b21-v2-frame-stroke.b21-v2-element-selected')};
         }""", source_key)
         assert frame_before_geometry["selected"] and frame_before_geometry["boxSizing"] == "border-box", frame_before_geometry
         assert frame_before_geometry["color"] == "rgb(17, 17, 17)", frame_before_geometry
+        assert not frame_before_geometry["svgSelection"], "Frame SVG hit target must not receive the generic thick selection stroke."
         assert frame_before_geometry["outlineStyle"] == "none", frame_before_geometry
         assert frame_before_geometry["markerWidth"] == "1px", frame_before_geometry
         assert frame_before_geometry["markerStyle"] == "solid", frame_before_geometry
