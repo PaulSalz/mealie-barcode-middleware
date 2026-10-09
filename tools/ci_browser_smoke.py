@@ -552,7 +552,6 @@ def main() -> None:
         )
         assert page.locator("#label-niim-print").is_visible(), "B21 Print all should remain available in Basic mode."
         assert page.locator("#label-niim-print").inner_text().strip() == "Print all"
-        assert page.locator("#label-niim-print").count() == 0
         assert page.locator("#b21-v2-print-scope").count() == 0
         assert page.locator("#b21-v2-copies").count() == 0
         assert page.locator("#label-print").inner_text().strip() == "Print all"
