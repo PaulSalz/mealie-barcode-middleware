@@ -150,30 +150,34 @@
     window.addEventListener('b2m:advanced-change', syncHeaderVisibility);
     document.querySelectorAll('input[name="label-output"]').forEach((input) => input.addEventListener('change', syncHeaderVisibility));
     syncHeaderVisibility();
-    const oldPrint = $('label-niim-print');if(oldPrint)oldPrint.remove();
+    const oldPrint = $('label-niim-print');
+    if(oldPrint){
+      const print=oldPrint.cloneNode(true);oldPrint.replaceWith(print);
+      print.innerHTML='<i class="ti ti-printer icon"></i> Print all';
+      print.addEventListener('click',()=>submitPrintJob());
+    }
     installPrintAllButton();
     return true;
   }
 
   function installPrintAllButton() {
-    const button=$('label-print');
-    if(!button) {
-      if(!printAllObserver) {
-        printAllObserver=new MutationObserver(()=>{
-          if(!$('label-print'))return;
-          printAllObserver.disconnect();printAllObserver=null;installPrintAllButton();
-        });
-        printAllObserver.observe(document.body,{childList:true,subtree:true});
-      }
+    const b21Print=$('label-niim-print');
+    const quickPrint=document.querySelector('#label-editor-mode [data-label-mode="quick"]');
+    const browserPrint=$('label-print');
+    if(b21Print&&quickPrint&&browserPrint){
+      quickPrint.insertAdjacentElement('afterend',browserPrint);
+      browserPrint.insertAdjacentElement('afterend',b21Print);
+      if(printAllObserver){printAllObserver.disconnect();printAllObserver=null;}
       return;
     }
-    if(button.dataset.b21OutputPrint==='1')return;
-    button.dataset.b21OutputPrint='1';
-    button.addEventListener('click',(event)=>{
-      const output=$('b21-output-b21');
-      if(!output||!output.checked)return;
-      event.preventDefault();event.stopImmediatePropagation();submitPrintJob();
-    },true);
+    if(!printAllObserver){
+      printAllObserver=new MutationObserver(()=>{
+        const quick=document.querySelector('#label-editor-mode [data-label-mode="quick"]');
+        if(!$('label-niim-print')||!$('label-print')||!quick)return;
+        printAllObserver.disconnect();printAllObserver=null;installPrintAllButton();
+      });
+      printAllObserver.observe(document.body,{childList:true,subtree:true});
+    }
   }
 
   function installInspector() {
@@ -572,7 +576,7 @@
     const singleIndex=entryId==null?-1:queue.findIndex((entry)=>String(entry&&entry._id)===String(entryId));
     if(entryId!=null&&singleIndex<0)return;
     const indices=entryId==null?queue.map((_,i)=>i):[singleIndex];
-    const button=entryId==null?$('label-print'):Array.from(document.querySelectorAll('#label-queue .entry-print')).find((item)=>String(item.dataset.entryId)===String(entryId));
+    const button=entryId==null?$('label-niim-print'):Array.from(document.querySelectorAll('#label-queue .entry-print')).find((item)=>String(item.dataset.entryId)===String(entryId));
     const status=$('b21-v2-job-state');jobSubmitting=true;if(button)button.disabled=true;if(status)status.textContent='Preparing…';
     try{
       // Snapshot first: subsequent UI changes cannot alter this job.
@@ -583,7 +587,7 @@
   }
   function pollJob(id,triggerButton){
     clearInterval(jobPoll);
-    const status=$('b21-v2-job-state'),button=triggerButton||$('label-print');
+    const status=$('b21-v2-job-state'),button=triggerButton||$('label-niim-print');
     jobPoll=setInterval(async()=>{
       try{
         const job=await fetchJson('/labels/b21/jobs/'+encodeURIComponent(id));
