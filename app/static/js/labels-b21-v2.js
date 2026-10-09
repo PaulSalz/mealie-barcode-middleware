@@ -420,7 +420,6 @@
     handle.style.top=(content.offsetTop+content.offsetHeight)+'px';
   }
   function fitCodeContent(visual,image,el,p){
-    if(!image.naturalWidth||!image.naturalHeight)return;
     const maxWidthMm=Math.max(.01,Number(el.w||10)*p.width_mm/100);
     const maxHeightMm=Math.max(.01,Number(el.h||10)*p.height_mm/100);
     if(resolvedCodeKind(currentEntry(),currentState()?.codeValue)==='code128'){

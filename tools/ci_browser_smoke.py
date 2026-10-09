@@ -668,7 +668,7 @@ def main() -> None:
 
         page.locator("#label-queue .entry-kind").nth(1).select_option("qr")
         page.wait_for_function(
-            "() => { const image=document.querySelector('#b21-label-stage .b21-code'); return !!image && image.src.includes('kind=qr'); }",
+            "() => { const image=document.querySelector('#b21-label-stage .b21-code'); return !!image && image.src.includes('kind=qr') && image.complete && image.naturalWidth > 0; }",
             timeout=5_000,
         )
         qr_resize = page.evaluate("""() => {
