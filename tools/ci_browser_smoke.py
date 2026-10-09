@@ -1106,12 +1106,12 @@ def main() -> None:
         page.wait_for_function("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           return all[key]?.elements.find(row=>row.id==='frame')?.lineStyle==='dotted';
-        }""", source_key, timeout=5_000)
+        }""", arg=source_key, timeout=5_000)
         page.locator('.b21-v24-layer [data-layer-invert="frame"]').click()
         page.wait_for_function("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           return all[key]?.elements.find(row=>row.id==='frame')?.inverted===true;
-        }""", source_key, timeout=5_000)
+        }""", arg=source_key, timeout=5_000)
         assert page.locator('#b21-label-stage [data-element-id="frame"] .b21-v2-frame-stroke').get_attribute('stroke') == '#fff'
         page.locator('.b21-v24-layer [data-layer-visible="frame"]').click()
         page.wait_for_function("!document.querySelector('#b21-label-stage [data-element-id=frame]')", timeout=5_000)
