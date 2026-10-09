@@ -527,14 +527,15 @@ def main() -> None:
             "Global Advanced mode did not switch off.",
         )
         printer_card = page.locator("#b21-printer-card")
-        printer_card.wait_for(state="visible", timeout=5_000)
+        printer_card.wait_for(state="attached", timeout=5_000)
+        assert not printer_card.is_visible(), "Printer controls should be hidden in browser output mode."
         assert printer_card.evaluate("(el) => el.closest('#b21-output-card') !== null"), "Printer controls should be integrated into the output selection card."
         disconnect_button = page.locator("#b21-connect-button")
-        wait_until(
-            lambda: disconnect_button.is_visible() and "Disconnect" in (disconnect_button.text_content() or ""),
-            "Printer disconnect control should remain available in browser output mode.",
-            timeout_ms=5_000,
+        assert not disconnect_button.is_visible(), "The printer connection button should be hidden in browser output mode."
+        browser_columns = page.locator("#b21-output-grid").evaluate(
+            "(el) => getComputedStyle(el).gridTemplateColumns.split(' ').map(parseFloat)"
         )
+        assert browser_columns[0] > browser_columns[1], browser_columns
         b21_toolbar = page.locator("#b21-v2-header")
         b21_toolbar.wait_for(state="attached", timeout=5_000)
         assert not b21_toolbar.is_visible(), "B21-specific print controls should be hidden in browser output mode."
@@ -542,9 +543,20 @@ def main() -> None:
         b21_output.wait_for(state="attached", timeout=5_000)
         b21_output.check(force=True)
         page.locator("#b21-layout-body").wait_for(state="visible", timeout=5_000)
-        assert printer_card.is_visible()
-        assert "Disconnect" in (disconnect_button.text_content() or "")
-        assert not b21_toolbar.is_visible(), "Advanced printer controls should be hidden in Basic mode."
+        wait_until(
+            lambda: printer_card.is_visible()
+            and disconnect_button.is_visible()
+            and "Disconnect" in (disconnect_button.text_content() or ""),
+            "B21 printer controls should appear when B21 output is selected.",
+            timeout_ms=5_000,
+        )
+        assert b21_toolbar.is_visible(), "B21 queue and copies controls should remain available in Basic mode."
+        assert page.locator("#b21-v2-print-scope").is_visible()
+        assert page.locator("#b21-v2-copies").is_visible()
+        b21_columns = page.locator("#b21-output-grid").evaluate(
+            "(el) => getComputedStyle(el).gridTemplateColumns.split(' ').map(parseFloat)"
+        )
+        assert b21_columns[1] > b21_columns[0], b21_columns
         if not global_advanced.is_visible():
             tools.click()
             global_advanced.wait_for(state="visible", timeout=5_000)
@@ -1318,3 +1330,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
