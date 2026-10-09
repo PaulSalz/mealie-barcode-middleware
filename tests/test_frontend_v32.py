@@ -210,7 +210,7 @@ def test_b21_drag_and_resize_use_visible_objects_and_rotated_corners():
     assert "target.w=Math.max(2,Math.min(100,origW+2*localX/p.width_mm*100))" in editor
     assert "saveEntryStates();" in editor
     assert "positionTextResizeHandle" not in editor
-    assert "el.id===selectedElementId&&el.type==='line'" in editor
+    assert "el.id===selectedElementId&&(el.type==='line'||el.type==='frame')" in editor
 
 
 def test_b21_qr_links_dimensions_and_code128_can_stretch():
@@ -264,10 +264,17 @@ def test_b21_frame_is_a_layer_with_line_style_inversion_and_correct_handles():
     assert "data-layer-invert=" in layers and "toggleInvert" in layers
     assert "element.type==='frame'?'border-outer'" in layers
     assert "b21-v2-frame-stroke" in css
+    assert "b21-v2-frame-resize-handle" in css and "left: calc(100% + var(--b21-frame-width, 1px))" in css
     assert "b21-v2-line-resize-handle { left: 100%; top: 50%;" in css
     assert "positionTextResizeHandle" not in editor
-    assert "el.id===selectedElementId&&el.type==='line'" in editor
+    assert "el.id===selectedElementId&&(el.type==='line'||el.type==='frame')" in editor
     assert "setCodeDimensions: function" in editor
+    assert "node.style.setProperty('--b21-frame-style',lineBorderStyle(el.lineStyle))" in editor
+    assert "stroke.setAttribute('stroke-opacity','0')" in editor
+    assert "el.type==='frame'||(key!=='h'||el.type!=='line')" in editor
+    assert "[0,ctx.lineWidth*2]" in editor
+    assert ".b21-v2-frame-stroke.b21-v2-element-selected" not in css
+    assert "border-color: var(--b21-frame-color, #111) !important" in css
 
 
 def test_b21_connect_button_shares_the_output_choice_row_and_print_all_is_shared():
