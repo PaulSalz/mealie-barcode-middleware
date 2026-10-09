@@ -62,11 +62,6 @@
   box-shadow: none !important;
 }
 
-/* Preview selection shares the card header with the B21 title. */
-.b21-preview-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
-#b21-preview-selector { flex: 0 1 auto; margin-left: auto; }
-#b21-preview-selector .form-select { min-width: 12rem; }
-
 /* Make the editable Content field distinct below the layers. */
 .b21-v2-content-panel {
   border: 1px solid var(--tblr-border-color);
@@ -97,11 +92,6 @@
 }
 #b21-v22-typography { border-top: 0; margin-top: 0; padding-top: 0; }
 
-@media (max-width: 767.98px) {
-  #b21-preview-selector { width: 100%; margin-left: 0; }
-  #b21-preview-selector .form-select { width: 100%; min-width: 0; }
-}
-
 /* B21 output choices keep each control inside its matching printer option. */
 .b21-output-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 .b21-output-grid[data-active-mode="b21"] { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
@@ -119,10 +109,16 @@
   .b21-output-grid .b21-output-choice { width: 100%; }
 }
 
-/* Keep the preview label selector vertically centered and flush to the right. */
-#b21-preview-selector { align-items: center; justify-content: flex-end; text-align: right; }
-#b21-preview-selector .form-label { text-align: right; }
-#b21-preview-selector .form-select { text-align: right; text-align-last: right; }
+/* Keep B21 copies control the same height as compact queue selects. */
+#b21-v2-copies { height: calc(1.42857143em + .5rem + 2px); }
+#b21-v2-header .input-group-sm .input-group-text,
+#b21-v2-header .input-group-sm .form-control { font-size: .875rem; }
+#label-queue .entry-kind,
+#label-queue .label-copy-actions .entry-qty,
+#label-queue .label-copy-actions .entry-edit { height: calc(1.42857143em + .5rem + 2px); }
+#label-queue .label-copy-actions .entry-qty { min-width: 3.5rem; }
+#label-queue .entry-edit { white-space: nowrap; }
+#b21-label-stage { scroll-margin-top: 6rem; }
 
 /* Preset emphasis follows the user's current primary color and clears on edits. */
 #b21-v4-presets .b21-v13-preset.active {

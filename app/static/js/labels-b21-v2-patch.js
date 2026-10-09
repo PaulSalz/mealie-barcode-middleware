@@ -71,9 +71,6 @@
         const activeVisual=active.closest('.b21-code-content')||active;
         const dimensions=profileSize(stage);
         const kind=currentCodeKind(active);
-        const naturalRatio=active.naturalWidth&&active.naturalHeight?active.naturalWidth/active.naturalHeight:(kind==='code128'?3:1);
-        const aspect=kind==='qr'?1:Math.max(.1,naturalRatio||1);
-        const rect=stage.getBoundingClientRect();
         const originalWidthMm=(activeVisual.offsetWidth||active.offsetWidth)/Math.max(1,stage.clientWidth)*dimensions.width;
         const originalHeightMm=(activeVisual.offsetHeight||active.offsetHeight)/Math.max(1,stage.clientHeight)*dimensions.height;
         if(!originalWidthMm||!originalHeightMm)return;
@@ -86,11 +83,17 @@
           const dy=(e.clientY-sy)/Math.max(1,stage.clientHeight)*dimensions.height;
           const localX=dx*Math.cos(angle)+dy*Math.sin(angle);
           const localY=-dx*Math.sin(angle)+dy*Math.cos(angle);
-          const projected=2*(localX+localY/aspect)/(1+1/(aspect*aspect));
-          const maxWidthMm=Math.max(.5,Math.min(dimensions.width,dimensions.height*aspect));
-          const minWidthMm=Math.min(maxWidthMm,Math.max(dimensions.width*.02,dimensions.height*.01*aspect));
-          const newWidthMm=Math.max(minWidthMm,Math.min(maxWidthMm,originalWidthMm+projected));
-          const newHeightMm=newWidthMm/aspect;
+          let newWidthMm,newHeightMm;
+          if(kind==='qr'){
+            const maxSideMm=Math.max(.5,Math.min(dimensions.width,dimensions.height));
+            const minSideMm=Math.min(maxSideMm,Math.max(dimensions.width*.02,dimensions.height*.02));
+            const sideMm=Math.max(minSideMm,Math.min(maxSideMm,Math.min(originalWidthMm,originalHeightMm)+localX+localY));
+            newWidthMm=sideMm;
+            newHeightMm=sideMm;
+          }else{
+            newWidthMm=Math.max(Math.min(2,dimensions.width),Math.min(dimensions.width,originalWidthMm+2*localX));
+            newHeightMm=Math.max(Math.min(1,dimensions.height),Math.min(dimensions.height,originalHeightMm+2*localY));
+          }
           const widthPct=newWidthMm/dimensions.width*100;
           const heightPct=newHeightMm/dimensions.height*100;
 

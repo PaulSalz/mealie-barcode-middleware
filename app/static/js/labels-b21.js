@@ -173,17 +173,11 @@
         b21Preview.innerHTML = `
             <div class="b21-label-shell"><div class="b21-label-stage" id="b21-label-stage"></div></div>
             <div class="text-secondary small mt-2">Drag code/text directly on the label or use the precise position controls.</div>`;
-        var previewHeader = previewCard.querySelector('.card-header');
-        var previewSelector = document.createElement('div');
-        previewSelector.id = 'b21-preview-selector';
-        previewSelector.className = 'd-flex align-items-center gap-2 d-none';
-        previewSelector.innerHTML = '<label class="form-label small mb-0" for="b21-entry-select">Preview label</label><select class="form-select form-select-sm" id="b21-entry-select"></select>';
-        if (previewHeader) {
-            previewHeader.classList.add('b21-preview-header');
-            previewHeader.appendChild(previewSelector);
-        } else {
-            b21Preview.insertAdjacentElement('afterbegin', previewSelector);
-        }
+        var entrySelect = document.createElement('select');
+        entrySelect.id = 'b21-entry-select';
+        entrySelect.hidden = true;
+        entrySelect.setAttribute('aria-hidden', 'true');
+        b21Preview.prepend(entrySelect);
         browserPreviewBody.parentNode.appendChild(b21Preview);
 
         var b21Controls = document.createElement('div');
@@ -335,7 +329,6 @@
         $('browser-preview-body').classList.toggle('d-none', !browser);
         $('browser-layout-body').classList.toggle('d-none', !browser);
         $('b21-preview-body').classList.toggle('d-none', browser);
-        $('b21-preview-selector')?.classList.toggle('d-none', browser);
         $('b21-layout-body').classList.toggle('d-none', browser);
         var b21Header = $('b21-v2-header');
         if (b21Header) b21Header.classList.toggle('d-none', browser);

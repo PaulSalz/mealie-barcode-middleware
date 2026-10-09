@@ -38,6 +38,12 @@
   function currentIndex() { return Number(($('b21-entry-select') && $('b21-entry-select').value) || 0); }
   function currentEntry() { const queue = readQueue(); return queue[currentIndex()] || queue[0] || null; }
   function profileById(id) { return profiles.find((row) => String(row.id) === String(id)) || profiles[0] || {id:'50x30',name:'50 × 30 mm',width_mm:50,height_mm:30,dpi:300,density:3,label_type:1}; }
+  function resolvedCodeKind(entry, value) {
+    const kind = String(entry && entry.kind || 'auto').toLowerCase();
+    if (kind !== 'auto') return kind;
+    const encoded = String(value == null ? (entry && entry.code || '') : value);
+    return /^[\x00-\x7f]*$/.test(encoded) && encoded.length <= 32 ? 'code128' : 'qr';
+  }
 
   function oldDesign(profileId) {
     const all = loadJson(OLD_DESIGN_KEY, {});
@@ -298,6 +304,10 @@
     else content.value=el.text||'';
     content.readOnly=el.source==='label'||el.source==='value';
     const defs=defaultForElement(el.type,el.id);
+    if(el.type==='code'){
+      const step=resolvedCodeKind(currentEntry(),s.codeValue)==='qr'?'any':'1';
+      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key);if(input)input.step=step;});
+    }
     ['x','y','w','h','rotation','fontSizePt','lineWidthMm'].forEach((key)=>{
       const input=$('b21-v2-'+key); const wrap=input && input.closest('.b21-v2-range-wrap'); if(!input)return;
       const relevant = key==='fontSizePt' ? el.type==='text' : key==='lineWidthMm' ? el.type==='line' : true;
@@ -309,10 +319,18 @@
     $('b21-v2-threshold').value=Number(s.threshold||128); $('b21-v2-threshold-value').textContent=$('b21-v2-threshold').value;
   }
 
-  function updateSelectedFromInspector(){
+  function updateSelectedFromInspector(event){
     const s=currentState(), el=selectedElement(); if(!s||!el)return;
     if(el.type==='code' && !$('b21-v2-content').readOnly) s.codeValue=$('b21-v2-content').value;
     if(el.type==='text' && !el.source && !$('b21-v2-content').readOnly) el.text=$('b21-v2-content').value;
+    const changedKey=event&&event.target&&event.target.dataset?event.target.dataset.key:'';
+    if(el.type==='code'&&resolvedCodeKind(currentEntry(),s.codeValue)==='qr'&&(changedKey==='w'||changedKey==='h')){
+      const p=currentProfile();
+      if(changedKey==='w')el.h=Number(el.w||0)*p.width_mm/p.height_mm;
+      else el.w=Number(el.h||0)*p.height_mm/p.width_mm;
+      const other=$('b21-v2-'+(changedKey==='w'?'h':'w'));
+      if(other)other.value=String(el[changedKey==='w'?'h':'w']);
+    }
     document.querySelectorAll('.b21-v2-range:not(.d-none)').forEach((input)=>{const key=input.dataset.key;if(key in el || ['fontSizePt','lineWidthMm'].includes(key)) el[key]=Number(input.value);const out=$('b21-v2-'+key+'-value');if(out)out.textContent=input.value;});
     saveEntryStates(); renderStage();
   }
@@ -335,28 +353,20 @@
   function alignSelected(mode){
     const select=$('b21-v2-element-select');if(select&&select.value)selectedElementId=select.value;
     const el=selectedElement();if(!el)return;
-    const p=currentProfile(),cal=getCalibration(p.id),angle=Number(el.rotation||0)*Math.PI/180;
-    let elementWidthMm=Number(el.w||0)*p.width_mm/100,elementHeightMm=Number(el.h||0)*p.height_mm/100;
-    if(el.type==='code'){
-      const image=$('b21-label-stage')?.querySelector('[data-element-id="'+CSS.escape(String(el.id))+'"] .b21-code');
-      let ratio=image&&image.naturalWidth&&image.naturalHeight?image.naturalWidth/image.naturalHeight:0;
-      if(!ratio){
-        let kind=String((currentEntry()||{}).kind||'auto').toLowerCase();
-        const value=String(currentState()?.codeValue||(currentEntry()||{}).code||'');
-        if(kind==='auto')kind=/^[\x00-\x7f]*$/.test(value)&&value.length<=32?'code128':'qr';
-        ratio=kind==='qr'?1:3;
-      }
-      elementWidthMm=Math.min(elementWidthMm,elementHeightMm*ratio);
-      elementHeightMm=elementWidthMm/ratio;
-    }
-    const widthMm=Math.abs(elementWidthMm*Math.cos(angle))+Math.abs(elementHeightMm*Math.sin(angle));
-    const heightMm=Math.abs(elementWidthMm*Math.sin(angle))+Math.abs(elementHeightMm*Math.cos(angle));
-    if(mode==='left')el.x=Math.max(0,(widthMm/2-(cal.xMm||0))/p.width_mm*100);
-    else if(mode==='hcenter')el.x=50-(cal.xMm||0)/p.width_mm*100;
-    else if(mode==='right')el.x=Math.min(100,100-(widthMm/2+(cal.xMm||0))/p.width_mm*100);
-    else if(mode==='top')el.y=Math.max(0,(heightMm/2-(cal.yMm||0))/p.height_mm*100);
-    else if(mode==='vcenter')el.y=50-(cal.yMm||0)/p.height_mm*100;
-    else if(mode==='bottom')el.y=Math.min(100,100-(heightMm/2+(cal.yMm||0))/p.height_mm*100);
+    const stage=$('b21-label-stage'),node=stage&&stage.querySelector('[data-element-id="'+CSS.escape(String(el.id))+'"]');
+    if(!stage||!node)return;
+    const visual=el.type==='code'?node.querySelector('.b21-code-content'):el.type==='text'?(node.querySelector('.b21-v2-text-content')||node):node;
+    if(!visual)return;
+    const sr=stage.getBoundingClientRect();
+    let vr=visual.getBoundingClientRect();
+    if(!vr.width||!vr.height)vr=node.getBoundingClientRect();
+    if(!sr.width||!sr.height||!vr.width||!vr.height)return;
+    if(mode==='left')el.x+=((sr.left-vr.left)/sr.width)*100;
+    else if(mode==='hcenter')el.x+=((sr.left+sr.width/2-(vr.left+vr.width/2))/sr.width)*100;
+    else if(mode==='right')el.x+=((sr.right-vr.right)/sr.width)*100;
+    else if(mode==='top')el.y+=((sr.top-vr.top)/sr.height)*100;
+    else if(mode==='vcenter')el.y+=((sr.top+sr.height/2-(vr.top+vr.height/2))/sr.height)*100;
+    else if(mode==='bottom')el.y+=((sr.bottom-vr.bottom)/sr.height)*100;
     saveEntryStates();syncInspector();renderStage();
   }
 
@@ -413,11 +423,16 @@
     if(!image.naturalWidth||!image.naturalHeight)return;
     const maxWidthMm=Math.max(.01,Number(el.w||10)*p.width_mm/100);
     const maxHeightMm=Math.max(.01,Number(el.h||10)*p.height_mm/100);
-    const ratio=image.naturalWidth/image.naturalHeight;
-    const widthMm=Math.min(maxWidthMm,maxHeightMm*ratio);
-    const heightMm=widthMm/ratio;
-    visual.style.width=(widthMm/maxWidthMm*100)+'%';
-    visual.style.height=(heightMm/maxHeightMm*100)+'%';
+    if(resolvedCodeKind(currentEntry(),currentState()?.codeValue)==='code128'){
+      visual.style.width='100%';
+      visual.style.height='100%';
+      image.style.objectFit='fill';
+      return;
+    }
+    const sideMm=Math.min(maxWidthMm,maxHeightMm);
+    visual.style.width=(sideMm/maxWidthMm*100)+'%';
+    visual.style.height=(sideMm/maxHeightMm*100)+'%';
+    image.style.objectFit='contain';
   }
   function stageScale(p){const stage=$('b21-label-stage');return stage?stage.clientWidth/p.width_mm:1;}
   function physicalFontPx(p,pt){return Math.max(7,(pt*25.4/72)*stageScale(p));}
@@ -442,16 +457,23 @@
   }
   function startResize(event,node,el){
     event.preventDefault();event.stopPropagation();
-    const startX=event.clientX,startY=event.clientY,origW=Number(el.w||10),origH=Number(el.h||10);
+    const elementId=String(el.id),startX=event.clientX,startY=event.clientY;
     const stage=$('b21-label-stage'),rect=stage.getBoundingClientRect(),p=currentProfile(),angle=Number(el.rotation||0)*Math.PI/180,handle=event.target;
+    const initial=currentState()?.elements.find((row)=>String(row.id)===elementId);
+    if(!initial||!rect.width||!rect.height)return;
+    const origW=Number(initial.w||10),origH=Number(initial.h||10);
     handle.setPointerCapture(event.pointerId);
     const move=(e)=>{
+      const state=currentState(),target=state&&state.elements.find((row)=>String(row.id)===elementId);
+      if(!target)return;
       const dx=(e.clientX-startX)/rect.width*p.width_mm,dy=(e.clientY-startY)/rect.height*p.height_mm;
       const localX=dx*Math.cos(angle)+dy*Math.sin(angle),localY=-dx*Math.sin(angle)+dy*Math.cos(angle);
-      el.w=Math.max(2,Math.min(100,origW+2*localX/p.width_mm*100));
-      el.h=Math.max(1,Math.min(100,origH+2*localY/p.height_mm*100));
-      node.style.width=el.w+'%';node.style.height=el.h+'%';
+      target.w=Math.max(2,Math.min(100,origW+2*localX/p.width_mm*100));
+      target.h=Math.max(1,Math.min(100,origH+2*localY/p.height_mm*100));
+      node.style.width=target.w+'%';node.style.height=target.h+'%';
       positionTextResizeHandle(node,handle);
+      ['w','h'].forEach((key)=>{const input=$('b21-v2-'+key),out=$('b21-v2-'+key+'-value');if(input){input.value=target[key];if(out)out.textContent=input.value;}});
+      saveEntryStates();
     };
     const end=(e)=>{try{handle.releasePointerCapture(e.pointerId);}catch(ignore){}handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',end);handle.removeEventListener('pointercancel',end);saveEntryStates();syncInspector();renderStage();};
     handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
@@ -467,7 +489,7 @@
     if(s.frame!==false){const inset=Number(s.frameInsetMm||1)*ppm,line=Math.max(1,Number(s.frameWidthMm||.35)*ppm);ctx.lineWidth=line;ctx.strokeRect(inset+line/2,inset+line/2,width-2*inset-line,height-2*inset-line);}
     for(const el of s.elements.filter((row)=>row.visible!==false)){
       const cx=width*el.x/100,cy=height*el.y/100,w=width*el.w/100,h=height*el.h/100,rot=Number(el.rotation||0);
-      if(el.type==='code'){const url='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(s.codeValue||entry.code||'');const img=await loadImage(url);ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);drawContain(ctx,img,-w/2,-h/2,w,h);ctx.restore();}
+      if(el.type==='code'){const value=s.codeValue||entry.code||'',url='/labels/code.svg?kind='+encodeURIComponent(entry.kind||'auto')+'&value='+encodeURIComponent(value),img=await loadImage(url);ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);if(resolvedCodeKind(entry,value)==='code128')ctx.drawImage(img,-w/2,-h/2,w,h);else{const side=Math.min(w,h);drawContain(ctx,img,-side/2,-side/2,side,side);}ctx.restore();}
       else if(el.type==='line'){ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);ctx.lineWidth=Math.max(1,Number(el.lineWidthMm||.35)*ppm);ctx.beginPath();ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);ctx.stroke();ctx.restore();}
       else drawText(ctx,displayText(el,entry,s),cx,cy,w,Number(el.fontSizePt||14)*p.dpi/72,rot,!!el.mono);
     }
@@ -511,6 +533,14 @@
   }
 
   window.__b2mB21LabelEditor = {
+    selectQueueEntry: function (entryId) {
+      const queue=readQueue(),index=queue.findIndex((entry)=>String(entry&&entry._id)===String(entryId));
+      const select=$('b21-entry-select');
+      if(index<0||!select)return false;
+      select.value=String(index);
+      select.dispatchEvent(new Event('change',{bubbles:true}));
+      return true;
+    },
     moveLayer: function (id, direction) {
       const state = currentState();
       if (!state || !Array.isArray(state.elements)) return false;
