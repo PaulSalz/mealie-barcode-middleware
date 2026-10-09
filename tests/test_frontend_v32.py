@@ -282,6 +282,7 @@ def test_b21_frame_is_a_layer_with_line_style_inversion_and_correct_handles():
     assert "rangeHtml('Corner radius','cornerRadiusMm',0,10,.5)" in editor
     assert "function traceRoundedRect(ctx,x,y,w,h,r)" in editor
     assert "state.frameInsetMm=1;state.frameWidthMm=.35" in editor
+    assert "const el=state.elements.find((row)=>row.id===selectedElementId); if(!el)return;" in editor
 
 
 def test_b21_connect_button_shares_the_output_choice_row_and_print_all_is_shared():
