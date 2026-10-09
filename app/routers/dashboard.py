@@ -18,7 +18,6 @@ from app.services.shopping import (
     add_food_to_list, add_note_to_list, add_recipe_to_list,
     get_default_shopping_list_id, get_shopping_list_counts, get_shopping_lists,
 )
-from app.services.targets import primary_targets_by_barcode
 from app.templating import _localtime, _relative_time, templates
 from app.utils import utcnow
 
@@ -69,13 +68,39 @@ def _recent_scans(db: Session, limit: int = 25) -> list[dict]:
     if not activities: return []
     barcode_ids = list({a.barcode for a in activities})
     caches = {bc.barcode: bc for bc in db.query(BarcodeCache).filter(BarcodeCache.barcode.in_(barcode_ids)).all()}
-    primaries = primary_targets_by_barcode(db, barcode_ids)
+    target_rows = (
+        db.query(BarcodeTarget)
+        .filter(BarcodeTarget.barcode.in_(barcode_ids), BarcodeTarget.enabled == True)
+        .order_by(BarcodeTarget.barcode, BarcodeTarget.position, BarcodeTarget.id)
+        .all()
+    )
+    targets_by_barcode: dict[str, list[BarcodeTarget]] = {}
+    for target in target_rows:
+        targets_by_barcode.setdefault(target.barcode, []).append(target)
+    food_ids = list({target.target_id for target in target_rows if target.target_type == "food"})
+    food_names = {
+        item.id: item.name
+        for item in db.query(Item).filter(Item.id.in_(food_ids)).all()
+    } if food_ids else {}
     rows = []
     for activity in activities:
         cached = caches.get(activity.barcode)
-        targets = _activity_targets(activity, primaries.get(activity.barcode))
+        current_targets = targets_by_barcode.get(activity.barcode, [])
+        if current_targets:
+            targets = []
+            for target in current_targets:
+                name = food_names.get(target.target_id) if target.target_type == "food" else target.target_name
+                targets.append({
+                    "type": target.target_type,
+                    "id": target.target_id,
+                    "name": name or target.target_name or target.target_id,
+                })
+        else:
+            # Keep scan history useful for one-off or now-unlinked targets, but
+            # prefer the current BarcodeTarget rows whenever this barcode is linked.
+            targets = _activity_targets(activity)
         first = targets[0] if targets else {}
-        target_name = activity.target_name or first.get("name")
+        target_name = (first.get("name") or activity.target_name) if current_targets else (activity.target_name or first.get("name"))
         rows.append({
             "barcode": activity.barcode,
             "title": cached.display_title if cached and cached.display_title else activity.message,
