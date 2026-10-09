@@ -1116,7 +1116,7 @@ def main() -> None:
         assert frame_before_geometry["color"] == "rgb(17, 17, 17)", frame_before_geometry
         assert frame_before_geometry["markerWidth"] == "0px", frame_before_geometry
         assert frame_before_geometry["outlineWidth"] == "1px" and frame_before_geometry["outlineStyle"] == "solid", frame_before_geometry
-        assert abs(float(frame_before_geometry["outlineOffset"].replace("px","")) + float(frame_before_geometry["frameCssWidth"].replace("px",""))) < .1, frame_before_geometry
+        assert abs(float(frame_before_geometry["outlineOffset"].replace("px","")) + float(frame_before_geometry["frameBorderWidth"].replace("px",""))) < .1, frame_before_geometry
         assert frame_before_geometry["outlineColor"] not in ("rgb(17, 17, 17)", "rgb(255, 255, 255)", "rgba(0, 0, 0, 0)"), frame_before_geometry
 
         page.locator('#b21-v2-line-style').select_option('dotted')
