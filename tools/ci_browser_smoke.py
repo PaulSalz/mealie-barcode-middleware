@@ -655,17 +655,21 @@ def main() -> None:
             timeout=5_000,
         )
         page.locator('#b21-v24-layer-list [data-layer-select="code"]').click()
+        invert_key = page.evaluate("""() => {
+          const queue=JSON.parse(localStorage.getItem('b2m-label-generator-v2')||'{}').queue||[];
+          return String(queue[Number(document.getElementById('b21-entry-select')?.value||0)]?._id);
+        }""")
         page.locator('#b21-v24-layer-list [data-layer-invert="code"]').click()
         page.wait_for_function("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           return all[key]?.elements.find(row=>row.id==='code')?.inverted===true;
-        }""", arg=source_key, timeout=5_000)
+        }""", arg=invert_key, timeout=5_000)
         assert page.locator('#b21-label-stage [data-element-id="code"].b21-layer-inverted .b21-code').evaluate("el => getComputedStyle(el).filter") == "invert(1)"
         page.locator('#b21-v24-layer-list [data-layer-invert="code"]').click()
         page.wait_for_function("""key => {
           const all=JSON.parse(localStorage.getItem('b2m-b21-entry-settings-v3')||'{}');
           return all[key]?.elements.find(row=>row.id==='code')?.inverted===false;
-        }""", arg=source_key, timeout=5_000)
+        }""", arg=invert_key, timeout=5_000)
         for align_mode, edge in (("right", "right"), ("left", "left")):
             page.locator(f'#b21-v2-align [data-align="{align_mode}"]').click()
             page.wait_for_function(
